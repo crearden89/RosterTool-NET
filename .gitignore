@@ -6,3 +6,6 @@ obj/
 TestResults/
 artifacts/
 appsettings.Local.json
+.idea/
+.vscode/
+*.swp
