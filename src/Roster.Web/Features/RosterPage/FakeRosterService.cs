@@ -104,8 +104,8 @@ public sealed class FakeRosterService : IRosterService
             {
                 People =
                 [
-                    new(Guid.Parse(Team[3].Id), Team[3].Name, Team[3].Role, false, 3.5),
-                    new(Guid.Parse(Team[6].Id), Team[6].Name, Team[6].Role, true, 1.25),
+                    new(Team[3].Id, Team[3].Name, Team[3].Role, false, 3.5),
+                    new(Team[6].Id, Team[6].Name, Team[6].Role, true, 1.25),
                 ],
                 Under = 1,
                 Over = 1,

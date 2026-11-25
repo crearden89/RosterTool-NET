@@ -1,16 +1,17 @@
-// New: a stand-in for the Review page's service until the data layer's review loader,
-// notifications and plan approval land. Three invented stores in one area, each with a
-// held plan (one without), whose flags, figures and review state live in memory for the
-// life of the app, so the page can be built, tried in a browser and tested. The steps keep
-// actions.ts's rules and words; the formatting here is the stand-in's own.
+// New: a stand-in for the Review page's service in the page tests: three invented stores
+// in one area, each with a held plan (one without), whose flags, figures and review state
+// live in memory. The steps keep actions.ts's rules and words; the formatting is the
+// stand-in's own. (It also stood in for the data layer while the page was built.)
 
 using System.Globalization;
 using Roster.Engine.Core;
 using Roster.Web.Features.Notifications;
+using Roster.Web.Features.Review;
+using Roster.Web.Tests.Notifications;
 
-namespace Roster.Web.Features.Review;
+namespace Roster.Web.Tests.Review;
 
-/// <summary>Who the stand-in is signed in as: <c>Review:FakeTier</c> (store, emso, super_user, director, pa).</summary>
+/// <summary>Who the stand-in is signed in as (store, emso, super_user, director, pa).</summary>
 public sealed record FakeReviewUser(Guid Id, string Username, string Tier, Guid? StoreId, Guid? AreaId);
 
 /// <summary>The stand-in's stores and reviews, shared by every connection.</summary>
@@ -31,9 +32,9 @@ public sealed class FakeReviewStore
     internal readonly object Gate = new();
     internal readonly Dictionary<(Guid, DateOnly), FakeReview> Reviews = [];
 
-    public FakeReviewStore(IConfiguration configuration)
+    public FakeReviewStore(string tier = "super_user")
     {
-        User = UserFor(configuration["Review:FakeTier"] ?? "super_user");
+        User = UserFor(tier);
     }
 
     /// <summary>The signed-in stand-in user.</summary>

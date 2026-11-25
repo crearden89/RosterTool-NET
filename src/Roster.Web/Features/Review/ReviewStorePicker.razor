@@ -1,0 +1,21 @@
+@* Port of src/app/(app)/plan/review/StorePicker.tsx.
+   Store choice for people who see more than one store (EMSO, super user). *@
+@inject NavigationManager Navigation
+<label class="flex items-center gap-2 text-sm text-[var(--ui-ink)]">
+    <span class="sr-only">Store</span>
+    <select value="@Value?.ToString()" @onchange="OnChange" class="@($"max-w-[16rem] {Ui.FieldClass}")">
+        @foreach (var s in Stores)
+        {
+            <option @key="s.Id" value="@s.Id">@s.Label</option>
+        }
+    </select>
+</label>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ReviewStoreOption> Stores { get; set; } = [];
+    [Parameter] public Guid? Value { get; set; }
+    [Parameter, EditorRequired] public DateOnly Period { get; set; }
+
+    private void OnChange(ChangeEventArgs e) =>
+        Navigation.NavigateTo($"/plan/review?store={e.Value}&period={ReviewQuery.Iso(Period)}");
+}

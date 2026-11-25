@@ -12,6 +12,7 @@ using Roster.Data.Services.Pay;
 using Roster.Data.Services.Planning;
 using Roster.Data.Services.RefData;
 using Roster.Data.Services.Review;
+using Roster.Data.Services.Rostering;
 using Roster.Data.Services.SubTasks;
 
 namespace Roster.Data.Services;
@@ -28,7 +29,7 @@ public sealed class ServicesModule : IDataModule
         services.TryAddScoped<IRefData, RefDataReader>();
         services.TryAddScoped<IPayData, PayDataReader>();
         services.TryAddScoped<IPayCosts, PayCostsLoader>();
-        services.TryAddScoped<IFreshRosterShifts, PendingFreshRosterShifts>();
+        services.TryAddScoped<IFreshRosterShifts, FreshRosterShifts>();
 
         services.TryAddScoped<IStoreDayLoader, StoreDayLoader>();
         services.TryAddScoped<ITradeCurveSource>(sp => (ITradeCurveSource)sp.GetRequiredService<IRefData>());
@@ -41,6 +42,9 @@ public sealed class ServicesModule : IDataModule
         services.TryAddScoped<IPublishedSubtasks, PublishedSubtasks>();
         services.TryAddScoped<IPlanPeriods, PlanPeriods>();
         services.TryAddScoped<IHeldPlans, HeldPlans>();
+        services.TryAddScoped<IRosterLoader, RosterLoader>();
+        services.TryAddScoped<IRosterRows, RosterRowsLoader>();
+        services.TryAddScoped<IHeldRosters, HeldRosters>();
 
         services.TryAddScoped<IReviewNotices, ReviewNoticesService>();
         services.TryAddScoped<IReviewGate, ReviewGateService>();

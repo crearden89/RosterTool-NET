@@ -1,0 +1,98 @@
+@* Port of DayBar in src/app/(app)/plan/sales/SalesClient.tsx. *@
+@using global::Roster.Engine.Core
+@* One day: its value on top, the bar, its day below. A button that opens the
+   adjustment (read-only viewers get a focusable figure with the same
+   details), with the reason on hover or focus. *@
+@if (ReadOnly)
+{
+    <div tabindex="0" role="img" aria-label="@Label" class="@Cls">@Body</div>
+}
+else
+{
+    <button type="button" @onclick="OnOpen" aria-label="@Label" class="@($"{Cls} cursor-pointer hover:bg-[var(--ui-canvas)]")">@Body</button>
+}
+
+@code {
+    private const int BarArea = 200; // px, the tallest bar
+
+    [Parameter, EditorRequired] public SalesDay Day { get; set; } = default!;
+    [Parameter] public double Max { get; set; } = 1;
+
+    /// <summary>"left", "centre" or "right": tips near the chart's edges open inwards.</summary>
+    [Parameter] public string Align { get; set; } = "centre";
+
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback OnOpen { get; set; }
+
+    private string Cls => $"group relative flex min-w-0 flex-1 flex-col items-stretch rounded-xl px-0.5 pb-1 {Ui.FocusRing}";
+
+    private bool Closed => Day.Override?.Closed == true;
+
+    private string Label =>
+        $"{Dates.AuDayLabel(Day.Date)}: forecast {SalesFigures.Money0(Day.Forecast)}"
+        + (Day.Adjusted is { } a && !Closed ? $", adjusted {Day.Pill} to {SalesFigures.Money0(a)}" : "")
+        + (Closed ? ", store closed" : "")
+        + (Day.Note is { Length: > 0 } ? $". Reason: {Day.Note}" : "")
+        + (ReadOnly ? "" : ". Press to adjust.");
+
+    private RenderFragment Body => __builder =>
+    {
+        var x = Day;
+        var h = x.Shown > 0 ? Math.Max(3, Js.Round(x.Shown / Max * BarArea)) : 0;
+        var ghost = x.Adjusted != null && x.Forecast > 0 ? Js.Round(x.Forecast / Max * BarArea) : 0;
+        var closed = Closed;
+        var dayOfWeek = SalesFigures.Dow[(int)x.Date.DayOfWeek];
+        <span class="flex w-full flex-col items-center justify-end" style="@($"height: {BarArea + 46}px")">
+            @if (x.Pill is not null)
+            {
+                <Pill Tone="@(closed ? PillTone.Red : PillTone.Gold)" Class="mb-1 !px-1.5 !py-0 text-[10px]">@x.Pill</Pill>
+            }
+            <span class="mb-1 block text-center text-[11px] font-semibold text-[var(--ui-ink)]">@(closed ? "-" : SalesFigures.MoneyK(x.Shown))</span>
+            <span class="relative flex w-full items-end justify-center" style="@($"height: {Js.NumberToString(Math.Max(h, Math.Max(ghost, closed ? 12 : 0)))}px")">
+                @if (ghost > h)
+                {
+                    @* The original forecast, outlined, behind a day cut below it. *@
+                    <span aria-hidden="true" class="absolute bottom-0 w-full max-w-[34px] rounded-t-lg border-2 border-dashed border-[var(--ui-control)]"
+                          style="@($"height: {Js.NumberToString(ghost)}px")"></span>
+                }
+                @if (closed)
+                {
+                    <span aria-hidden="true" class="block h-3 w-full max-w-[34px] rounded-md border border-[var(--ui-line)]"
+                          style="background: repeating-linear-gradient(135deg, #e3e3ee 0 2px, #f7f7fb 2px 5px)"></span>
+                }
+                else
+                {
+                    <span aria-hidden="true"
+                          class="@($"relative block w-full max-w-[34px] rounded-t-lg transition-[filter] group-hover:brightness-125 {(x.Weekend ? "bg-[var(--ui-violet)]" : "bg-[var(--ui-ink)]")}")"
+                          style="@($"height: {Js.NumberToString(h)}px")"></span>
+                }
+            </span>
+        </span>
+        <span class="mt-1.5 block text-center text-[10px] leading-tight font-semibold text-[var(--ui-faint)] uppercase">
+            @dayOfWeek[0]
+            <span class="block text-[11px] font-medium text-[var(--ui-muted)]">@x.Date.Day</span>
+        </span>
+        @* The day's details on hover or focus. aria-hidden: the label says it. *@
+        <span aria-hidden="true"
+              class="@($"pointer-events-none absolute top-0 z-20 hidden w-56 rounded-xl bg-[var(--ui-ink)] px-3 py-2 text-left text-xs leading-snug font-normal text-white shadow-lg ring-1 ring-white/20 group-hover:block group-focus-visible:block {(Align == "left" ? "left-0" : Align == "right" ? "right-0" : "left-1/2 -translate-x-1/2")}")">
+            <span class="block font-semibold">@Dates.AuDayLabel(x.Date)</span>
+            <span class="block">Forecast @SalesFigures.Money0(x.Forecast)</span>
+            @if (x.Avg is { } avg)
+            {
+                <span class="block text-white/75">12-week average @SalesFigures.Money0(avg)</span>
+            }
+            @if (x.Adjusted is { } adjusted && !closed)
+            {
+                <span class="block">Adjusted @x.Pill → @SalesFigures.Money0(adjusted)</span>
+            }
+            @if (closed)
+            {
+                <span class="block">Store closed</span>
+            }
+            @if (x.Note is { Length: > 0 } note)
+            {
+                <span class="mt-1 block text-[var(--ui-gold)]">“@note”</span>
+            }
+        </span>
+    };
+}

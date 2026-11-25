@@ -91,10 +91,3 @@ public sealed class PayCostsLoader(IRefData refData, IPayData payData, IStage1Lo
         RequestMemo.Cached("payroll.getPeriodTiers", [storeId, periodStart], async () =>
             await TierRosterPeriodAsync(await freshRoster.FortnightShiftsAsync(storeId, periodStart, ct), ct));
 }
-
-/// <summary>The fresh fortnight roster, until E2's roster engine half lands.</summary>
-public sealed class PendingFreshRosterShifts : IFreshRosterShifts
-{
-    public Task<IReadOnlyList<(DateOnly Date, IEnumerable<Shift> Shifts)>> FortnightShiftsAsync(Guid storeId, DateOnly periodStart, CancellationToken ct = default) =>
-        throw new NotImplementedException("computeRosterFortnight needs E2's fortnight roster (lib/stage2/compute).");
-}
