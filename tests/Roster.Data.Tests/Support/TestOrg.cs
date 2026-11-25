@@ -1,4 +1,5 @@
 // New: a small invented organisation for the store-scope tests.
+using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 using Roster.Data.Scope;
 
@@ -98,7 +99,9 @@ public sealed class TestOrg
         sys.UploadBatches.Add(new UploadBatch { Type = UploadTypes.Benchmark, Filename = "bench.csv" });
         sys.FeedTokens.Add(new FeedToken { Label = "Warehouse sync", Token = "feed-token-1" });
         sys.CronRuns.Add(new CronRun { Job = "emso-check", RunCount = 1 });
-        sys.LoadTypes.Add(new LoadType { Name = "Ambient", MinutesPerPallet = 19 });
+        // A database built by the migrations already has Ambient (the ReferenceData migration).
+        if (!sys.LoadTypes.IgnoreQueryFilters().Any(l => l.Name == "Ambient"))
+            sys.LoadTypes.Add(new LoadType { Name = "Ambient", MinutesPerPallet = 19 });
         sys.SaveChanges();
         return o;
     }
