@@ -1,0 +1,343 @@
+@* Port of src/app/(app)/plan/generate/DayPlanBlock.tsx (the edit mode's logic is DayPlanEditor). *@
+@using global::Roster.Engine.Planning
+@using global::Roster.Engine.Planning.Plan
+@using global::Roster.Engine.Planning.Stage1
+@using global::Roster.Engine.Rostering.Shaper
+@using global::Roster.Engine.SubTasks
+@using global::Roster.Web.Features.RosterPage
+@using global::Roster.Web.Features.RosterPage.Grid
+@using Curve = global::Roster.Engine.Planning.Plan.TradeCurve
+@inject IPlanService PlanService
+@inject TimeProvider Clock
+@{ Compute(); }
+<div>
+    <DayHeading Class="mb-3" Title="@PageFigures.LongDayLabel(Date)">
+        <Figures>
+            @if (_hours is not null && !Peer)
+            {
+                <FigureChip Value="@Text($"{Js.ToFixed(_hours.Worked, 2)} h")" Label="@Text("planned")" />
+                <FigureChip Value="@Text($"{Js.ToFixed(_hours.Benchmark, 2)} h")" Label="@Text("benchmark")" />
+                <FigureChip Value="@Text($"{PageFigures.Signed(_hours.Gap)} h")"
+                            Label="@Text(_hours.Status == "ok" ? "within ±1 h" : _hours.Status == "warning" ? "over, rules allow" : "outside ±1 h")"
+                            Tone="@(_hours.Status == "error" ? FigureTone.Bad : FigureTone.Plain)" />
+            }
+            <FigureChip Value="@Text(Js.NumberToString(_shifts.Count))" Label="@Text(_shifts.Count == 1 ? "shift" : "shifts")" />
+        </Figures>
+        <Beside>
+            @if (NightFill)
+            {
+                <span title="Night fill store: load running is permitted at night, so Load Running is planned from 18:00 to close (Store Attributes → Night Fill)"
+                      class="inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-navy)] px-2.5 py-1 text-xs font-semibold text-white">
+                    <svg viewBox="0 0 16 16" aria-hidden="true" class="h-3.5 w-3.5" fill="currentColor">
+                        <path d="M6 .278a.768.768 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278" />
+                    </svg>
+                    Night load running permitted
+                </span>
+            }
+            @if (CanEdit && !_edit.Editing)
+            {
+                <button type="button" @onclick="StartEditing"
+                        class="rounded-lg border border-[var(--brand-border)] px-3 py-1.5 text-sm font-semibold text-[var(--brand-navy)] hover:bg-[var(--brand-surface)]">
+                    Edit
+                </button>
+            }
+            @if (_edit.Editing)
+            {
+                <button type="button" @onclick="SaveAsync" disabled="@_saving"
+                        class="rounded-lg bg-[var(--brand-orange)] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60">
+                    @(_saving ? "Saving…" : "Save changes")
+                </button>
+                <button type="button" @onclick="_edit.Stop" disabled="@_saving"
+                        class="rounded-lg border border-[var(--brand-border)] px-3 py-1.5 text-sm text-[var(--brand-navy)] hover:bg-[var(--brand-surface)]">
+                    Cancel
+                </button>
+                @if (_edit.Error is not null)
+                {
+                    <span class="text-sm font-medium text-[var(--brand-red)]">@_edit.Error</span>
+                }
+            }
+        </Beside>
+    </DayHeading>
+
+    @if (_edit.Editing)
+    {
+        <div class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--brand-navy)]/20 bg-[var(--brand-navy-tint)] px-4 py-2.5">
+            <span class="mr-1 text-sm font-semibold text-[var(--brand-navy)]">
+                Pick a labour group, then click 15-min tiles to fill:
+            </span>
+            @* One Checkout chip since the SCO/Registers merge - it paints
+               "registers" blocks, which display as the combined CO tile. *@
+            @ToolChip(PaintTools.Registers, "CO", LabourGroups.CheckoutColorLeft, true)
+            @ToolChip("load_running", ChipText("load_running", "LR"), GroupColor("load_running"))
+            @SubChips("load_running", GroupColor("load_running"))
+            @ToolChip("reset", ChipText("reset", "RR"), GroupColor("reset"), true)
+            @SubChips("reset", GroupColor("reset"), true)
+            @ToolChip("admin", "AD", GroupColor("admin"))
+            @ToolChip("specials", ChipText("specials", "SB"), GroupColor("specials"), true)
+            @SubChips("specials", GroupColor("specials"), true)
+            @ToolChip("cleaning", ChipText("cleaning", "CL"), GroupColor("cleaning"))
+            @SubChips("cleaning", GroupColor("cleaning"))
+            @ToolChip("non_op", "N", GroupColor("non_op"))
+            @ToolChip(PaintTools.Break, "BR", "var(--brand-red)")
+            <button type="button" @onclick="() => _edit.ToggleTool(PaintTools.Erase)"
+                    class="@(_edit.Tool == PaintTools.Erase
+                        ? "rounded border border-[var(--brand-red)] px-2 py-1 text-xs font-semibold text-[var(--brand-red)] bg-[var(--brand-red)] !text-white ring-2 ring-[var(--brand-navy)] ring-offset-1"
+                        : "rounded border border-[var(--brand-red)] px-2 py-1 text-xs font-semibold text-[var(--brand-red)] bg-white hover:bg-[var(--brand-red-tint)]")">
+                ✕ Clear labour group
+            </button>
+            <span class="text-xs text-[var(--brand-navy)]/60">
+                @(_edit.Tool == PaintTools.Erase
+                    ? "Eraser on - click a tile to clear it, or the shift's FIRST/LAST tile to trim the shift"
+                    : _edit.Tool is not null
+                        ? "Click tiles to paint - painting BEYOND a shift's start or finish stretches it there"
+                        : ShowAll
+                            ? "Nothing selected yet (you can also click a row in the Benchmark table - sub-task rows too)"
+                            : "Nothing selected yet (you can also click a row in the Benchmark table; open Reset, Load Running, Cleaning or Specials with its arrow to paint one of its sub-tasks)")@(" · ")✕ on a row deletes that shift, the role badge cycles MGR/SA/JSA
+            </span>
+            <button type="button" @onclick="AddShift"
+                    class="rounded-lg bg-[var(--brand-green)] px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110">
+                + Add shift
+            </button>
+        </div>
+    }
+
+    <PlanRosterView Plan="_shownPlan"
+                    CheckoutBlocks="_checkoutBlocks"
+                    OnCellClick="@(_edit.Editing ? EventCallback.Factory.Create<GridCell>(this, CellClick) : default)"
+                    Extendable="_edit.Editing"
+                    OnRemoveRow="@(_edit.Editing ? EventCallback.Factory.Create<string>(this, _edit.RemoveShift) : default)"
+                    OnRoleClick="@(_edit.Editing ? EventCallback.Factory.Create<string>(this, _edit.CycleRole) : default)"
+                    HeatRow="_heatRow"
+                    LoadRunningPeriods="_lrPeriods"
+                    OpenGroups="ShownGroups" />
+    <RosterLegend HeatRamp="@(_heatRow is not null ? Curve.HeatRamp : null)" LoadRunning="true" />
+    @if (ShowAll)
+    {
+        <SubtaskLegend />
+    }
+
+    @* The day's checks beside its summary - not for another store's plan,
+       whose flags never reach the page. *@
+    @if (!Peer)
+    {
+        <div class="mb-6 grid gap-4 lg:grid-cols-3">
+            <ChecksCard Class="lg:col-span-2"
+                        Title="@Text($"Checks for {PageFigures.LongDayLabel(Date)}")"
+                        Aside="@Text(_hasErrors ? "Errors stop the day being OK: fix them, or explain them in the Review" : "Errors stop the day being OK; warnings are for a look")"
+                        Rows="_checkRows" />
+            <Card>
+                <SectionHeader Title="@Text("Day summary")" />
+                <dl class="grid grid-cols-2 gap-3">
+                    @foreach (var (label, n) in new[] { ("Total shifts", _shifts.Count), ("Manager shifts", _managerShifts), ("SA shifts", _saShifts), ("JSA shifts", _jsaShifts) })
+                    {
+                        <div @key="label" class="rounded-xl bg-[var(--ui-lavender)] px-3 py-2">
+                            <dt class="text-[10px] font-semibold tracking-wide text-[var(--ui-muted)] uppercase">@label</dt>
+                            <dd class="text-lg font-bold text-[var(--ui-ink)]">@n</dd>
+                        </div>
+                    }
+                </dl>
+            </Card>
+        </div>
+    }
+
+    @* Row 1: Benchmark Hours with the day's admin tasks beside it - the
+       tasks are the detail behind the AdminMGmt line, so they read best
+       next to it. The task table is the narrower of the two. *@
+    <div class="mb-6 flex flex-col gap-6 lg:flex-row lg:items-stretch">
+        <div class="flex flex-col lg:flex-[3]">
+            <h3 class="mb-2 text-lg font-semibold text-[var(--brand-navy)]">Benchmark Hours</h3>
+            <div class="flex-1 overflow-hidden rounded-xl border border-[var(--brand-border)] bg-white">
+                <table class="w-full text-sm">
+                    <thead class="bg-[var(--brand-navy)] text-left text-white">
+                        <tr>
+                            <th class="px-3 py-2 font-medium">Labour Group</th>
+                            <th class="px-3 py-2 text-right font-medium">Benchmark</th>
+                            <th class="px-3 py-2 text-right font-medium">Allocated</th>
+                            <th class="px-3 py-2 text-right font-medium">Variance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in RowOrder)
+                        {
+                            var share = _benchRows.GetOr(row.Key, 0); // hundredths of an hour
+                            var alloc = _tileHours.GetValueOrDefault(row.Key); // counted from the tiles drawn
+                            var variance = Js.Round(alloc * 100) - share; // + = over-allocated, − = short
+                            // In edit mode a benchmark row doubles as the palette: click it to
+                            // select that group (the Checkout row paints the same "registers"
+                            // blocks the CO chip does).
+                            var rowTool = row.Key == "checkout" ? PaintTools.Registers : row.Key;
+                            var selected = _edit.Editing && _edit.Tool == rowTool;
+                            // Reset, Load Running, Cleaning and Specials open into their
+                            // sub-tasks: a click on the row (or its arrow, while editing). With
+                            // "Show sub-tasks" on they are all open, and stay so.
+                            var hasSubs = Catalogue.IsSubtaskGroup(row.Key);
+                            var opens = hasSubs && !ShowAll;
+                            var isOpen = hasSubs && ShownGroups.Contains(row.Key);
+                            <tr @key="row.Key" @onclick="() => GroupRowClick(rowTool, opens, row.Key)"
+                                title="@(opens && !_edit.Editing ? isOpen ? "Click to close the sub-tasks" : "Click to open the sub-tasks" : null)"
+                                class="@Ui.Cx("border-t border-[var(--brand-border)]", _edit.Editing || opens ? "cursor-pointer hover:bg-[var(--brand-navy-tint)]" : null, selected ? "bg-[var(--brand-navy-tint)]" : null)">
+                                <td class="flex items-center gap-2 px-3 py-1.5">
+                                    <span class="inline-block h-3 w-3 rounded-sm" style="@($"background:{row.Color}")"></span>
+                                    @row.Label
+                                    @if (opens)
+                                    {
+                                        <button type="button" aria-expanded="@(isOpen ? "true" : "false")"
+                                                aria-label="@(isOpen ? $"Close {row.Label}'s sub-tasks" : $"Open {row.Label}'s sub-tasks")"
+                                                @onclick="() => ToggleGroup(row.Key)" @onclick:stopPropagation="true"
+                                                class="rounded px-1 text-xs text-[var(--brand-navy)]/60 hover:bg-[var(--brand-navy-tint)] hover:text-[var(--brand-navy)]">
+                                            @(isOpen ? "▾" : "▸")
+                                        </button>
+                                    }
+                                    @if (selected)
+                                    {
+                                        <span class="text-xs font-semibold text-[var(--brand-navy)]/60">← painting</span>
+                                    }
+                                </td>
+                                <td class="px-3 py-1.5 text-right"
+                                    title="@(row.Key == "checkout" ? "What the day's benchmark leaves after the other groups: the benchmark file's checkout hours and the rounding the other groups give up for the tills" : null)">
+                                    @BenchmarkSplit.HoursText(share)
+                                </td>
+                                <td class="px-3 py-1.5 text-right">@Js.ToFixed(alloc, 2)</td>
+                                <td class="@(Math.Abs(variance) > 1 ? "px-3 py-1.5 text-right text-[var(--brand-red)]" : "px-3 py-1.5 text-right")">
+                                    @BenchmarkSplit.SignedText(variance)
+                                </td>
+                            </tr>
+                            @if (isOpen)
+                            {
+                                // The sub-tasks: no benchmark of their own (a dash) and no
+                                // variance - their tiles add up to the group's.
+                                foreach (var st in Catalogue.SubtasksOf(row.Key))
+                                {
+                                    var subSelected = _edit.Editing && _edit.Tool == st.Key;
+                                    <tr @key="st.Key" @onclick="() => SubRowClick(st.Key)"
+                                        class="@Ui.Cx("text-[var(--brand-navy)]/80", _edit.Editing ? "cursor-pointer hover:bg-[var(--brand-navy-tint)]" : null, subSelected ? "bg-[var(--brand-navy-tint)]" : "bg-[var(--brand-surface)]")">
+                                        <td class="flex items-center gap-2 py-1 pl-8 pr-3">
+                                            <span class="inline-flex h-4 w-5 items-center justify-center rounded-sm text-[8px] font-semibold leading-none"
+                                                  style="@($"background:{row.Color};color:{TileText(row.Key)}")">@st.Code</span>
+                                            @st.Label
+                                            @if (subSelected)
+                                            {
+                                                <span class="text-xs font-semibold text-[var(--brand-navy)]/60">← painting</span>
+                                            }
+                                        </td>
+                                        <td class="px-3 py-1 text-right text-[var(--brand-navy)]/40">-</td>
+                                        <td class="px-3 py-1 text-right">@Js.ToFixed(_subHours.GetOr(st.Key, 0) * 0.25, 2)</td>
+                                        <td class="px-3 py-1"></td>
+                                    </tr>
+                                }
+                            }
+                        }
+                        @* Breaks are a scheduling by-product, not demand - informational
+                           only, excluded from the Total/Variance below. In edit mode
+                           the row selects the BR paint tool like any other. *@
+                        <tr @onclick="() => SubRowClick(PaintTools.Break)"
+                            class="@Ui.Cx("border-t border-[var(--brand-border)]", _edit.Editing ? "cursor-pointer hover:bg-[var(--brand-navy-tint)]" : null, _edit.Editing && _edit.Tool == PaintTools.Break ? "bg-[var(--brand-navy-tint)]" : null)">
+                            <td class="flex items-center gap-2 px-3 py-1.5">
+                                <span class="inline-block h-3 w-3 rounded-sm" style="background:var(--brand-red)"></span>
+                                Breaks
+                                @if (_edit.Editing && _edit.Tool == PaintTools.Break)
+                                {
+                                    <span class="text-xs font-semibold text-[var(--brand-navy)]/60">← painting</span>
+                                }
+                            </td>
+                            <td class="px-3 py-1.5 text-right">@Js.ToFixed(_totalBreakHours, 2)</td>
+                            <td class="px-3 py-1.5 text-right">@Js.ToFixed(_totalBreakHours, 2)</td>
+                            <td class="px-3 py-1.5 text-right">0.00</td>
+                        </tr>
+                        <tr class="border-t-2 border-[var(--brand-border)] font-semibold">
+                            <td class="px-3 py-2">Total work</td>
+                            <td class="px-3 py-2 text-right">@BenchmarkSplit.HoursText(_benchTotal)</td>
+                            <td class="px-3 py-2 text-right">@Js.ToFixed(_rosteredTotal, 2)</td>
+                            <td class="px-3 py-2 text-right">@BenchmarkSplit.SignedText(_dayVariance)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            @if (_hours is not null && !Peer)
+            {
+                <p class="@(_hours.Status == "ok" ? "mt-2 text-sm text-green-700" : _hours.Status == "warning" ? "mt-2 text-sm text-[#a34a00]" : "mt-2 text-sm text-[var(--brand-red)]")">
+                    @($"Day hours {Js.ToFixed(_hours.Worked, 2)}h worked vs {Js.ToFixed(_hours.Benchmark, 2)}h benchmark ({(_hours.Gap >= 0 ? "+" : "")}{Js.ToFixed(_hours.Gap, 2)}h) - {(_hours.Status == "ok" ? "within the 1-hour tolerance ✓" : _hours.Status == "warning" ? "over, for reasons the rules allow (see the warnings)" : "outside the 1-hour tolerance ✗")}")
+                </p>
+            }
+        </div>
+
+        @* The day's named administration tasks (from the catalogue on Labour
+           Rules), resolved to concrete minutes + windows for this store/date.
+           Placement guidance only - the AdminMGmt benchmark beside it already
+           funds this work. Snapshots generated before the catalogue existed
+           don't carry it. *@
+        @if (!Peer && Result.AdminTasks is { Count: > 0 } tasks)
+        {
+            <div class="flex flex-col lg:flex-[2]">
+                <h3 class="mb-2 text-lg font-semibold text-[var(--brand-navy)]">
+                    Admin Tasks Due Today
+                </h3>
+                <div class="flex-1 overflow-hidden rounded-xl border border-[var(--brand-border)] bg-white">
+                    <table class="w-full text-sm">
+                        <thead class="bg-[var(--brand-navy)] text-left text-white">
+                            <tr>
+                                <th class="px-3 py-2 font-medium">Task</th>
+                                <th class="px-3 py-2 text-right font-medium">Mins</th>
+                                <th class="whitespace-nowrap px-3 py-2 font-medium">Execution Window</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in tasks)
+                            {
+                                <tr @key="t.Name" class="border-t border-[var(--brand-border)]">
+                                    <td class="px-3 py-1.5 font-medium text-[var(--brand-navy)]">@t.Name</td>
+                                    @* Two decimals, as every number on this page. *@
+                                    <td class="px-3 py-1.5 text-right">@Js.ToFixed(t.Minutes, 2)</td>
+                                    @* Fixed-width, tabular-figure time slots so every row's
+                                       digits and separator sit on the same vertical lines -
+                                       the column is scanned down, not read across. *@
+                                    <td class="whitespace-nowrap px-3 py-1.5 tabular-nums">
+                                        <span class="inline-flex items-baseline gap-1.5">
+                                            <span class="w-[5ch] text-right">@Grid.MinToTime(t.WindowStart)</span>
+                                            <span class="text-[var(--brand-navy)]/40">:</span>
+                                            <span class="w-[5ch]">@Grid.MinToTime(t.WindowEnd)</span>
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                            <tr class="border-t-2 border-[var(--brand-border)] font-semibold">
+                                <td class="px-3 py-2">Total</td>
+                                <td class="px-3 py-2 text-right">@Js.ToFixed(tasks.Aggregate(0.0, (s, t) => s + t.Minutes), 2)</td>
+                                <td class="px-3 py-2"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Row 3: the store's trade curve for THIS day's weekday, so the plan above
+       can be read against when the shop is actually busy. Follows the date
+       chips automatically - the weekday comes from the date. *@
+    @if (TradeCurve is not null)
+    {
+        <div class="mb-6">
+            <TradeCurveCard Week="TradeCurve" Dow="Period.DowMon0(Date)" />
+        </div>
+    }
+</div>
+
+@code {
+    private RenderFragment ToolChip(string t, string label, string color, bool lightText = false, string? title = null) =>
+        @<button @key="t" type="button" title="@title" @onclick="() => _edit.ToggleTool(t)"
+                 class="@(_edit.Tool == t ? "rounded px-2 py-1 text-xs font-semibold ring-2 ring-[var(--brand-navy)] ring-offset-1" : "rounded px-2 py-1 text-xs font-semibold opacity-80 hover:opacity-100")"
+                 style="@($"background:{color};color:{(lightText ? "var(--brand-navy)" : "#fff")}")">@label</button>;
+
+    // An opened group's sub-tasks as chips of their own, set off by a thin rule so they
+    // read as part of the group before them.
+    private RenderFragment? SubChips(string g, string color, bool lightText = false) =>
+        ShownGroups.Contains(g)
+            ? @<span @key="@($"{g}-subs")" class="flex items-center gap-1 border-l border-[var(--brand-navy)]/30 pl-1.5">
+                  @foreach (var st in Catalogue.SubtasksOf(g))
+                  {
+                      @ToolChip(st.Key, st.Code, color, lightText, $"{LabourGroups.ByKey[g].Label} · {st.Label}")
+                  }
+              </span>
+            : null;
+}

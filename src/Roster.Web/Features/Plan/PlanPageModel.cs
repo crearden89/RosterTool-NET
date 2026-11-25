@@ -1,6 +1,8 @@
 // Port of the data src/app/(app)/plan/generate/page.tsx works out before it renders.
 
 using Roster.Engine.Core;
+using Roster.Engine.Planning.Plan;
+using Roster.Engine.Planning.Stage1;
 
 namespace Roster.Web.Features.Plan;
 
@@ -12,6 +14,12 @@ public enum PlanChipTone { Ok, Error, Neutral }
 
 /// <summary>One day of the fortnight's chips: the date, where it goes, its dot, its figure and what it says.</summary>
 public sealed record PlanDayChip(DateOnly Date, string Href, PlanChipTone Tone, string? Note, string? Status);
+
+/// <summary>
+/// The selected day as the page draws it (dayForRender): Stage 1's result and the held plan.
+/// For another store's plan the flags, notes, checks and hours are already stripped.
+/// </summary>
+public sealed record PlanDayView(Stage1Computation Result, PlanShiftComputation? Plan);
 
 /// <summary>
 /// Everything /plan/generate shows (page.tsx after its reads): the store and fortnight, who
@@ -78,6 +86,18 @@ public sealed record PlanPageModel
 
     /// <summary>Night fill (Store Attributes): load running is permitted at night.</summary>
     public bool NightFill { get; init; }
+
+    /// <summary>The selected day, when the held plan has it.</summary>
+    public PlanDayView? Day { get; init; }
+
+    /// <summary>The store's floor-cover rules, for the day's live hours check while editing.</summary>
+    public CoverRules? Cover { get; init; }
+
+    /// <summary>The store's weekly trade pattern, bucketed to hours (the panel under the plan).</summary>
+    public TradeCurveWeek? TradeCurve { get; init; }
+
+    /// <summary>The same curve at 15 minutes, index 0 = Monday, for the heat row in the plan grid.</summary>
+    public IReadOnlyList<IReadOnlyList<CurveShare>>? TradeQuarterHours { get; init; }
 
     /// <summary>Where the Review of this fortnight is.</summary>
     public string ReviewHref => $"/plan/review?store={SelectedStore}&period={PeriodStart.ToIso()}";
