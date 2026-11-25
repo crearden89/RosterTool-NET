@@ -2899,6 +2899,10 @@
       grid-column: span 2 / span 2;
     }
 
+    .lg\:col-span-3 {
+      grid-column: span 3 / span 3;
+    }
+
     .lg\:col-start-1 {
       grid-column-start: 1;
     }
@@ -2942,6 +2946,10 @@
 
     .lg\:grid-cols-4 {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .lg\:grid-cols-5 {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
     .lg\:grid-cols-\[12rem_minmax\(0\,1fr\)\] {
