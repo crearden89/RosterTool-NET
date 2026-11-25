@@ -1,0 +1,32 @@
+@* Port of EntryCard in src/app/(app)/plan/non-op/NonOpClient.tsx. *@
+@* One entry: the item, who, the minutes and what it was for, edged in its
+   category's colour, with a cross to remove it. *@
+<li class="@($"relative rounded-xl border border-[var(--ui-line)] bg-[var(--ui-canvas)] py-2 pl-3 transition-opacity {(CanRemove ? "pr-7" : "pr-3")} {(Dim ? "opacity-35" : "")}")"
+    style="@($"box-shadow: inset 3px 0 0 {Colour}")">
+    <p class="text-xs leading-snug font-semibold text-[var(--ui-ink)]">@Item</p>
+    <p class="mt-1 flex min-w-0 items-start gap-1.5 text-xs leading-tight text-[var(--ui-ink)]">
+        <Avatar Name="@(Person?.Name ?? "?")" Seed="@Person?.Id.ToString()" Size="16" />
+        <span class="min-w-0 break-words">@(Person?.Name ?? "-")</span>
+    </p>
+    <p class="mt-1 text-[11px] leading-snug break-words text-[var(--ui-muted)]">
+        <b class="font-semibold text-[var(--ui-ink)] tabular-nums">@Entry.Minutes min</b> · @Entry.Description
+    </p>
+    @if (CanRemove)
+    {
+        <button type="button" @onclick="OnRemove" disabled="@Busy" title="Remove" aria-label="@($"Remove {Item} for {Person?.Name ?? "-"}")"
+                class="@($"absolute top-1.5 right-1.5 grid h-5 w-5 place-items-center rounded-md text-[var(--ui-muted)] hover:bg-white hover:text-[var(--ui-bad)] {Ui.FocusRing}")">
+            <Icon Name="IconName.X" Class="h-3.5 w-3.5" StrokeWidth="2.5" />
+        </button>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public string Item { get; set; } = "";
+    [Parameter] public NonOpEmployee? Person { get; set; }
+    [Parameter, EditorRequired] public NonOpEntryRow Entry { get; set; } = default!;
+    [Parameter] public string Colour { get; set; } = "";
+    [Parameter] public bool Dim { get; set; }
+    [Parameter] public bool CanRemove { get; set; }
+    [Parameter] public EventCallback OnRemove { get; set; }
+    [Parameter] public bool Busy { get; set; }
+}

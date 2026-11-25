@@ -485,10 +485,7 @@
         </div>;
 
     private static RenderFragment Note(string who, string text) =>
-        @<div class="rounded-xl bg-[var(--ui-canvas)] px-3 py-2 text-sm whitespace-pre-line text-[var(--ui-ink)]">
-            <span class="mb-0.5 block text-[10px] font-semibold tracking-wider text-[var(--ui-muted)] uppercase">@who</span>
-            @text
-        </div>;
+        @<div class="rounded-xl bg-[var(--ui-canvas)] px-3 py-2 text-sm whitespace-pre-line text-[var(--ui-ink)]"><span class="mb-0.5 block text-[10px] font-semibold tracking-wider text-[var(--ui-muted)] uppercase">@who</span>@text</div>;
 
     private RenderFragment CheckControl(ReviewCheckView c, bool inList)
     {

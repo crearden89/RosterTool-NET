@@ -1,0 +1,258 @@
+@* Port of src/app/(app)/plan/non-op/AddNonOpSheet.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Web.Features.Plan
+@inject INonOpService Service
+@* ─── Adding Non-Op hours: a side sheet ───────────────────────────────────────
+   The add dialog's fields and rules, in a sheet over the calendar: the day
+   (the one clicked, changeable to any day of the fortnight), the category, the
+   items allowed on that weekday with their default and maximum, the team
+   member, the minutes (pre-filled with the item's default, checked against
+   its minimum and maximum) and the description, which the server requires. *@
+<SideSheet TitleId="add-non-op-title" OnClose="OnClose">
+    <Eyebrow>Add Non-Op hours</Eyebrow>
+    <Title>@PageFigures.LongDayLabel(_day)</Title>
+    <Badges><span class="text-xs text-[var(--ui-muted)]">@StoreName · already @NonOpShared.HoursText(Already) h this day</span></Badges>
+    <Actions>
+        <SheetIconButton Label="Close" OnClick="OnClose"><Icon Name="IconName.X" Class="h-4 w-4" /></SheetIconButton>
+    </Actions>
+    <Footer>
+        @if (_err is not null)
+        {
+            <p role="alert" class="w-full text-sm text-[var(--ui-bad)]">@_err</p>
+        }
+        <p class="text-xs text-[var(--ui-muted)]">Adds <b class="font-semibold text-[var(--ui-ink)]">@NonOpShared.HoursText(Minutes) h</b> to @Dates.AuDayLabel(_day)</p>
+        <span class="flex gap-2">
+            <button type="button" @onclick="OnClose" disabled="@_busy" class="@Ui.ButtonClass(ButtonKind.Secondary)">Cancel</button>
+            <button type="button" @onclick="SaveAsync" disabled="@(_busy || _subId is null)" class="@Ui.ButtonClass(ButtonKind.Accent)">@(_busy ? "Saving…" : "Save")</button>
+        </span>
+    </Footer>
+    <ChildContent>
+        <div class="space-y-4">
+            <Card Class="!p-4 sm:!p-5">
+                <Eyebrow Class="mb-2">Day</Eyebrow>
+                <div class="space-y-2">
+                    @for (var i = 0; i < 2; i++)
+                    {
+                        var wk = FortnightDates.Skip(i * 7).Take(7).ToList();
+                        <div @key="i" role="radiogroup" aria-label="@($"Week {i + 1}")" class="grid grid-cols-7 gap-1">
+                            @foreach (var x in wk)
+                            {
+                                var on = x == _day;
+                                var has = Entries.Any(e => e.Date == x);
+                                <button @key="x" type="button" role="radio" aria-checked="@(on ? "true" : "false")"
+                                        aria-label="@($"{Dates.AuDayLabel(x)}{(has ? ", has Non-Op" : "")}")" @onclick="() => PickDay(x)"
+                                        class="@($"flex flex-col items-center rounded-xl border px-0.5 py-1 {Ui.FocusRing} {(on ? "border-[var(--ui-ink)] bg-[var(--ui-ink)] text-white" : "border-[var(--ui-line)] bg-white text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)]")}")">
+                                    <span class="@($"text-[10px] font-semibold uppercase {(on ? "text-white/75" : NonOpShared.IsWeekend(x) ? "text-[var(--ui-violet)]" : "text-[var(--ui-faint)]")}")">@NonOpShared.WeekdayOf(x)</span>
+                                    <span class="text-sm leading-tight font-bold">@NonOpShared.DayNumber(x)</span>
+                                    <span aria-hidden="true" class="@($"mt-0.5 h-1 w-1 rounded-full {(has ? (on ? "bg-white" : "bg-[var(--ui-violet)]") : "bg-transparent")}")"></span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+                <p class="mt-2 text-xs text-[var(--ui-muted)]">A dot marks a day that already has Non-Op.</p>
+            </Card>
+
+            <Card Class="!p-4 sm:!p-5">
+                <Eyebrow Class="mb-2">What</Eyebrow>
+                @* Scrolls sideways rather than break the sheet if there are many. *@
+                <div class="max-w-full overflow-x-auto">
+                    <SegmentedControl T="Guid" Label="Category" Size="ControlSize.Sm" Value="_catId ?? Guid.Empty" OnChange="PickCategory"
+                                      Options="@Categories.Select(c => new SegmentOption<Guid>(c.Id, c.Name)).ToList()" />
+                </div>
+                @if (Items.Count == 0)
+                {
+                    <p class="mt-3 text-sm text-[var(--ui-muted)]">No @(Categories.FirstOrDefault(c => c.Id == _catId)?.Name ?? "") items may be booked on a @Weekday.</p>
+                }
+                else
+                {
+                    <div role="radiogroup" aria-label="Item" class="mt-3 space-y-1.5">
+                        @foreach (var s in Items)
+                        {
+                            var on = s.Id == _subId;
+                            <label @key="s.Id" class="@($"flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[color:var(--ui-violet)] {(on ? "border-[var(--ui-ink)] bg-[var(--ui-lavender)]" : "border-[var(--ui-line)] bg-white hover:bg-[var(--ui-lavender)]")}")">
+                                <input type="radio" name="non-op-item" checked="@on" @onchange="() => PickSub(s)" class="mt-1 accent-[var(--ui-ink)]" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm font-semibold text-[var(--ui-ink)]">@s.Name</span>
+                                    <span class="block text-xs text-[var(--ui-muted)]">
+                                        @(s.DefaultMinutes is { } dm ? $"Default {dm} min" : "No default")@(s.MaxMinutes is { } mx ? $" · maximum {mx} min" : s.Note is { Length: > 0 } nt ? $" · {nt}" : " · no maximum")
+                                    </span>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                }
+                <p class="mt-2 text-xs text-[var(--ui-muted)]">Only the items allowed on a @Weekday are listed.</p>
+            </Card>
+
+            <Card Class="!p-4 sm:!p-5">
+                <Eyebrow Class="mb-2">Who and how long</Eyebrow>
+                <label class="block">
+                    <span class="@Ui.FieldLabelClass">Team member</span>
+                    <select value="@_empId?.ToString()" @onchange="e => _empId = Guid.TryParse(e.Value?.ToString(), out var g) ? g : null" class="@($"w-full {Ui.FieldClass}")">
+                        @foreach (var e in Employees)
+                        {
+                            <option @key="e.Id" value="@e.Id">@e.Name</option>
+                        }
+                    </select>
+                </label>
+                <div class="mt-3 flex flex-wrap items-end gap-3">
+                    <label class="block">
+                        <span class="@Ui.FieldLabelClass">Minutes</span>
+                        <span class="flex items-center gap-2">
+                            <input type="number" inputmode="numeric" min="0" value="@_minutesStr" @oninput="e => _minutesStr = e.Value?.ToString() ?? string.Empty" class="@($"w-24 {Ui.FieldClass}")" />
+                            <span class="text-sm text-[var(--ui-muted)] tabular-nums">= @NonOpShared.HoursText(Minutes) h</span>
+                        </span>
+                    </label>
+                    @if (Picks.Count > 0)
+                    {
+                        <div class="flex flex-wrap gap-1.5 pb-1">
+                            @foreach (var p in Picks)
+                            {
+                                var pressed = p.M.ToString() == _minutesStr;
+                                <button @key="p.Label" type="button" aria-pressed="@(pressed ? "true" : "false")" @onclick="() => _minutesStr = p.M.ToString()"
+                                        class="@($"rounded-full px-2.5 py-1 text-xs font-semibold {Ui.FocusRing} {(pressed ? "bg-[var(--ui-ink)] text-white" : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)]")}")">
+                                    @p.Label @p.M
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+                @* The item's rule, where the minutes are entered (as the dialog had it). *@
+                @if (Sub is { } sub)
+                {
+                    <p class="mt-2 text-xs text-[var(--ui-muted)]">
+                        @if (sub.DefaultMinutes is { } dm)
+                        {
+                            <text>Default <b class="font-semibold">@dm min</b>@(sub.MaxMinutes is not null || sub.Note is { Length: > 0 } ? " · " : "")</text>
+                        }
+                        @(sub.MaxMinutes is { } mx ? $"Maximum {mx} min" : sub.Note is { Length: > 0 } nt ? nt : sub.DefaultMinutes is null ? "No default or maximum set for this item" : "No maximum set")
+                    </p>
+                }
+                <label class="mt-3 block">
+                    <span class="@Ui.FieldLabelClass">Description or team member name (required)</span>
+                    <input value="@_desc" @oninput="e => _desc = e.Value?.ToString() ?? string.Empty" placeholder="What it was for, or who it was for" class="@($"w-full {Ui.FieldClass}")" />
+                </label>
+            </Card>
+        </div>
+    </ChildContent>
+</SideSheet>
+
+@code {
+    private DateOnly _day;
+    private Guid? _catId;
+    private Guid? _subId;
+    private Guid? _empId;
+    private string _minutesStr = "30";
+    private string _desc = "";
+    private string? _err;
+    private bool _busy;
+
+    [Parameter, EditorRequired] public Guid StoreId { get; set; }
+    [Parameter] public string StoreName { get; set; } = "";
+
+    /// <summary>The fortnight's days, for the day picker.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<DateOnly> FortnightDates { get; set; } = [];
+
+    [Parameter, EditorRequired] public DateOnly InitialDate { get; set; }
+    [Parameter] public IReadOnlyList<NonOpCategoryRow> Categories { get; set; } = [];
+    [Parameter] public IReadOnlyList<NonOpSub> Subs { get; set; } = [];
+    [Parameter] public IReadOnlyList<NonOpEmployee> Employees { get; set; } = [];
+
+    /// <summary>The fortnight's entries: how much each day already has.</summary>
+    [Parameter] public IReadOnlyList<NonOpEntryRow> Entries { get; set; } = [];
+
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnSaved { get; set; }
+
+    // The minutes an item starts with: its default, else its minimum, else 30.
+    private static string Prefill(NonOpSub? s) => (s?.DefaultMinutes ?? s?.MinMinutes ?? 30).ToString();
+
+    protected override void OnInitialized()
+    {
+        _day = InitialDate;
+        _catId = Categories.Count > 0 ? Categories[0].Id : null;
+        _subId = NonOpShared.ItemsAllowed(Subs, _catId, InitialDate).FirstOrDefault()?.Id;
+        _empId = Employees.Count > 0 ? Employees[0].Id : null;
+        _minutesStr = Prefill(Sub);
+    }
+
+    private NonOpSub? Sub => Subs.FirstOrDefault(s => s.Id == _subId);
+    private List<NonOpSub> Items => NonOpShared.ItemsAllowed(Subs, _catId, _day);
+    private int Already => NonOpShared.MinutesOf(Entries.Where(e => e.Date == _day));
+    private double Minutes => Js.Number(_minutesStr).Or(0);
+    private string Weekday => PageFigures.LongDayLabel(_day).Split(' ')[0];
+
+    // The quick picks: the item's default and its maximum.
+    private List<(string Label, int M)> Picks
+    {
+        get
+        {
+            var all = new List<(string Label, int? M)> { ("Default", Sub?.DefaultMinutes), ("Maximum", Sub?.MaxMinutes) };
+            return all.Where((p, i) => p.M is not null && all.FindIndex(q => q.M == p.M) == i).Select(p => (p.Label, p.M!.Value)).ToList();
+        }
+    }
+
+    private void PickSub(NonOpSub? s)
+    {
+        _subId = s?.Id;
+        _minutesStr = Prefill(s);
+    }
+
+    // Another day may allow other items: the chosen one stays if it is allowed.
+    private void PickDay(DateOnly x)
+    {
+        _day = x;
+        var allowed = NonOpShared.ItemsAllowed(Subs, _catId, x);
+        if (!allowed.Any(s => s.Id == _subId)) PickSub(allowed.FirstOrDefault());
+    }
+
+    private void PickCategory(Guid c)
+    {
+        _catId = c;
+        PickSub(NonOpShared.ItemsAllowed(Subs, c, _day).FirstOrDefault());
+    }
+
+    // The dialog's checks, then the same server action (which requires the
+    // description and a team member).
+    private async Task SaveAsync()
+    {
+        var minutes = Minutes;
+        if (minutes <= 0)
+        {
+            _err = "Enter the minutes.";
+            return;
+        }
+        var sub = Sub;
+        if (sub?.MinMinutes is { } min && minutes < min)
+        {
+            _err = $"Minutes must be at least {min}";
+            return;
+        }
+        if (sub?.MaxMinutes is { } max && minutes > max)
+        {
+            _err = $"Minutes must be at most {max}";
+            return;
+        }
+        // minutes is a whole-number column: the database refused a fraction with this.
+        if (minutes != Math.Floor(minutes))
+        {
+            _err = $"invalid input syntax for type integer: \"{Js.NumberToString(minutes)}\"";
+            return;
+        }
+        _err = null;
+        _busy = true;
+        NonOpResult res;
+        try
+        {
+            res = await Service.AddNonOpEntryAsync(new AddNonOpEntryInput(StoreId, _day, _subId, _empId, (int)minutes, _desc));
+        }
+        catch (Exception)
+        {
+            res = new NonOpResult(false, "The connection to the server dropped. Reload the page to see whether it was saved.");
+        }
+        _busy = false;
+        if (res.Ok) await OnSaved.InvokeAsync();
+        else _err = res.Error ?? "The entry could not be saved.";
+    }
+}
