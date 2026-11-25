@@ -5,6 +5,8 @@
 using Roster.Engine.Core;
 using Roster.Engine.Planning.Plan;
 using Roster.Engine.Planning.Stage1;
+using Roster.Engine.Rostering.Shaper;
+using Roster.Engine.Till;
 
 namespace Roster.Data.Services.Planning;
 
@@ -16,6 +18,27 @@ public interface IStoreDayLoader
     /// setting applied (Core StoreDays.ResolveStoreDay over the request-cached reads).
     /// </summary>
     Task<StoreDay> ResolveStoreDayAsync(Guid storeId, DateOnly date, CancellationToken ct = default);
+}
+
+/// <summary>computeTillForDate's loader: the Till engine over a store-day's checkout demand.</summary>
+public interface ITillLoader
+{
+    /// <summary>
+    /// computeTillForDate: the day's checkout-hours budget spread over the weekday's trade
+    /// curve and rounded to tills (request-cached per store and date).
+    /// </summary>
+    Task<TillComputation> ComputeTillForDateAsync(Guid storeId, DateOnly date, CancellationToken ct = default);
+}
+
+/// <summary>The trade curve a store plans with (refdata getTradeCurveWeek, D3's assembly).</summary>
+public interface ITradeCurveSource
+{
+    /// <summary>
+    /// getTradeCurveWeek: the store's curve by weekday (Mon = 0), derived from the POS interval
+    /// statistics (public holidays and zero-trade dates excluded), each weekday falling back to
+    /// the legacy quarter_hour_allocation rows.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetTradeCurveWeekAsync(Guid storeId, CancellationToken ct = default);
 }
 
 /// <summary>computeStage1's loader: everything a day plan needs, read and run through Stage 1.</summary>
@@ -39,6 +62,17 @@ public interface IDayCheckOptionsLoader
     /// rules, each slot type's longest legal shift and whether it is a school day.
     /// </summary>
     Task<DayCheckOptions> DayCheckOptionsAsync(Guid storeId, DateOnly date, CancellationToken ct = default);
+}
+
+/// <summary>computeDaySlots's loader: the day's plan slots, the one shift structure of plan and roster.</summary>
+public interface IDaySlotsLoader
+{
+    /// <summary>
+    /// computeDaySlots: the day's shaped and trial-painted plan slots (request-cached per
+    /// store and date, so the Task view and the roster can never disagree). No reads beyond
+    /// Stage 1 when the day has no data.
+    /// </summary>
+    Task<DaySlots> ComputeDaySlotsAsync(Guid storeId, DateOnly date, CancellationToken ct = default);
 }
 
 /// <summary>computePlanShifts's loader: the Task view's painted, labelled and checked day.</summary>
