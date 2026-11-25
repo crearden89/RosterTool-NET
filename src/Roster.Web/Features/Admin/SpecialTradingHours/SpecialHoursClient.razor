@@ -1,0 +1,184 @@
+@* Port of src/app/(app)/admin/special-trading-hours/SpecialHoursClient.tsx. Each date
+   range is added or removed at once, as before; a half-typed one counts as an
+   unsaved change when leaving the page or choosing another store. *@
+@inject ISpecialTradingHoursService Service
+@inject StoreSelection Selection
+@inject RosterJs RosterJs
+@inject NavigationManager Navigation
+
+<LeaveGuard Id="special-hours" Dirty="@(_startDate != "" || _endDate != "" || _note != "")" />
+<SettingsSection Id="add">
+    <Title>Add a date range</Title>
+    <Purpose>A run of dates the store trades different hours, or is closed. It replaces the store's usual hours on those dates.</Purpose>
+    <Aside>
+        @if (View.Stores.Count > 0)
+        {
+            <label class="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink)]">
+                Store
+                <select @key="_pickVersion" value="@View.StoreId" disabled="@_pending" @onchange="SelectStoreAsync" class="@Ui.CompactField">
+                    @foreach (var s in View.Stores)
+                    {
+                        <option @key="s.Id" value="@s.Id">@s.Label</option>
+                    }
+                </select>
+            </label>
+        }
+    </Aside>
+    <ChildContent>
+        <div class="flex flex-wrap items-end gap-3">
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">Start date</span>
+                <input type="date" value="@_startDate" @oninput="@(e => _startDate = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+            </label>
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">End date</span>
+                <input type="date" value="@_endDate" @oninput="@(e => _endDate = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+            </label>
+            <div class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">Trading</span>
+                <button type="button" aria-pressed="@(_closed ? "true" : "false")"
+                        aria-label="@(_closed ? "Closed on these dates (press to trade)" : "Trading on these dates (press for closed)")"
+                        @onclick="() => _closed = !_closed"
+                        class="@Ui.Cx("rounded-xl px-3 py-2 text-sm font-semibold", Ui.FocusRing, _closed ? "bg-[var(--ui-bad)] text-white" : "border border-[var(--ui-control)] bg-white text-[var(--ui-ink)]")">
+                    @(_closed ? "Closed" : "Open")
+                </button>
+            </div>
+            @if (!_closed)
+            {
+                <label class="text-sm text-[var(--ui-ink)]">
+                    <span class="@Ui.FieldLabelClass">Open</span>
+                    <input type="time" value="@_openTime" @oninput="@(e => _openTime = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+                </label>
+                <label class="text-sm text-[var(--ui-ink)]">
+                    <span class="@Ui.FieldLabelClass">Close</span>
+                    <input type="time" value="@_closeTime" @oninput="@(e => _closeTime = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+                </label>
+            }
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">Note</span>
+                <input placeholder="e.g. Anzac Day" @bind="_note" @bind:event="oninput" class="@($"{Ui.FieldClass} w-48")" />
+            </label>
+            <button type="button" @onclick="AddAsync" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Primary)">@(_pending ? "Working…" : "Add override")</button>
+        </div>
+        @if (_msg is not null)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="@(_msg.StartsWith("Error") ? FormMessageTone.Error : FormMessageTone.Ok)">@_msg</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="dates" Flush="true">
+    <Title>Special hours</Title>
+    <Purpose>@($"Every date range set for {StoreLabel}, latest first.")</Purpose>
+    <ChildContent>
+        <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Start</th>
+                        <th class="@Ui.Table.Th">End</th>
+                        <th class="@Ui.Table.Th">Hours</th>
+                        <th class="@($"{Ui.Table.Th} w-full")">Note</th>
+                        <th class="@Ui.Table.Th"><span class="sr-only">Remove</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (View.Rows.Count == 0)
+                    {
+                        <tr><td colspan="5" class="@Ui.Table.Empty">No special hours set for this store.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var r in View.Rows)
+                        {
+                            <tr @key="r.Id" class="@Ui.Table.Row">
+                                <td class="whitespace-nowrap px-3 py-2">@Dates.AuFull(r.StartDate)</td>
+                                <td class="whitespace-nowrap px-3 py-2">@Dates.AuFull(r.EndDate)</td>
+                                <td class="whitespace-nowrap px-3 py-2">
+                                    @if (r.Closed)
+                                    {
+                                        <Pill Tone="PillTone.Red">Closed</Pill>
+                                    }
+                                    else
+                                    {
+                                        <span>@Hm(r.OpenTime) – @Hm(r.CloseTime)</span>
+                                    }
+                                </td>
+                                <td class="px-3 py-2 text-[var(--ui-muted)]">
+                                    @if (!string.IsNullOrEmpty(r.Note))
+                                    {
+                                        @r.Note
+                                    }
+                                    else
+                                    {
+                                        <span class="text-[var(--ui-faint)]">-</span>
+                                    }
+                                </td>
+                                <td class="px-3 py-2 text-right">
+                                    <button type="button" disabled="@_pending" @onclick="() => DeleteAsync(r.Id)" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">Remove</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    [CascadingParameter] public SaveScope? Scope { get; set; }
+    [Parameter, EditorRequired] public SpecialHoursView View { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback Reload { get; set; }
+
+    private string _startDate = "", _endDate = "", _openTime = "08:30", _closeTime = "21:00", _note = "";
+    private bool _closed, _pending;
+    private string? _msg;
+    private int _pickVersion;
+
+    private string StoreLabel => View.Stores.FirstOrDefault(s => s.Id == View.StoreId) is { } s ? s.Label : "this store";
+
+    private static string? Hm(TimeOnly? t) => t is { } v ? AdminParse.Hm(v) : null;
+
+    private async Task SelectStoreAsync(ChangeEventArgs e)
+    {
+        if (!Guid.TryParse(e.Value?.ToString(), out var id)) return;
+        _pending = true;
+        var went = await AdminStorePick.GoAsync(id, "/admin/special-trading-hours", Scope, Selection, RosterJs, Navigation);
+        _pending = false;
+        if (!went) _pickVersion++;
+    }
+
+    private async Task AddAsync()
+    {
+        if (View.StoreId is null || _startDate == "" || _endDate == "")
+        {
+            _msg = "Error: store, start date and end date are required.";
+            return;
+        }
+        _msg = null;
+        _pending = true;
+        var res = await Service.AddSpecialHoursAsync(new SpecialHoursInput(
+            View.StoreId, _startDate, _endDate, _closed, _closed ? null : _openTime, _closed ? null : _closeTime, _note));
+        if (res.Ok)
+        {
+            _startDate = "";
+            _endDate = "";
+            _note = "";
+            _msg = "Added.";
+            await Reload.InvokeAsync();
+        }
+        else _msg = $"Error: {res.Error}";
+        _pending = false;
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        _pending = true;
+        await Service.DeleteSpecialHoursAsync(id);
+        await Reload.InvokeAsync();
+        _pending = false;
+    }
+}
