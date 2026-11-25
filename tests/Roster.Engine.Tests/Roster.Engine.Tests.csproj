@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
@@ -17,6 +17,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Roster.Engine\Roster.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test vectors produced by V8: node Core/js-vectors.mjs Core/js-vectors.json -->
+    <None Include="Core\js-vectors.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
