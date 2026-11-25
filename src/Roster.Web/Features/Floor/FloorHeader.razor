@@ -1,0 +1,24 @@
+@* Port of FloorHeader in src/app/floor/[token]/FloorScreen.tsx: the header, shared
+   by the wall screen and the walk notes view. *@
+
+<header class="floor-head">
+    <h1>Floor Display</h1>
+    <span class="floor-when">@Info.When</span>
+    @if (Info.OtherDay)
+    {
+        <span class="floor-pill floor-otherDayPill">Not today</span>
+    }
+    <span class="floor-store">@Info.Store</span>
+    @if (Info.NoLoginNeeded)
+    {
+        <span class="floor-pill">No login needed</span>
+    }
+    @Right
+</header>
+
+@code {
+    [Parameter, EditorRequired] public FloorHeaderInfo Info { get; set; } = default!;
+
+    /// <summary>The header's right-hand end (the walk notes view's back link).</summary>
+    [Parameter] public RenderFragment? Right { get; set; }
+}

@@ -1,0 +1,90 @@
+@* Port of src/app/floor/[token]/AdminTaskChecklist.tsx.
+   The day's admin tasks as a tick-off list: tap a task to mark it done, tap
+   again to undo a mis-tap. Ticks are per store per day, so the list resets
+   naturally each morning. Only today's list is tickable - a past day's ticks
+   are a record, not a control. *@
+@inject IFloorService Floor
+
+<div>
+    <h2>
+        Admin tasks
+        <small>@Tasks.Count(t => IsChecked(t.Name)) of @Tasks.Count done</small>
+    </h2>
+    <div class="floor-tasks">
+        @foreach (var t in Tasks)
+        {
+            var done = IsChecked(t.Name);
+            var cls = $"floor-check {(done ? "floor-done" : "")}";
+            if (CanTick)
+            {
+                <button @key="t.Name" type="button" role="checkbox" aria-checked="@(done ? "true" : "false")"
+                        @onclick="() => ToggleAsync(t.Name)" class="@cls">
+                    @Body(t, done)
+                </button>
+            }
+            else
+            {
+                <div @key="t.Name" class="@cls">@Body(t, done)</div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Token { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<ChecklistTask> Tasks { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> CheckedNames { get; set; } = [];
+    [Parameter] public bool CanTick { get; set; }
+
+    /// <summary>Reads the page again (the TypeScript's router.refresh()).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Optimistic: the wall tablet may be on slow wifi, and a tick that takes two
+    // seconds to appear gets tapped twice.
+    private readonly Dictionary<string, bool> local = new();
+    private bool busy;
+
+    private bool IsChecked(string name) => local.TryGetValue(name, out var v) ? v : CheckedNames.Contains(name);
+
+    private async Task ToggleAsync(string name)
+    {
+        if (!CanTick || busy) return;
+        var next = !IsChecked(name);
+        local[name] = next;
+        busy = true;
+        try
+        {
+            // On failure fall back to the server's truth rather than lying locally -
+            // including when the action THROWS (the slow-wifi case this component
+            // exists for), not only when it returns ok: false.
+            try
+            {
+                var res = await Floor.SetAdminTaskCheckAsync(Token, name, next);
+                if (!res.Ok) local[name] = !next;
+            }
+            catch (Exception)
+            {
+                local[name] = !next;
+            }
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static RenderFragment Body(ChecklistTask t, bool done) => __builder =>
+    {
+        <span class="floor-box" aria-hidden="true">
+            @if (done)
+            {
+                <svg viewBox="0 0 18 18">
+                    <path d="M3.5 9.5l3.5 3.5 7.5-8" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            }
+        </span>
+        <b>@t.Name</b>
+        <span>@t.Window · @FloorTiles.N(t.Minutes) min</span>
+    };
+}
