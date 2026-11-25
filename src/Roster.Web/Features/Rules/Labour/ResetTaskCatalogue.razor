@@ -1,0 +1,78 @@
+@* Port of src/app/(app)/admin/rules/labour/ResetTaskCatalogue.tsx.
+   The reset task catalogue: how the day's Reset hours split into named jobs
+   (re-runs, first declare, full decard), each with its own placement window.
+   Sizing is placement-only - the benchmark Reset hours already fund the tasks.
+   Each task keeps its own Save, as before; a task edited and not saved counts
+   as an unsaved change when leaving the page. *@
+@inject ILabourRulesService Service
+
+<SettingsSection Id="reset-tasks">
+    <Title>Reset task catalogue</Title>
+    <Purpose>How the day's benchmark Reset hours split into named jobs, each placed inside its own window.</Purpose>
+    <Aside>
+        @if (!_adding)
+        {
+            <button type="button" @onclick="() => _adding = true" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">
+                <Icon Name="IconName.Plus" Class="h-3.5 w-3.5" /> Add task
+            </button>
+        }
+    </Aside>
+    <ChildContent>
+        <p class="mb-3 text-xs text-[var(--ui-muted)]">
+            The day's benchmark Reset hours split into these named jobs, each placed inside its own
+            window - re-runs done by their deadlines, the full decard against close. Shares are % of the
+            day's Reset hours; <strong>remainder</strong> takes whatever the sized tasks leave.
+            Placement only: the tasks never add hours to the plan. <strong>Counts as</strong> says which
+            sub-task (Re-runs or Decarding) the task's tiles are labelled; left on "by name", a name
+            containing "re-run" is Re-runs and anything else Decarding - so set it before renaming a task.
+        </p>
+        <div class="space-y-2">
+            @foreach (var t in Tasks)
+            {
+                <ResetTaskEditor @key="t.Id" Row="t" Pending="_pending" Run="RunAsync" />
+            }
+            @if (_adding)
+            {
+                <ResetTaskEditor Row="null" Pending="_pending" Run="RunAsync" OnCancel="() => _adding = false" />
+            }
+        </div>
+        @if (_error is not null)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private bool _pending;
+    private bool _adding;
+    private string? _error;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ResetTaskRow> Tasks { get; set; } = [];
+
+    /// <summary>After a change: the page reads the catalogue again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task RunAsync(Func<Task<SaveResult>> action)
+    {
+        _error = null;
+        _pending = true;
+        try
+        {
+            var res = await action();
+            if (!res.Ok) _error = res.Error ?? "Something went wrong";
+            else
+            {
+                _adding = false;
+                await OnChanged.InvokeAsync();
+            }
+        }
+        finally
+        {
+            _pending = false;
+            StateHasChanged();
+        }
+    }
+}

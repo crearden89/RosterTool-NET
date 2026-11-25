@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Roster.Engine.Core;
 using Roster.Engine.Pay;
+using WeekendOff = Roster.Engine.RosterOps.WeekendOff;
 
 namespace Roster.Web.Features.Team;
 
@@ -247,13 +248,11 @@ public static partial class TeamRules
     // day's flag again. The weekend marker is keyed on the Saturday of the weekend,
     // with a sat_off / sun_off flag apiece; the sibling day's flag is preserved.
 
-    /// <summary>The Saturday of a weekend day's weekend; null on a weekday (no marker to touch).</summary>
-    public static DateOnly? WeekendStartOf(DateOnly date)
-    {
-        var dow = Period.DowMon0(date);
-        if (dow != 5 && dow != 6) return null;
-        return dow == 5 ? date : Period.AddDaysIso(date, -1);
-    }
+    /// <summary>
+    /// The Saturday of a weekend day's weekend; null on a weekday (no marker to touch).
+    /// The roster page's rule (E3's WeekendOff), which syncWeekendMarker wrote out inline.
+    /// </summary>
+    public static DateOnly? WeekendStartOf(DateOnly date) => WeekendOff.WeekendSaturday(date);
 
     /// <summary>The marker's flags after a weekend day's request is (un)granted: that day follows the grant.</summary>
     public static (bool SatOff, bool SunOff) MergeWeekendMarker(DateOnly date, bool granted, bool? existingSatOff, bool? existingSunOff)

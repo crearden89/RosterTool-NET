@@ -38,7 +38,7 @@ public class RosterCardsTests : UiTestContext
     private static RosterContracts Figures(int people) => new()
     {
         People = Enumerable.Range(0, people)
-            .Select(i => new RosterContractGap(Guid.NewGuid(), $"Person {i}", "SA", i % 2 == 0, 10 - i * 0.5)).ToList(),
+            .Select(i => new RosterContractGap($"e{i}", $"Person {i}", "SA", i % 2 == 0, 10 - i * 0.5)).ToList(),
         Under = people / 2,
         Over = people - people / 2,
         UnderHours = 3.5,

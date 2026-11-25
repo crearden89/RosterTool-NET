@@ -2,7 +2,9 @@
 // invented notices held in memory for the life of the app, so the page and the menu's
 // badge can be built and tried. Registered by NotificationsModule.
 
-namespace Roster.Web.Features.Notifications;
+using Roster.Web.Features.Notifications;
+
+namespace Roster.Web.Tests.Notifications;
 
 /// <summary>The stand-in's notices, shared by every connection (one person's worth).</summary>
 public sealed class FakeNotificationStore

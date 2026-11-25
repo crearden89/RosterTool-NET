@@ -20,23 +20,6 @@ using Roster.Web.Features.Review;
 
 namespace Roster.Web.Features.Plan;
 
-/// <summary>
-/// Builds the fortnight's roster from its held plan and holds it (lib/planSnapshots'
-/// computeAndStoreRosterSnapshot): false when there is no plan yet. The data layer's
-/// roster loader; until it is on main, <see cref="PendingRosterRebuild"/> stands in.
-/// </summary>
-public interface IRosterRebuild
-{
-    Task<bool> ComputeAndStoreRosterSnapshotAsync(Guid storeId, DateOnly periodStart, Guid userId, CancellationToken ct = default);
-}
-
-/// <summary>PENDING: the roster loader (stage2/compute + planSnapshots' roster half) is not on main yet.</summary>
-public sealed class PendingRosterRebuild : IRosterRebuild
-{
-    public Task<bool> ComputeAndStoreRosterSnapshotAsync(Guid storeId, DateOnly periodStart, Guid userId, CancellationToken ct = default) =>
-        throw new NotImplementedException("Building the roster waits for the data layer's roster loader (computeAndStoreRosterSnapshot).");
-}
-
 public sealed class PlanService(
     IStoreScope scope,
     IStoreDirectory directory,
@@ -51,7 +34,7 @@ public sealed class PlanService(
     IReviewGate gate,
     IPlanApproval planApproval,
     IRosterApproval rosterApproval,
-    IRosterRebuild rosterRebuild,
+    IHeldRosters rosters,
     IRosterDbContextFactory contexts,
     PlanPartKey partKey,
     TimeProvider clock) : IPlanService
@@ -248,7 +231,7 @@ public sealed class PlanService(
         if (!(await gate.RosterGateAsync(storeId, periodStart)).Unlocked) return PlanResult.Refused(RosterGates.RosterLocked);
         try
         {
-            if (!await rosterRebuild.ComputeAndStoreRosterSnapshotAsync(storeId, periodStart, user.Id))
+            if (await rosters.ComputeAndStoreRosterSnapshotAsync(storeId, periodStart, user.Id) is null)
                 return PlanResult.Refused("Generate the plan first.");
         }
         catch (Exception e)
@@ -391,7 +374,7 @@ public sealed class PlanService(
         }
         // The roster changed under the held snapshot - refresh it so the edit shows
         // without an explicit regenerate.
-        await rosterRebuild.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
+        await rosters.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
         await AuditAsync(storeId, date, user, locked ? "lock_shift" : "unlock_shift", new { employeeId });
         return PlanResult.Done;
     }
@@ -448,7 +431,7 @@ public sealed class PlanService(
             }
             await db.SaveChangesAsync();
         }
-        await rosterRebuild.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
+        await rosters.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
         await AuditAsync(storeId, date, user, action, detail);
         return PlanResult.Done;
     }
@@ -468,7 +451,7 @@ public sealed class PlanService(
             db.GeneratedShifts.RemoveRange(rows);
             await db.SaveChangesAsync();
         }
-        await rosterRebuild.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
+        await rosters.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
         await AuditAsync(storeId, date, user, "remove_shift", new { employeeId });
         return PlanResult.Done;
     }
@@ -491,7 +474,7 @@ public sealed class PlanService(
             });
             await db.SaveChangesAsync();
         }
-        await rosterRebuild.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
+        await rosters.ComputeAndStoreRosterSnapshotAsync(storeId, Period.PeriodStartFor(date), user.Id);
         await AuditAsync(storeId, date, user, "add_shift", new { employeeId, startMin, endMin });
         return PlanResult.Done;
     }

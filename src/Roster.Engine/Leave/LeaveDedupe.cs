@@ -54,7 +54,7 @@ public static class LeaveDedupe
     /// </summary>
     public static int StatusRank(string status)
     {
-        var s = status.Trim().ToLowerInvariant();
+        var s = Js.Trim(status).ToLowerInvariant();
         if (s == "approved") return 0;
         if (s == "submitted") return 1;
         // Cancelled / Cancel Submitted / Cancel Approved / Refused, and anything new

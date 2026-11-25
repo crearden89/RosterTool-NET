@@ -17,8 +17,6 @@ public sealed class PlanModule : IFeatureModule
             services.TryAddSingleton<IPlanService, FakePlanService>();
             return;
         }
-        // PENDING until the data layer's roster loader is on main (PendingRosterRebuild).
-        services.TryAddScoped<IRosterRebuild, PendingRosterRebuild>();
         services.TryAddScoped<IPlanService, PlanService>();
     }
 }
