@@ -1,0 +1,154 @@
+@* Port of TeamMemberRow in src/app/(app)/setup/staff/StaffClient.tsx: one person's
+   row - name and position, contract, Monday-Sunday availability, and the notes
+   (leave, restricted tasks, fixed roster). *@
+@inject ITeamService Team
+@inject RosterJs Browser
+
+<li class="@($"flex flex-wrap items-start gap-x-6 gap-y-3 rounded-2xl border border-[var(--ui-line)] bg-white px-4 py-3.5 sm:px-5 {RowGrid}")">
+    @* Member *@
+    <div class="flex min-w-0 basis-full items-center gap-3 lg:basis-auto">
+        <Avatar Name="@Employee.Name" Seed="@Employee.Id.ToString()" />
+        <div class="min-w-0">
+            <p class="truncate font-semibold text-[var(--ui-ink)]">@Employee.Name</p>
+            <p class="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--ui-muted)]">
+                <RolePill Role="@Employee.Role" />
+                @* The position is what payroll pays off, so it's named in full. *@
+                <span class="truncate" title="@PositionLabel">@PositionLabel</span>
+            </p>
+        </div>
+        @* On a phone Edit sits on the name line; on a desk it has its own column. *@
+        @if (!ReadOnly)
+        {
+            <button type="button" @onclick="OnEdit" class="@($"ml-auto lg:hidden {Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)}")"
+                    aria-label="@($"Edit {Employee.Name}")">Edit</button>
+        }
+    </div>
+
+    @* Contract: stored per fortnight, and labelled so. *@
+    <div class="min-w-[5.5rem]">
+        <p class="text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase lg:hidden">Contract</p>
+        @if (Casual)
+        {
+            <p class="text-base font-bold text-[var(--ui-ink)]">Casual</p>
+            <p class="text-[11px] text-[var(--ui-muted)]">no set hours</p>
+        }
+        else
+        {
+            <p class="text-base font-bold text-[var(--ui-ink)]">@Js.NumberToString(Employee.ContractHours) h</p>
+            <p class="text-[11px] text-[var(--ui-muted)]">per fortnight</p>
+        }
+    </div>
+
+    @* Availability, Monday to Sunday *@
+    <div>
+        <p class="mb-1 text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase lg:hidden">Mon – Sun</p>
+        <AvailabilitySquares Rows="Availability" />
+    </div>
+
+    @* Notes: leave, restricted tasks, fixed roster *@
+    <div class="flex min-w-0 basis-full flex-col gap-1.5 lg:basis-auto">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            @foreach (var l in Leave)
+            {
+                <span @key="l.Id" class="inline-flex items-center gap-2">
+                    <Switch Checked="@(_clearing != l.Id)" Label="@(TeamRules.LeaveWords(l.LeaveType) ?? $"{l.LeaveType} leave")"
+                            Disabled="@(ReadOnly || _clearing == l.Id)" OnChange="@(ReadOnly ? default : EventCallback.Factory.Create<bool>(this, () => ClearAsync(l)))" />
+                    <Pill Tone="PillTone.Amber" Title="@($"{l.LeaveType} {Dates.AuShort(l.StartDate)} to {Dates.AuShort(l.EndDate)}")">
+                        @Dates.AuRange(l.StartDate, l.EndDate)
+                        @if (l.DayHours is { } dh)
+                        {
+                            <span class="font-medium">· @(Js.NumberToString(dh))h/day</span>
+                        }
+                    </Pill>
+                </span>
+            }
+            @if (Restricted.Count > 0)
+            {
+                <span class="inline-flex items-center gap-1 rounded-full bg-[var(--ui-ink)] px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-white"
+                      title="@($"Restricted from {string.Join(", ", RestrictedNames)}")">
+                    <Icon Name="IconName.Lock" Class="h-3 w-3" StrokeWidth="2.5" />
+                    Restricted tasks
+                    <span class="font-medium text-white/80">· @string.Join(", ", RestrictedCodes)</span>
+                    <span class="sr-only">: @string.Join(", ", RestrictedNames)</span>
+                </span>
+            }
+            @if (Fixed)
+            {
+                <button type="button" @onclick="OnOpenFixed"
+                        class="@($"inline-flex items-center gap-1.5 rounded-full bg-[var(--ui-lavender)] px-2.5 py-0.5 text-xs font-semibold text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)] {Ui.FocusRing}")"
+                        aria-label="@($"{(ReadOnly ? "View" : "Manage")} {Employee.Name}'s fixed roster")">
+                    <span class="status-green inline-block h-2 w-2 rounded-full" aria-hidden="true"></span>
+                    Fixed roster
+                    <span class="font-medium text-[var(--ui-violet)] underline underline-offset-2">@(ReadOnly ? "View" : "Manage")</span>
+                </button>
+            }
+            else if (!ReadOnly)
+            {
+                <button type="button" @onclick="OnOpenFixed"
+                        class="@($"inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs text-[var(--ui-muted)] hover:text-[var(--ui-ink)] {Ui.FocusRing}")"
+                        aria-label="@($"Add a fixed roster for {Employee.Name}")">
+                    <Icon Name="IconName.Plus" Class="h-3 w-3" /> Fixed roster
+                </button>
+            }
+        </div>
+        @if (OverContract)
+        {
+            <p class="text-xs font-medium text-[var(--ui-amber-ink)]">
+                ⚠ Fixed roster pays @Js.ToFixed(FixedPaid, 1)h/fortnight, above the @(Js.NumberToString(Employee.ContractHours))h contract
+            </p>
+        }
+    </div>
+
+    @if (!ReadOnly)
+    {
+        <div class="hidden lg:block lg:text-right">
+            <button type="button" @onclick="OnEdit" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)" aria-label="@($"Edit {Employee.Name}")">Edit</button>
+        </div>
+    }
+</li>
+
+@code {
+    /// <summary>Desktop columns: member | contract | Mon-Sun | notes | edit.</summary>
+    public const string RowGrid =
+        "lg:grid lg:grid-cols-[minmax(13rem,1.15fr)_6.5rem_9.5rem_minmax(14rem,2fr)_4.5rem] lg:items-center lg:gap-x-5";
+
+    private Guid? _clearing;
+
+    [Parameter, EditorRequired] public TeamMember Employee { get; set; } = default!;
+    [Parameter, EditorRequired] public string PositionLabel { get; set; } = "";
+    [Parameter] public IReadOnlyList<string> Restricted { get; set; } = [];
+    [Parameter] public IReadOnlyList<LeaveBooking> Leave { get; set; } = [];
+    [Parameter] public IReadOnlyList<AvailabilityRow> Availability { get; set; } = [];
+
+    /// <summary>The person has a fixed roster.</summary>
+    [Parameter] public bool Fixed { get; set; }
+
+    /// <summary>The fixed roster's paid hours a fortnight.</summary>
+    [Parameter] public double FixedPaid { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public EventCallback OnOpenFixed { get; set; }
+    [Parameter] public EventCallback OnLeaveCleared { get; set; }
+
+    private bool Casual => Employee.Role == "JSA";
+
+    private bool OverContract => Fixed && TeamRules.PaysOverContract(Employee.Role, Employee.ContractHours, FixedPaid);
+
+    private IEnumerable<string> RestrictedNames =>
+        Restricted.Select(g => LabourGroups.ByKey.TryGetValue(g, out var lg) ? lg.Label : g);
+
+    private IEnumerable<string> RestrictedCodes =>
+        Restricted.Select(g => LabourGroups.ByKey.TryGetValue(g, out var lg) ? lg.Abbrev : g);
+
+    // Switching a booking off removes it - the action the ✕ beside it used to be.
+    private async Task ClearAsync(LeaveBooking l)
+    {
+        var what = $"{TeamRules.LeaveWords(l.LeaveType) ?? l.LeaveType} {Dates.AuRange(l.StartDate, l.EndDate)}";
+        if (!await Browser.ConfirmAsync($"Remove {Employee.Name}'s {what}?")) return;
+        _clearing = l.Id;
+        await Team.ClearLeaveAsync(l.Id);
+        _clearing = null;
+        await OnLeaveCleared.InvokeAsync();
+    }
+}

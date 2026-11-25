@@ -1,0 +1,59 @@
+@* Port of FixedRostersCard in src/app/(app)/setup/staff/FixedRosters.tsx: the
+   compact list of everyone with a fixed roster, beside the Requests card. *@
+<section id="fixed-rosters" aria-labelledby="fixed-rosters-title" class="scroll-mt-20 lg:scroll-mt-6">
+    <Card Padded="false">
+        <div class="px-4 pt-5 sm:px-6">
+            <SectionHeader Id="fixed-rosters-title">
+                <Title>Fixed rosters</Title>
+                <Aside>@People.Count @(People.Count == 1 ? "person" : "people")@(ReadOnly ? "" : " · add one from a person's row")</Aside>
+            </SectionHeader>
+        </div>
+        @if (People.Count == 0)
+        {
+            <p class="border-t border-[var(--ui-line)] px-4 py-5 text-sm text-[var(--ui-muted)] sm:px-6">No fixed rosters.</p>
+        }
+        else
+        {
+            <ul class="divide-y divide-[var(--ui-line)] border-t border-[var(--ui-line)]">
+                @foreach (var e in People)
+                {
+                    var cycle = Cycles.FirstOrDefault(c => c.EmployeeId == e.Id);
+                    var weeks = cycle?.CycleWeeks ?? 1;
+                    var now = cycle is not null ? FixedCycle.FixedWeekIndex(weeks, cycle.StartDate, Today) : 0;
+                    var id = e.Id;
+                    <li @key="e.Id" class="px-4 py-3 sm:px-6">
+                        <div class="flex items-center gap-3">
+                            <Avatar Name="@e.Name" Seed="@e.Id.ToString()" Size="30" />
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-semibold text-[var(--ui-ink)]">@e.Name</p>
+                                <p class="text-xs text-[var(--ui-muted)]">@TeamRules.CycleLabel(weeks)@(weeks > 1 ? $" · week {now + 1} now" : "")</p>
+                            </div>
+                            <button type="button" @onclick="() => OnOpen.InvokeAsync(id)" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)"
+                                    aria-label="@($"{(ReadOnly ? "View" : "Manage")} {e.Name}'s fixed roster")">
+                                @(ReadOnly ? "View" : "Manage")
+                            </button>
+                        </div>
+                        @* This week's locked shifts, under the name. *@
+                        <div class="mt-2 pl-[42px]">
+                            <ShiftChips Rows="Fixed.Where(r => r.EmployeeId == id && r.WeekIndex == now).ToList()" />
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </Card>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TeamMember> Employees { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<FixedShift> Fixed { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<FixedRosterCycleRow> Cycles { get; set; } = [];
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>Today in the person's own time zone, for "week N now".</summary>
+    [Parameter] public DateOnly Today { get; set; }
+
+    [Parameter] public EventCallback<Guid> OnOpen { get; set; }
+
+    private List<TeamMember> People => Employees.Where(e => Fixed.Any(f => f.EmployeeId == e.Id)).ToList();
+}

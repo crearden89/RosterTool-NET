@@ -1,0 +1,41 @@
+@* Port of src/app/(app)/plan/generate/PlanStatus.tsx (PlanStatusChip; ReviewLink.razor is the other half). *@
+@using global::Roster.Web.Features.Review
+@* Where the fortnight's plan review stands, as a chip beside the Plan and
+   Roster pages' titles. The words are PlanReviewStatus's (the status pill these
+   pages showed before), split in two so the status can sit by the title. On the
+   Plan page an approved plan reads as locked (owner decision R5): the Review
+   unlocks it. *@
+@switch (State)
+{
+    case PlanReviewState.Approved when Locked:
+        <StatusChip Icon="StatusIcon.Lock"
+                    Title="An approved plan can't be edited or regenerated. To change it, ask for it to be unlocked on the Review page.">
+            @($"{PlanWord}{Cap("approved · locked")}")
+        </StatusChip>
+        break;
+    case PlanReviewState.Approved:
+        <StatusChip>@($"{PlanWord}{Cap("approved")}")</StatusChip>
+        break;
+    case PlanReviewState.Submitted:
+        <StatusChip Tone="StatusTone.Soft" Icon="StatusIcon.None">@($"{PlanWord}{Cap("with the EMSO")}")</StatusChip>
+        break;
+    case PlanReviewState.Returned:
+        <StatusChip Tone="StatusTone.Red" Icon="StatusIcon.None">@($"{PlanWord}{Cap("returned - action needed")}")</StatusChip>
+        break;
+    default:
+        <StatusChip Tone="StatusTone.Soft" Icon="StatusIcon.None">@($"{PlanWord}{Cap("not submitted")}")</StatusChip>
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public PlanReviewState State { get; set; }
+
+    [Parameter] public bool Locked { get; set; }
+
+    /// <summary>Which page the chip is on: on the Roster page it says "Plan ...".</summary>
+    [Parameter, EditorRequired] public PlanOrRoster Page { get; set; }
+
+    private string PlanWord => Page == PlanOrRoster.Roster ? "Plan " : "";
+
+    private string Cap(string s) => PlanWord.Length > 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+}

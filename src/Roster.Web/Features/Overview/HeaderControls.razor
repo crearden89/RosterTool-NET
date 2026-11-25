@@ -1,0 +1,100 @@
+@* Port of src/app/(app)/overview/HeaderControls.tsx.
+   The Dashboard's store and month, in its header: the region narrows the store
+   list, a store choice becomes the app-wide default (the store cookie), and
+   the month arrows keep the store. *@
+@inject NavigationManager Navigation
+@inject StoreSelection Selection
+@inject RosterJs Js
+
+@if (_pending)
+{
+    <span class="text-sm text-[var(--ui-muted)]">Loading…</span>
+}
+@if (Regions.Count > 1)
+{
+    <select value="@_regionFilter" @onchange="e => _regionFilter = e.Value?.ToString() ?? string.Empty" aria-label="Region" class="@Ui.FieldClass">
+        <option value="">All regions</option>
+        @foreach (var r in Regions)
+        {
+            <option @key="r.Id" value="@r.Id">@r.Name</option>
+        }
+    </select>
+}
+@if (Stores.Count > 0)
+{
+    <select value="@(SelectedStore?.ToString() ?? string.Empty)" @onchange="OnStoreAsync" aria-label="Store" class="@($"{Ui.FieldClass} max-w-full")">
+        @if (IsRollup)
+        {
+            <option value="">@RollupLabel</option>
+        }
+        @foreach (var s in StoresInRegion)
+        {
+            <option @key="s.Id" value="@s.Id">@s.Code - @s.Name</option>
+        }
+    </select>
+}
+<div class="flex items-center overflow-hidden rounded-xl border border-[var(--ui-control)] bg-white">
+    <button type="button" @onclick="() => Go(MonthHref(PrevMonth))" aria-label="Previous month" class="@Arrow">
+        <Icon Name="IconName.ChevronLeft" Class="h-4 w-4" aria-hidden="true" />
+    </button>
+    <span class="min-w-[8.5rem] px-1 text-center text-sm font-semibold text-[var(--ui-ink)]">@MonthLabel</span>
+    <button type="button" @onclick="() => Go(MonthHref(NextMonth))" aria-label="Next month" class="@Arrow">
+        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" aria-hidden="true" />
+    </button>
+</div>
+
+@code {
+    private const string Arrow =
+        "grid h-9 w-9 place-items-center text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] disabled:opacity-50 " + Ui.FocusRing;
+
+    private string _regionFilter = "";
+    private bool _pending;
+    private string? _shownMonth;
+
+    [Parameter, EditorRequired] public IReadOnlyList<DashboardStore> Stores { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<DashboardRegion> Regions { get; set; } = [];
+    [Parameter] public Guid? SelectedStore { get; set; }
+    [Parameter] public bool IsRollup { get; set; }
+    [Parameter] public string RollupLabel { get; set; } = "";
+    [Parameter] public DateOnly MonthStart { get; set; }
+    [Parameter] public string MonthLabel { get; set; } = "";
+    [Parameter] public DateOnly PrevMonth { get; set; }
+    [Parameter] public DateOnly NextMonth { get; set; }
+
+    private IEnumerable<DashboardStore> StoresInRegion =>
+        _regionFilter.Length > 0 ? Stores.Where(s => s.RegionId?.ToString() == _regionFilter) : Stores;
+
+    protected override void OnInitialized() =>
+        _regionFilter = Stores.FirstOrDefault(s => s.Id == SelectedStore)?.RegionId?.ToString() ?? "";
+
+    protected override void OnParametersSet()
+    {
+        // A new month or store has arrived: the navigation is done.
+        var shown = $"{SelectedStore}|{MonthStart}";
+        if (shown != _shownMonth) _pending = false;
+        _shownMonth = shown;
+    }
+
+    private string MonthHref(DateOnly month) => $"/overview?store={SelectedStore?.ToString() ?? ""}&month={month.ToIso()}";
+
+    private void Go(string url)
+    {
+        _pending = true;
+        Navigation.NavigateTo(url);
+    }
+
+    private async Task OnStoreAsync(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var id))
+        {
+            _pending = true;
+            Selection.Remember(id);
+            await Js.SetCookieAsync(StoreSelection.CookieName, id.ToString(), TimeSpan.FromDays(365));
+            Navigation.NavigateTo($"/overview?store={id}&month={MonthStart.ToIso()}");
+        }
+        else
+        {
+            Go($"/overview?month={MonthStart.ToIso()}");
+        }
+    }
+}

@@ -1,0 +1,387 @@
+@* Port of src/app/(app)/admin/process/planning/PlacementClient.tsx. *@
+@using Roster.Engine.Planning.Plan
+@inject IPlanningOrderService Service
+@inject RosterJs Browser
+
+@* The MASTER SWITCH. Stage 1 reads this configuration - but only while the
+   switch is on, so flipping it is always a deliberate act rather than a side
+   effect of editing a rule. *@
+<SettingsSection Id="switch">
+    <Title>Placement switch</Title>
+    <Purpose>Whether plan generation follows this page at all. It flips at once, on its own.</Purpose>
+    <Aside>
+        <button type="button" disabled="@_busy" @onclick="ToggleAsync" class="@Ui.ButtonClass(_enabled ? ButtonKind.Danger : ButtonKind.Accent, ButtonSize.Sm)">
+            @(_enabled ? "Switch off" : "Switch on")
+        </button>
+    </Aside>
+    <ChildContent>
+        <div class="@Ui.Cx("rounded-xl p-4 text-sm text-[var(--ui-ink)]", _enabled ? "bg-green-50" : "bg-[var(--ui-amber-bg)]")">
+            <p class="@Ui.Cx("font-semibold", _enabled && !UsingDefault ? "text-[var(--ui-good)]" : "text-[var(--ui-amber-ink)]")">
+                @(!_enabled
+                    ? "Saved but switched off — plans still use the even spread"
+                    : UsingDefault
+                        ? "Switched on, but nothing saved yet — plans use the even spread, leaning the way the order below points"
+                        : "Live — plan generation follows this order")
+            </p>
+            <p class="mt-1">
+                @(!_enabled
+                    ? "The configuration is saved and versioned, but while the switch is off generating a plan levels every movable group evenly across its window - nothing here affects a live roster."
+                    : UsingDefault
+                        ? "The switch is on, but no configuration has been saved, so the planner has no strategies to read and every movable group is still levelled evenly across its window. The rows below are a RECOMMENDATION - press Save configuration to make them the ones plans actually use."
+                        : "Every newly generated plan places each group by its strategy below. Already-approved rosters are untouched until they are regenerated.")
+            </p>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+@StepOrderCard
+
+@* After the step order's slot: the save bar saves the step order first, as the
+   TypeScript page registered its forms. *@
+<SaveSlot Id="placement" Changes="Changes" Save="SaveAsync" Discard="Discard" />
+
+<SettingsSection Id="placement">
+    <Title>Group placement</Title>
+    <Purpose>When each group's benchmark hours sit in its window - which decides the demand curve, and so when shifts start and finish.</Purpose>
+    <Aside>
+        <button type="button" @onclick="ResetAsync" disabled="@_busy" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">Reset to recommended</button>
+    </Aside>
+    <ChildContent>
+        <p class="mb-4 text-sm text-[var(--ui-muted)]">
+            Groups are placed in the order below, each one filling around what earlier groups already
+            claimed, so position 1 gets the best of the day. It is <em>not</em> the same as
+            <strong>Rules → Labour Group Rules → task priority</strong>, which decides <strong>who</strong>
+            picks a task up when several groups are live in the same block.
+        </p>
+
+        @{ var warnings = Placement.ValidatePlacement(_draft.Value.Rules, _draft.Value.Settings); }
+        @if (warnings.Count > 0)
+        {
+            <div class="mb-4 rounded-xl bg-[var(--ui-amber-bg)] p-4 text-sm text-[var(--ui-ink)]">
+                <p class="mb-1 font-semibold text-[var(--ui-amber-ink)]">Configuration notes</p>
+                <ul class="list-disc space-y-1 pl-5">
+                    @foreach (var w in warnings)
+                    {
+                        <li>@w</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="space-y-2">
+            @{ var rules = _draft.Value.Rules; }
+            @for (var i = 0; i < rules.Count; i++)
+            {
+                var at = i;
+                var r = rules[i];
+                var meta = Placement.StrategyMetaFor(r.Strategy);
+                <div @key="r.Group" class="flex items-start gap-3 rounded-xl border border-[var(--ui-line)] bg-white p-3">
+                    <span class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--ui-ink)] text-xs font-semibold text-white">@(i + 1)</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold text-[var(--ui-ink)]">@Placement.GroupLabel[r.Group]</p>
+
+                        <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-4">
+                            <label class="@($"{Lbl} col-span-2")">
+                                Strategy
+                                <select value="@r.Strategy" @onchange="e => Update(at, x => x with { Strategy = e.Value?.ToString() ?? x.Strategy })" class="@Sel">
+                                    @foreach (var m in Placement.Strategies)
+                                    {
+                                        <option value="@m.Strategy">@m.Label</option>
+                                    }
+                                </select>
+                            </label>
+
+                            @if (meta.UsesAnchor)
+                            {
+                                <AnchorEditor Rule="r" OnChange="patch => Update(at, patch)" />
+                            }
+
+                            @if (meta.UsesPeakSplit)
+                            {
+                                <label class="@($"{Lbl} {Cell}")">
+                                    Before peak %
+                                    <input type="number" min="0" max="100" value="@Js.NumberToString(r.PrePeakPct ?? 0)"
+                                           @oninput="e => Update(at, x => x with { PrePeakPct = Num(e) })" class="@Sel" />
+                                </label>
+                                <label class="@($"{Lbl} {Cell}")">
+                                    After peak %
+                                    <input type="number" min="0" max="100" value="@Js.NumberToString(r.PostPeakPct ?? 0)"
+                                           @oninput="e => Update(at, x => x with { PostPeakPct = Num(e) })" class="@Sel" />
+                                </label>
+                            }
+
+                            @if (meta.UsesStrength)
+                            {
+                                <label class="@($"{Lbl} {Cell}")">
+                                    Avoidance strength
+                                    <input type="number" min="0" max="100" value="@Js.NumberToString(r.AvoidStrength ?? 0)"
+                                           @oninput="e => Update(at, x => x with { AvoidStrength = Num(e) })" class="@Sel" />
+                                </label>
+                            }
+
+                            @* Always starts its own line, so the conditional override sits in
+                               the same place on every row instead of landing in whatever column
+                               the strategy's fields happen to leave. *@
+                            <label class="@($"{Lbl} {Cell} lg:col-start-1")">
+                                If heavy night trader
+                                <select value="@(r.NightTraderStrategy ?? "")" @onchange="e => Update(at, x => x with { NightTraderStrategy = OrNull(e) })" class="@Sel">
+                                    <option value="">No override</option>
+                                    @foreach (var m in Placement.Strategies)
+                                    {
+                                        <option value="@m.Strategy">@m.Label</option>
+                                    }
+                                </select>
+                            </label>
+                        </div>
+
+                        <p class="mt-1.5 text-xs text-[var(--ui-muted)]">@meta.Description</p>
+                    </div>
+
+                    <div class="flex shrink-0 items-center gap-1">
+                        <button type="button" @onclick="() => Move(at, -1)" disabled="@(at == 0)" aria-label="@($"Move {Placement.GroupLabel[r.Group]} up")" class="@Arrow">
+                            <Icon Name="IconName.ArrowUp" Class="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" @onclick="() => Move(at, 1)" disabled="@(at == rules.Count - 1)" aria-label="@($"Move {Placement.GroupLabel[r.Group]} down")" class="@Arrow">
+                            <Icon Name="IconName.ArrowDown" Class="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+        @if (UsingDefault && Changes == 0)
+        {
+            <p class="mt-3 text-sm text-[var(--ui-muted)]">Showing the recommended starting configuration — nothing saved yet.</p>
+        }
+        @if (_err is not null)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="FormMessageTone.Error">@_err</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="busy-period">
+    <Title>Busy period</Title>
+    <Purpose>How the peak is found in the quarter-hour curve.</Purpose>
+    <ChildContent>
+        <p class="mb-3 text-xs text-[var(--ui-muted)]">
+            Hourly buckets are deliberately coarse — at 15-minute granularity a single block can read
+            3.7% between neighbours of 2.6% and 2.8%, which is sampling noise rather than a rush.
+        </p>
+        @{ var s = _draft.Value.Settings; }
+        <div class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+            <label class="@Lbl">
+                Measure on
+                <select value="@s.PeakBasis" @onchange="e => PatchSettings(x => x with { PeakBasis = e.Value?.ToString() ?? x.PeakBasis })" class="@Sel">
+                    <option value="hourly">Hourly buckets</option>
+                    <option value="rolling">Rolling average of blocks</option>
+                </select>
+            </label>
+            @if (s.PeakBasis == "rolling")
+            {
+                <label class="@Lbl">
+                    Blocks in the average
+                    <input type="number" min="1" max="16" value="@Js.NumberToString(s.PeakSmoothingBlocks)"
+                           @oninput="e => PatchSettings(x => x with { PeakSmoothingBlocks = Num(e) })" class="@Sel" />
+                </label>
+            }
+            <label class="@Lbl">
+                Peak threshold % of busiest
+                <input type="number" min="1" max="100" value="@Js.NumberToString(s.PeakThresholdPct)"
+                       @oninput="e => PatchSettings(x => x with { PeakThresholdPct = Num(e) })" class="@Sel" />
+            </label>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="night-trader">
+    <Title>Heavy night trader</Title>
+    <Purpose>A store whose trade sits this far into the evening uses each group's override strategy instead of its normal one.</Purpose>
+    <ChildContent>
+        <p class="mb-3 text-xs text-[var(--ui-muted)]">
+            No store in the data loaded so far exceeds about 22%, so this threshold still needs
+            calibrating against the national store set — treat the default as a placeholder, not a
+            finding.
+        </p>
+        <div class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+            <label class="@Lbl">
+                Trade from
+                <input type="time" step="900" value="@Grid.MinToTime(_draft.Value.Settings.NightTraderFromMin)"
+                       @oninput="e => PatchSettings(x => x with { NightTraderFromMin = Grid.TimeToMin(e.Value?.ToString() ?? string.Empty) })" class="@Sel" />
+            </label>
+            <label class="@Lbl">
+                Is at least % of the day
+                <input type="number" min="0" max="100" value="@Js.NumberToString(_draft.Value.Settings.NightTraderSharePct)"
+                       @oninput="e => PatchSettings(x => x with { NightTraderSharePct = Num(e) })" class="@Sel" />
+            </label>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="elsewhere">
+    <Title>Decided elsewhere</Title>
+    <Purpose>Two groups are placed by models richer than one strategy per group, so they are set where the thing that defines them lives.</Purpose>
+    <ChildContent>
+        <ul class="space-y-2 text-sm">
+            @foreach (var e in Placement.Elsewhere)
+            {
+                <li @key="e.Group" class="text-[var(--ui-muted)]">
+                    <strong class="text-[var(--ui-ink)]">@Placement.GroupLabel[e.Group]</strong> — @e.Owner
+                    <br />
+                    <span class="text-xs">@e.Why</span>
+                </li>
+            }
+        </ul>
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    internal const string Sel = "mt-1 block h-9 w-full " + Ui.CompactField;
+    internal const string Lbl = "block text-xs font-semibold text-[var(--ui-muted)]";
+    // Every control sits in a fixed-width grid cell, so the Strategy select on one row
+    // lines up with the Strategy select on the next whatever fields the two strategies
+    // happen to expose.
+    internal const string Cell = "min-w-0";
+    private const string Arrow = "rounded-lg border border-[var(--ui-control)] p-1 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] disabled:opacity-30 " + Ui.FocusRing;
+
+    /// <summary>The rules and the busy-period / night-trader settings, saved together from the save bar.</summary>
+    private sealed record Config(IReadOnlyList<PlacementRule> Rules, PlacementSettings Settings);
+
+    private FormDraft<Config> _draft = new(new Config([], Placement.DefaultSettings));
+    private bool _started;
+    // The master switch acts at once, as before (SetPlacementEnabledAsync).
+    private bool _enabled;
+    private string? _err;
+    private bool _busy;
+
+    [Parameter, EditorRequired] public IReadOnlyList<PlacementRule> Saved { get; set; } = [];
+
+    [Parameter, EditorRequired] public PlacementSettings Settings { get; set; } = Placement.DefaultSettings;
+
+    /// <summary>The step order's card, shown after the switch.</summary>
+    [Parameter] public RenderFragment? StepOrderCard { get; set; }
+
+    /// <summary>After a change is saved: the page reads the configuration again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool UsingDefault => Saved.Count == 0;
+
+    private Config SavedConfig => new(UsingDefault ? Placement.DefaultRules.ToList() : Placement.NormaliseRules(Saved), Settings);
+
+    // The switch is not part of the saved configuration: it flips on its own.
+    private int Changes
+    {
+        get
+        {
+            var (b, v) = (_draft.Base, _draft.Value);
+            var n = SaveBar.CountChanged(b.Rules, v.Rules, r => r.Group, r => r.Strategy, r => r.AnchorKind, r => r.AnchorTime,
+                r => r.AnchorOffsetMin, r => r.PrePeakPct, r => r.PostPeakPct, r => r.AvoidStrength, r => r.NightTraderStrategy);
+            if (v.Settings.PeakBasis != b.Settings.PeakBasis) n++;
+            if (v.Settings.PeakSmoothingBlocks != b.Settings.PeakSmoothingBlocks) n++;
+            if (v.Settings.PeakThresholdPct != b.Settings.PeakThresholdPct) n++;
+            if (v.Settings.NightTraderFromMin != b.Settings.NightTraderFromMin) n++;
+            if (v.Settings.NightTraderSharePct != b.Settings.NightTraderSharePct) n++;
+            return n;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_started)
+        {
+            _draft = new FormDraft<Config>(SavedConfig);
+            _enabled = Settings.Enabled;
+            _started = true;
+        }
+        else _draft.Sync(SavedConfig);
+    }
+
+    // Number(e.target.value): a blank box reads 0.
+    private static double Num(ChangeEventArgs e) => Js.Number(e.Value?.ToString() ?? "");
+
+    private static string? OrNull(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } v ? v : null;
+
+    private void Update(int i, Func<PlacementRule, PlacementRule> patch) =>
+        _draft.Set(c => c with { Rules = c.Rules.Select((r, k) => k == i ? patch(r) : r).ToList() });
+
+    private void PatchSettings(Func<PlacementSettings, PlacementSettings> patch) =>
+        _draft.Set(c => c with { Settings = patch(c.Settings) });
+
+    private void Move(int i, int delta)
+    {
+        var j = i + delta;
+        var rules = _draft.Value.Rules;
+        if (j < 0 || j >= rules.Count) return;
+        var next = rules.ToList();
+        (next[i], next[j]) = (next[j], next[i]);
+        _draft.Set(c => c with { Rules = next });
+    }
+
+    private async Task<bool> SaveAsync()
+    {
+        var sent = _draft.Value;
+        var res = await Service.SavePlacementAsync(sent.Rules, sent.Settings with { Enabled = _enabled });
+        if (!res.Ok)
+        {
+            _err = res.Error ?? "Save failed.";
+            StateHasChanged();
+            return false;
+        }
+        _err = null;
+        _draft.Commit(sent);
+        await OnChanged.InvokeAsync();
+        StateHasChanged();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _err = null;
+    }
+
+    private async Task ResetAsync()
+    {
+        if (!await Browser.ConfirmAsync("Go back to the recommended order and strategies? The saved configuration is replaced.")) return;
+        var keep = _draft.Value.Settings;
+        _busy = true;
+        try
+        {
+            var res = await Service.ResetPlacementAsync(keep with { Enabled = _enabled });
+            if (!res.Ok) _err = res.Error ?? "Reset failed.";
+            else
+            {
+                _err = null;
+                // The reset saves the settings as they stand, with the recommended rules.
+                var next = new Config(Placement.DefaultRules.ToList(), keep);
+                _draft.Set(next);
+                _draft.Commit(next);
+                await OnChanged.InvokeAsync();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        _busy = true;
+        try
+        {
+            var res = await Service.SetPlacementEnabledAsync(!_enabled);
+            if (res.Ok)
+            {
+                _enabled = !_enabled;
+                await OnChanged.InvokeAsync();
+            }
+            else _err = res.Error ?? "Could not change the switch";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

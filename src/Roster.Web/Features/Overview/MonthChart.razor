@@ -1,0 +1,57 @@
+@* Port of MonthChart in src/app/(app)/overview/Dashboard.tsx: one bar per day of
+   actual sales against forecast. *@
+@{
+    var (top, days) = MonthView.MonthBars(Data);
+}
+<Card>
+    <SectionHeader>
+        <Title>@MonthName by day</Title>
+        <Aside>
+            <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span class="inline-flex items-center gap-1.5">
+                    <span aria-hidden="true" class="h-3 w-3 rounded-sm bg-[var(--ui-ink)]"></span>
+                    Actual sales
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span aria-hidden="true" class="h-3 w-3 rounded-sm bg-[var(--ui-violet)]"></span>
+                    at the weekend
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span aria-hidden="true" class="h-3 w-3 rounded-sm border-2 border-dashed border-[var(--ui-control)]"></span>
+                    Forecast
+                </span>
+            </span>
+        </Aside>
+    </SectionHeader>
+    @if (top > 0)
+    {
+        <DayBarsChart Label="@($"{MonthName} by day: actual sales against forecast. Use the arrow keys to move between days; the table below has every figure.")"
+                      Ticks="MonthView.MonthTicks(top).Select(t => new ChartTick(t.At, t.Label)).ToList()"
+                      Days="days.Select(Datum).ToList()" />
+    }
+    else
+    {
+        <p class="text-sm text-[var(--ui-muted)]">No forecast or sales loaded for @MonthName yet.</p>
+    }
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public OverviewData Data { get; set; } = null!;
+    [Parameter, EditorRequired] public string MonthName { get; set; } = "";
+
+    private static DayBarDatum Datum(DayBar d)
+    {
+        var lines = DashboardText.BarLines(d);
+        return new DayBarDatum
+        {
+            Key = d.Date.ToIso(),
+            Day = d.Day,
+            Actual = d.Actual,
+            Forecast = d.Forecast,
+            Weekend = d.Weekend,
+            Today = d.Today,
+            Label = string.Join(", ", lines),
+            Tip = lines,
+        };
+    }
+}
