@@ -1,0 +1,33 @@
+@* Port of AvailabilitySquares in src/app/(app)/setup/staff/StaffClient.tsx: a
+   person's week as seven squares, Monday first - filled all day, half-filled for
+   part of the day (hover for the hours), hatched when not available. *@
+<div role="img" aria-label="@($"Availability: {string.Join(", ", _days.Select(d => d.Text))}")" class="flex gap-1">
+    @foreach (var d in _days)
+    {
+        <span @key="d.Day" title="@d.Text" style="@(d.Mode == AvailabilityMode.Off ? $"background: {Hatch}" : null)"
+              class="@($"relative block h-[18px] w-[18px] overflow-hidden rounded-[5px] {ModeClass(d.Mode)}")">
+            @if (d.Mode == AvailabilityMode.Window)
+            {
+                <span class="absolute inset-x-0 bottom-0 h-1/2 bg-[var(--ui-ink)]"></span>
+            }
+        </span>
+    }
+</div>
+
+@code {
+    /// <summary>The not-available hatch.</summary>
+    public const string Hatch = "repeating-linear-gradient(135deg, #e3e3ee 0 2px, #f7f7fb 2px 5px)";
+
+    private List<AvailabilitySquare> _days = [];
+
+    [Parameter] public IReadOnlyList<AvailabilityRow> Rows { get; set; } = [];
+
+    protected override void OnParametersSet() => _days = TeamRules.AvailabilityDays(Rows);
+
+    private static string ModeClass(AvailabilityMode mode) => mode switch
+    {
+        AvailabilityMode.All => "bg-[var(--ui-ink)]",
+        AvailabilityMode.Window => "border-2 border-[var(--ui-ink)] bg-white",
+        _ => "border border-[var(--ui-line)]",
+    };
+}
