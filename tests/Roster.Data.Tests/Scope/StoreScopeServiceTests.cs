@@ -77,6 +77,16 @@ public sealed class StoreScopeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Any_signed_in_user_passes_the_peer_gate_and_nobody_else()
+    {
+        Assert.True(await As(_org.StoreS1).CanPeerReadAsync(_org.S3));
+        Assert.True(await As(_org.PaR1).CanPeerReadAsync(_org.S3));
+        Assert.False(await As(_org.StoreS1).CanPeerReadAsync(Guid.NewGuid()));
+        Assert.False(await As(AccessContext.Anonymous).CanPeerReadAsync(_org.S3));
+        Assert.False(await As(AccessContext.ForKiosk(_org.S1)).CanPeerReadAsync(_org.S3));
+    }
+
+    [Fact]
     public async Task Network_roll_ups_use_the_remit_and_national_only_for_pa_and_dso()
     {
         Assert.Equal([_org.S1, _org.S2], await As(_org.PaR1).NetworkStoreIdsAsync(NetworkScope.Remit));

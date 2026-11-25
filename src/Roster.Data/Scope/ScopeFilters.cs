@@ -19,7 +19,8 @@ namespace Roster.Data.Scope;
 ///
 /// The predicates themselves live on <see cref="RosterDbContext"/> (see the note there);
 /// this class only fits each table's key into the right one. Deliberate cross-store reads
-/// (the peer-visible pages) go through <see cref="PeerReads"/>.
+/// (the peer-visible pages) check <see cref="IStoreScope.CanPeerReadAsync"/> and then read
+/// with IgnoreQueryFilters().
 /// </summary>
 internal static class ScopeFilters
 {
