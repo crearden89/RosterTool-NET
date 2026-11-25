@@ -26,6 +26,8 @@ public sealed class ServicesModule : IDataModule
         services.TryAddScoped<IDatabaseFunctions, DatabaseFunctionsService>();
         services.TryAddScoped<IRefData, RefDataReader>();
         services.TryAddScoped<IPayData, PayDataReader>();
+        services.TryAddScoped<IPayCosts, PayCostsLoader>();
+        services.TryAddScoped<IFreshRosterShifts, PendingFreshRosterShifts>();
 
         services.TryAddScoped<IStoreDayLoader, StoreDayLoader>();
         services.TryAddScoped<IStage1Feeds, PendingStage1Feeds>();
