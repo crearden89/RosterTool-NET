@@ -1,0 +1,98 @@
+@* Port of PriorityEditor in src/app/(app)/admin/rules/labour/LabourRulesClient.tsx.
+   Overlap priority, saved from the page's save bar (SavePriorityOrderAsync), as
+   its own button did. *@
+@inject ILabourRulesService Service
+
+<SettingsSection Id="priority">
+    <Title>Overlap priority</Title>
+    <Purpose>When a person could cover two tasks in the same quarter-hour, the higher one wins. Reorder as business priorities change.</Purpose>
+    <ChildContent>
+        <SaveSlot Id="priority" Changes="Changes" Save="SaveAsync" Discard="Discard" />
+        <ol class="space-y-1.5">
+            @{ var order = _draft.Value; }
+            @for (var i = 0; i < order.Count; i++)
+            {
+                var at = i;
+                var key = order[i];
+                var label = LabelOf(key);
+                <li @key="key" class="flex items-center gap-3 rounded-xl border border-[var(--ui-line)] bg-white px-3 py-2 text-sm">
+                    <span class="w-5 text-right text-[var(--ui-muted)] tabular-nums">@(i + 1)</span>
+                    <span class="flex-1 font-semibold text-[var(--ui-ink)]">@label</span>
+                    <button type="button" @onclick="() => Move(at, -1)" disabled="@(at == 0)" aria-label="@($"Move {label} up")" class="@Arrow">
+                        <Icon Name="IconName.ArrowUp" Class="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" @onclick="() => Move(at, 1)" disabled="@(at == order.Count - 1)" aria-label="@($"Move {label} down")" class="@Arrow">
+                        <Icon Name="IconName.ArrowDown" Class="h-3.5 w-3.5" />
+                    </button>
+                </li>
+            }
+        </ol>
+        @if (_error is not null)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private const string Arrow = "rounded-lg border border-[var(--ui-control)] p-1 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] disabled:opacity-30 " + Ui.FocusRing;
+
+    private FormDraft<IReadOnlyList<string>> _draft = new([]);
+    private bool _started;
+    private string? _error;
+
+    [Parameter, EditorRequired] public IReadOnlyList<PriorityGroup> Groups { get; set; } = [];
+
+    /// <summary>After a save: the page reads the order again.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private int Changes => string.Join(",", _draft.Value) == string.Join(",", _draft.Base) ? 0 : 1;
+
+    private string LabelOf(string key) => Groups.FirstOrDefault(g => g.Key == key)?.Label ?? key;
+
+    protected override void OnParametersSet()
+    {
+        var keys = Groups.Select(g => g.Key).ToList();
+        if (!_started)
+        {
+            _draft = new FormDraft<IReadOnlyList<string>>(keys);
+            _started = true;
+        }
+        else _draft.Sync(keys);
+    }
+
+    private void Move(int i, int dir)
+    {
+        var order = _draft.Value;
+        var j = i + dir;
+        if (j < 0 || j >= order.Count) return;
+        var next = order.ToList();
+        (next[i], next[j]) = (next[j], next[i]);
+        _draft.Set(next);
+    }
+
+    private async Task<bool> SaveAsync()
+    {
+        var sent = _draft.Value;
+        var res = await Service.SavePriorityOrderAsync(sent);
+        if (!res.Ok)
+        {
+            _error = $"Error: {res.Error}";
+            StateHasChanged();
+            return false;
+        }
+        _error = null;
+        _draft.Commit(sent);
+        await OnSaved.InvokeAsync();
+        StateHasChanged();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _error = null;
+    }
+}

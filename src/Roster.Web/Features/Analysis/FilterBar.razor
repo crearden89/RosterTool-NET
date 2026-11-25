@@ -1,0 +1,73 @@
+@* Port of src/app/(app)/analysis/FilterBar.tsx.
+   The page's filters in one compact bar: the store (for logins that look after
+   more than one), the date range and the cost basis. Nothing changes until
+   Update, exactly as before. *@
+@inject NavigationManager Navigation
+@inject StoreSelection Selection
+@inject RosterJs Js
+
+<form @onsubmit="SubmitAsync" class="mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-[var(--ui-line)] bg-white p-4 sm:px-5">
+    @if (ShowStoreSelect && Stores.Count > 0)
+    {
+        <label class="text-sm">
+            <span class="@Ui.FieldLabelClass">Store</span>
+            <select name="store" @bind="_store" class="@Ui.FieldClass">
+                @foreach (var s in Stores)
+                {
+                    <option @key="s.Id" value="@s.Id">@s.Code - @s.Name</option>
+                }
+            </select>
+        </label>
+    }
+    <label class="text-sm">
+        <span class="@Ui.FieldLabelClass">From</span>
+        <input type="date" name="start" value="@_start" @onchange="e => _start = e.Value?.ToString() ?? string.Empty" class="@Ui.FieldClass" />
+    </label>
+    <label class="text-sm">
+        <span class="@Ui.FieldLabelClass">To (31 days at most)</span>
+        <input type="date" name="end" value="@_end" @onchange="e => _end = e.Value?.ToString() ?? string.Empty" class="@Ui.FieldClass" />
+    </label>
+    <div class="text-sm">
+        <span aria-hidden="true" class="@Ui.FieldLabelClass">Cost basis</span>
+        <SegmentedControl T="string" Label="Cost basis" Name="loaded" Options="BasisOptions" @bind-Value="_loaded" />
+    </div>
+    <button type="submit" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Primary)">@(_pending ? "Loading…" : "Update")</button>
+</form>
+
+@code {
+    private static readonly IReadOnlyList<SegmentOption<string>> BasisOptions = [new("1", "Fully loaded"), new("", "Raw wages")];
+    private string _store = "", _start = "", _end = "";
+    private string? _loaded = "";
+    private bool _pending;
+
+    [Parameter, EditorRequired] public IReadOnlyList<AnalysisStore> Stores { get; set; } = [];
+    [Parameter] public Guid? StoreId { get; set; }
+    [Parameter] public string StartDate { get; set; } = "";
+    [Parameter] public string EndDate { get; set; } = "";
+    [Parameter] public bool FullyLoaded { get; set; }
+    [Parameter] public bool ShowStoreSelect { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _store = StoreId?.ToString() ?? "";
+        _start = StartDate;
+        _end = EndDate;
+        _loaded = FullyLoaded ? "1" : "";
+        _pending = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        _pending = true;
+        var query = $"store={Uri.EscapeDataString(_store)}&start={Uri.EscapeDataString(_start)}&end={Uri.EscapeDataString(_end)}";
+        if (_loaded == "1") query += "&loaded=1";
+        // The explicit ?store= wins on this navigation, so the remembered store is only
+        // for the other pages.
+        if (Guid.TryParse(_store, out var id))
+        {
+            Selection.Remember(id);
+            await Js.SetCookieAsync(StoreSelection.CookieName, id.ToString(), TimeSpan.FromDays(365));
+        }
+        Navigation.NavigateTo($"/analysis?{query}");
+    }
+}
