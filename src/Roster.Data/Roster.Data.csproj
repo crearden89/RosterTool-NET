@@ -1,10 +1,34 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SQL Server data layer: entities, DbContext, EF Core migrations, the store-scope
+    permission service, the database functions as C# services, the file feeds and
+    the seed data. No connection string lives here: see Configuration/RosterDataOptions.cs.
+  -->
 
   <ItemGroup>
     <ProjectReference Include="..\Roster.Engine\Roster.Engine.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
+    <RootNamespace>Roster.Data</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.15" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Roster.Data.Tests" />
+  </ItemGroup>
 
 </Project>
