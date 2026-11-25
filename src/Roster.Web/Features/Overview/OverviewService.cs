@@ -298,12 +298,12 @@ public sealed class OverviewService(
         var actuals = await db.ActualsDays.AsNoTracking()
             .Where(a => ids.Contains(a.StoreId) && a.Date >= monthStart && a.Date <= today)
             .OrderBy(a => a.StoreId).ThenBy(a => a.Date)
-            .Select(a => new StoreActualsRow(a.StoreId.ToString(), a.ActualHours100, a.UkgActualHours))
+            .Select(a => new { a.StoreId, a.ActualHours100, a.UkgActualHours })
             .ToListAsync(ct);
         var nonOp = await db.NonOpEntries.AsNoTracking()
             .Where(n => ids.Contains(n.StoreId) && n.Date >= monthStart && n.Date <= today)
             .OrderBy(n => n.StoreId).ThenBy(n => n.Date).ThenBy(n => n.Id)
-            .Select(n => new StoreNonOpRow(n.StoreId.ToString(), n.Minutes))
+            .Select(n => new { n.StoreId, n.Minutes })
             .ToListAsync(ct);
         var breakFactorPct = await BreakFactorAsync(db, ct);
 
@@ -322,7 +322,11 @@ public sealed class OverviewService(
                 if (storeOfEmployee.TryGetValue(e, out var s)) requestsByStore[s] = requestsByStore.GetValueOrDefault(s) + 1;
         }
 
-        var oe = StoreRows.OeByStore(actuals, nonOp, breakFactorPct);
+        // Ids as text on this side: the database's own text form of a uniqueidentifier is upper case.
+        var oe = StoreRows.OeByStore(
+            actuals.Select(a => new StoreActualsRow(a.StoreId.ToString(), a.ActualHours100, a.UkgActualHours)),
+            nonOp.Select(n => new StoreNonOpRow(n.StoreId.ToString(), n.Minutes)),
+            breakFactorPct);
         var reviewByStore = new Dictionary<Guid, StoreReviewRow>();
         foreach (var x in reviewRows) reviewByStore[x.StoreId] = new StoreReviewRow(x.Status, x.SnapshotKey);
         var publishedByStore = published.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
