@@ -1,0 +1,301 @@
+@* Port of src/app/(app)/admin/calendars/CalendarsClient.tsx. Each holiday, term and
+   exception day is added or deleted at once, as before. An add that is refused says
+   why and keeps what was typed; a half-typed one counts as an unsaved change when
+   leaving the page. *@
+@inject ICalendarsService Service
+
+<LeaveGuard Id="calendar-forms" Dirty="@Dirty" />
+
+<SettingsSection Id="national">
+    <Title>Public holidays - national</Title>
+    <Purpose>Holidays every store keeps.</Purpose>
+    <ChildContent>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <input type="date" aria-label="Date" value="@_natDate" @oninput="@(e => _natDate = e.Value?.ToString() ?? "")" class="@Ui.CompactField" />
+            <input placeholder="Holiday name" aria-label="Holiday name" @bind="_natName" @bind:event="oninput" class="@Ui.CompactField" />
+            @AddButton(AddNationalAsync)
+        </div>
+        @ErrorOf("national")
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                @Head(["Date", "Name"])
+                <tbody>
+                    @foreach (var h in View.National)
+                    {
+                        <tr @key="h.Id" class="@Ui.Table.Row">
+                            <td class="@Td">@Dates.AuFull(h.Date)</td>
+                            <td class="@Td">@h.Name</td>
+                            <td class="@($"{Td} text-right")">@DeleteButton(CalendarTable.PublicHolidaysNational, h.Id)</td>
+                        </tr>
+                    }
+                    @if (View.National.Count == 0) { @None(3) }
+                </tbody>
+            </table>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="state">
+    <Title>Public holidays - state</Title>
+    <Purpose>Holidays kept by the stores in one state.</Purpose>
+    <ChildContent>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <select aria-label="State" @bind="_stState" class="@Ui.CompactField">@StateOptions</select>
+            <input type="date" aria-label="Date" value="@_stDate" @oninput="@(e => _stDate = e.Value?.ToString() ?? "")" class="@Ui.CompactField" />
+            <input placeholder="Holiday name" aria-label="Holiday name" @bind="_stName" @bind:event="oninput" class="@Ui.CompactField" />
+            @AddButton(AddStateAsync)
+        </div>
+        @ErrorOf("state")
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                @Head(["State", "Date", "Name"])
+                <tbody>
+                    @foreach (var h in View.State)
+                    {
+                        <tr @key="h.Id" class="@Ui.Table.Row">
+                            <td class="@Td">@h.State</td>
+                            <td class="@Td">@Dates.AuFull(h.Date)</td>
+                            <td class="@Td">@h.Name</td>
+                            <td class="@($"{Td} text-right")">@DeleteButton(CalendarTable.PublicHolidaysState, h.Id)</td>
+                        </tr>
+                    }
+                    @if (View.State.Count == 0) { @None(4) }
+                </tbody>
+            </table>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="local">
+    <Title>Public holidays - local (per store)</Title>
+    <Purpose>Holidays kept by one store only.</Purpose>
+    <ChildContent>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <select aria-label="Store" @bind="_locStore" class="@Ui.CompactField">
+                @foreach (var s in View.Stores)
+                {
+                    <option @key="s.Id" value="@s.Id">@s.Label</option>
+                }
+            </select>
+            <input type="date" aria-label="Date" value="@_locDate" @oninput="@(e => _locDate = e.Value?.ToString() ?? "")" class="@Ui.CompactField" />
+            <input placeholder="Holiday name" aria-label="Holiday name" @bind="_locName" @bind:event="oninput" class="@Ui.CompactField" />
+            @AddButton(AddLocalAsync)
+        </div>
+        @ErrorOf("local")
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                @Head(["Store", "Date", "Name"])
+                <tbody>
+                    @foreach (var h in View.Local)
+                    {
+                        <tr @key="h.Id" class="@Ui.Table.Row">
+                            <td class="@Td">@StoreName(h.StoreId)</td>
+                            <td class="@Td">@Dates.AuFull(h.Date)</td>
+                            <td class="@Td">@h.Name</td>
+                            <td class="@($"{Td} text-right")">@DeleteButton(CalendarTable.PublicHolidaysLocal, h.Id)</td>
+                        </tr>
+                    }
+                    @if (View.Local.Count == 0) { @None(4) }
+                </tbody>
+            </table>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+<SettingsSection Id="terms">
+    <Title>School terms</Title>
+    <Purpose>Term dates by state, and the pupil-free days inside them. Juniors' hours follow them.</Purpose>
+    <ChildContent>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <select aria-label="State" @bind="_termState" class="@Ui.CompactField">@StateOptions</select>
+            <input placeholder="Term label" aria-label="Term label" @bind="_termLabel" @bind:event="oninput" class="@Ui.CompactField" />
+            <input type="date" aria-label="Term starts" value="@_termStart" @oninput="@(e => _termStart = e.Value?.ToString() ?? "")" class="@Ui.CompactField" />
+            <input type="date" aria-label="Term ends" value="@_termEnd" @oninput="@(e => _termEnd = e.Value?.ToString() ?? "")" class="@Ui.CompactField" />
+            @AddButton(AddTermAsync)
+        </div>
+        @ErrorOf("term")
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                @Head(["State", "Term", "Start", "End"])
+                <tbody>
+                    @foreach (var t in View.Terms)
+                    {
+                        <tr @key="t.Id" class="@Ui.Table.Row">
+                            <td class="@Td">@t.State</td>
+                            <td class="@Td">@t.TermLabel</td>
+                            <td class="@Td">@Dates.AuFull(t.StartDate)</td>
+                            <td class="@Td">@Dates.AuFull(t.EndDate)</td>
+                            <td class="@($"{Td} text-right")">@DeleteButton(CalendarTable.SchoolTerms, t.Id)</td>
+                        </tr>
+                    }
+                    @if (View.Terms.Count == 0) { @None(5) }
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="mt-5 mb-2 text-sm font-semibold text-[var(--ui-ink)]">Exception days (pupil-free)</h3>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <select aria-label="State" @bind="_excState" class="@Ui.CompactField">@StateOptions</select>
+            <input type="date" aria-label="Date" value="@_excDate" @oninput="@(e => _excDate = e.Value?.ToString() ?? "")" class="@Ui.CompactField" />
+            <input placeholder="Note" aria-label="Note" @bind="_excNote" @bind:event="oninput" class="@Ui.CompactField" />
+            @AddButton(AddExceptionAsync)
+        </div>
+        @ErrorOf("exception")
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                @Head(["State", "Date", "Note"])
+                <tbody>
+                    @foreach (var e in View.Exceptions)
+                    {
+                        <tr @key="e.Id" class="@Ui.Table.Row">
+                            <td class="@Td">@e.State</td>
+                            <td class="@Td">@Dates.AuFull(e.Date)</td>
+                            <td class="@Td">@(e.Note ?? "-")</td>
+                            <td class="@($"{Td} text-right")">@DeleteButton(CalendarTable.SchoolTermExceptions, e.Id)</td>
+                        </tr>
+                    }
+                    @if (View.Exceptions.Count == 0) { @None(4) }
+                </tbody>
+            </table>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private const string Td = "px-3 py-1.5";
+
+    [Parameter, EditorRequired] public CalendarsView View { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback Reload { get; set; }
+
+    private bool _pending;
+    private Guid? _deletingId;
+    private readonly Dictionary<string, string> _errors = [];
+
+    private string _natDate = "", _natName = "";
+    private string _stState = "NSW", _stDate = "", _stName = "";
+    private string _locStore = "", _locDate = "", _locName = "";
+    private string _termState = "NSW", _termLabel = "", _termStart = "", _termEnd = "";
+    private string _excState = "NSW", _excDate = "", _excNote = "";
+    private bool _locStoreSet;
+
+    private bool Dirty =>
+        _natDate != "" || _natName != "" || _stDate != "" || _stName != "" || _locDate != "" || _locName != ""
+        || _termLabel != "" || _termStart != "" || _termEnd != "" || _excDate != "" || _excNote != "";
+
+    protected override void OnParametersSet()
+    {
+        // The local-holiday form starts on the first store (useState's initial value).
+        if (!_locStoreSet)
+        {
+            _locStore = View.Stores.Count > 0 ? View.Stores[0].Id.ToString() : "";
+            _locStoreSet = true;
+        }
+    }
+
+    private string StoreName(Guid id) => View.Stores.FirstOrDefault(x => x.Id == id) is { } s ? s.Code : id.ToString();
+
+    private static readonly RenderFragment StateOptions = b =>
+    {
+        foreach (var s in AuStates.All)
+        {
+            b.OpenElement(0, "option");
+            b.AddContent(1, s);
+            b.CloseElement();
+        }
+    };
+
+    private static RenderFragment Head(string[] head) => __builder =>
+    {
+        <thead class="@Ui.Table.Head">
+            <tr>
+                @foreach (var h in head)
+                {
+                    <th class="@Ui.Table.Th">@h</th>
+                }
+                <th class="@Ui.Table.Th"><span class="sr-only">Delete</span></th>
+            </tr>
+        </thead>
+    };
+
+    private static RenderFragment None(int cols) => __builder =>
+    {
+        <tr><td colspan="@cols" class="@Ui.Table.Empty">None yet.</td></tr>
+    };
+
+    private RenderFragment ErrorOf(string form) => __builder =>
+    {
+        if (_errors.TryGetValue(form, out var e) && e != "")
+        {
+            <div class="mb-3"><FormMessage Tone="FormMessageTone.Error">@e</FormMessage></div>
+        }
+    };
+
+    private RenderFragment AddButton(Func<Task> onClick) => __builder =>
+    {
+        <button type="button" @onclick="onClick" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">@(_pending ? "Adding…" : "Add")</button>
+    };
+
+    private RenderFragment DeleteButton(CalendarTable table, Guid id) => __builder =>
+    {
+        var deleting = _deletingId == id;
+        <button type="button" @onclick="() => DeleteAsync(table, id)" disabled="@deleting" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">@(deleting ? "Deleting…" : "Delete")</button>
+    };
+
+    private async Task DeleteAsync(CalendarTable table, Guid id)
+    {
+        _deletingId = id;
+        _pending = true;
+        await Service.DeleteRowAsync(table, id);
+        _deletingId = null;
+        await Reload.InvokeAsync();
+        _pending = false;
+    }
+
+    // Add a row; the form clears only once the row is in.
+    private async Task AddAsync(string form, Func<Task<AdminResult>> fn, Action clear)
+    {
+        _errors[form] = "";
+        _pending = true;
+        var res = await fn();
+        if (!res.Ok)
+        {
+            _errors[form] = $"Error: {res.Error ?? "Could not add it."}";
+            _pending = false;
+            return;
+        }
+        clear();
+        await Reload.InvokeAsync();
+        _pending = false;
+    }
+
+    private Task AddNationalAsync()
+    {
+        if (_natDate == "" || _natName == "") return Task.CompletedTask;
+        return AddAsync("national", () => Service.AddNationalHolidayAsync(_natDate, _natName), () => { _natDate = ""; _natName = ""; });
+    }
+
+    private Task AddStateAsync()
+    {
+        if (_stDate == "" || _stName == "") return Task.CompletedTask;
+        return AddAsync("state", () => Service.AddStateHolidayAsync(_stState, _stDate, _stName), () => { _stDate = ""; _stName = ""; });
+    }
+
+    private Task AddLocalAsync()
+    {
+        if (!Guid.TryParse(_locStore, out var store) || _locDate == "" || _locName == "") return Task.CompletedTask;
+        return AddAsync("local", () => Service.AddLocalHolidayAsync(store, _locDate, _locName), () => { _locDate = ""; _locName = ""; });
+    }
+
+    private Task AddTermAsync()
+    {
+        if (_termLabel == "" || _termStart == "" || _termEnd == "") return Task.CompletedTask;
+        return AddAsync("term", () => Service.AddSchoolTermAsync(_termState, _termLabel, _termStart, _termEnd),
+            () => { _termLabel = ""; _termStart = ""; _termEnd = ""; });
+    }
+
+    private Task AddExceptionAsync()
+    {
+        if (_excDate == "") return Task.CompletedTask;
+        return AddAsync("exception", () => Service.AddSchoolTermExceptionAsync(_excState, _excDate, _excNote), () => { _excDate = ""; _excNote = ""; });
+    }
+}

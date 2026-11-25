@@ -1,0 +1,33 @@
+@page "/admin/special-trading-hours"
+@* Port of src/app/(app)/admin/special-trading-hours/page.tsx. *@
+@inject ISpecialTradingHoursService Service
+@inject IRememberedStore Remembered
+
+<div>
+    <SettingsHeader Area="Stores" Title="Special Trading Hours">
+        <Subtitle>Dates a store trades different hours or doesn't open, in place of its usual week · one store at a time</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @if (_view is not null)
+        {
+            <SpecialHoursClient View="_view" Reload="ReloadAsync" />
+        }
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("add", "Add a date range"),
+        new("dates", "Special hours"),
+    ];
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+
+    private SpecialHoursView? _view;
+
+    protected override Task OnParametersSetAsync() => ReloadAsync();
+
+    private async Task ReloadAsync() =>
+        _view = await Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId);
+}
