@@ -1,0 +1,69 @@
+@page "/plan/review"
+@* Port of src/app/(app)/plan/review/page.tsx.
+   SM and EMSO review (owner, 10/11/2026; mock-up approved): the store checks
+   every flag on its fortnight and submits; the EMSO marks each day fine or
+   queries it, then approves (publishing the roster) or returns it. *@
+@inject IReviewService Service
+@inject TimeProvider Clock
+
+<div class="pb-44 sm:pb-28">
+    @if (_model is { } m)
+    {
+        <PageHeader Title="Review">
+            <Subtitle>@(m.Data is { } data ? $"{data.StoreName} ({data.StoreCode}) · {data.PeriodTitle}" : $"Fortnight {m.PeriodTitle}")</Subtitle>
+            <Actions>
+                @if (m.ShowStorePicker)
+                {
+                    <ReviewStorePicker Stores="m.Stores" Value="m.StoreId" Period="m.PeriodStart" />
+                }
+                @* The fortnight between its arrows. *@
+                <div class="flex items-center rounded-xl border border-[var(--ui-control)] bg-white">
+                    <a href="@ReviewQuery.Href(m.StoreId, Period.AddPeriods(m.PeriodStart, -1))" aria-label="Previous fortnight" title="Previous fortnight"
+                       class="@($"rounded-l-xl px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] {Ui.FocusRing}")">
+                        <Icon Name="IconName.ChevronLeft" Class="h-4 w-4" />
+                    </a>
+                    <span class="min-w-[8.5rem] px-2 text-center text-sm font-semibold whitespace-nowrap text-[var(--ui-ink)]">@ReviewQuery.ShortSpan(m.PeriodStart)</span>
+                    <a href="@ReviewQuery.Href(m.StoreId, Period.AddPeriods(m.PeriodStart, 1))" aria-label="Next fortnight" title="Next fortnight"
+                       class="@($"rounded-r-xl px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] {Ui.FocusRing}")">
+                        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+                    </a>
+                </div>
+            </Actions>
+        </PageHeader>
+
+        @if (m.Data is null)
+        {
+            <Card>
+                <p class="text-sm text-[var(--ui-muted)]">Choose a store to review.</p>
+            </Card>
+        }
+        else
+        {
+            <ReviewView Data="m.Data" Queue="m.Queue" CanStore="m.CanStore" CanReview="m.CanReview" CanUnlock="m.CanUnlock"
+                        UnreadNotices="m.UnreadNotices" InitialDay="ReviewQuery.DayFrom(DayParam)" OnChanged="ReloadAsync" />
+        }
+    }
+</div>
+
+@code {
+    private ReviewPageModel? _model;
+    private Guid? _requestedStore;
+    private DateOnly _periodStart;
+
+    [SupplyParameterFromQuery(Name = "store")] public string? StoreParam { get; set; }
+    [SupplyParameterFromQuery(Name = "period")] public string? PeriodParam { get; set; }
+    [SupplyParameterFromQuery(Name = "day")] public string? DayParam { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // ?store= that isn't a store's id still counts as asked-for (it then resolves
+        // like any store out of reach); only no ?store= at all sends a reviewer to
+        // the store waiting for them.
+        _requestedStore = string.IsNullOrEmpty(StoreParam) ? null : Guid.TryParse(StoreParam, out var s) ? s : Guid.Empty;
+        _periodStart = ReviewQuery.PeriodStartFrom(PeriodParam, Dates.TodayAu(Clock.GetUtcNow()));
+        await ReloadAsync();
+    }
+
+    // router.refresh(): the page reads the review again; the view keeps what was typed.
+    private async Task ReloadAsync() => _model = await Service.LoadPageAsync(_requestedStore, _periodStart);
+}
