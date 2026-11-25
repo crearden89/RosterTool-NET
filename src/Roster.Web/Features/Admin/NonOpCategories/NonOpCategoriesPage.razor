@@ -1,0 +1,30 @@
+@page "/admin/non-op-categories"
+@* Port of src/app/(app)/admin/non-op-categories/page.tsx. *@
+@inject INonOpCategoriesService Service
+
+<div>
+    <SettingsHeader Area="Catalogues" Title="Non-Op Categories">
+        <Subtitle>The categories stores record non-operational time against, and the bulk upload of entries · applies to every store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @* Upload first (the common job), catalogue underneath. The upload's Store ID
+           column does the job for any number of stores, straight from the export. *@
+        <NonOpBulkUpload ScopeNote="Any store in the file's Store ID column is accepted." />
+        <NonOpCategoriesClient View="_view" Reload="ReloadAsync" />
+    </SettingsBody>
+</div>
+
+@code {
+    private NonOpCategoriesView _view = new([], []);
+
+    private IReadOnlyList<SettingsSectionRef> Sections =>
+    [
+        new("bulk", "Bulk upload"),
+        new("categories", "Categories"),
+        .. _view.Categories.Select(c => new SettingsSectionRef($"cat-{c.Id}", c.Name)),
+    ];
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync() => _view = await Service.LoadAsync();
+}
