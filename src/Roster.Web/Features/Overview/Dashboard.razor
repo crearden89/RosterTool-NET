@@ -7,9 +7,17 @@
    in as they are read. (The owner, 15/11/2026: the store table is underneath,
    so the old view and its switch are gone.) *@
 @page "/overview"
-@inject IOverviewService Overview
+@inject IServiceProvider Services
+@inject ILogger<Dashboard> Log
 
-@if (_page is { } p)
+@if (_failed)
+{
+    <div class="space-y-4">
+        <PageHeader Title="Dashboard" />
+        <Unavailable What="The Dashboard" />
+    </div>
+}
+else if (_page is { } p)
 {
     var user = p.User;
     var store = p.Stores.FirstOrDefault(s => s.Id == p.SelectedStore);
@@ -88,10 +96,25 @@
 
 @code {
     private DashboardPage? _page;
+    private bool _failed;
 
     [SupplyParameterFromQuery(Name = "store")] public string? StoreParam { get; set; }
     [SupplyParameterFromQuery(Name = "month")] public string? MonthParam { get; set; }
 
-    protected override async Task OnParametersSetAsync() =>
-        _page = await Overview.LoadDashboardAsync(StoreParam, MonthParam);
+    // A read that fails (the database unreachable or not configured) is said plainly under
+    // the page's header, as the fortnight and Your stores say theirs, rather than as the
+    // app's error page. The service is resolved here so that holds for its set-up too.
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _page = await Services.GetRequiredService<IOverviewService>().LoadDashboardAsync(StoreParam, MonthParam);
+            _failed = false;
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "Dashboard: the month couldn't be read");
+            _failed = true;
+        }
+    }
 }
