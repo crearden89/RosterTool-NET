@@ -159,7 +159,7 @@ public static class FakePlanDays
                 var t = b.Time;
                 var n = (int)(t / 15) + i;
                 string group;
-                if (need.TryGetValue(t, out var heads) && taken.GetValueOrDefault(t) < heads && s.PlanRole != RoleBadges.Mgr)
+                if (need.TryGetValue(t, out var heads) && taken.GetValueOrDefault(t) < heads && s.PlanRole == RoleBadges.Sa)
                 {
                     taken[t] = taken.GetValueOrDefault(t) + 1;
                     group = "registers";

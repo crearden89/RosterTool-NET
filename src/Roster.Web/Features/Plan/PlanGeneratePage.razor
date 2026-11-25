@@ -27,12 +27,12 @@ else if (m.RedirectTo is null)
                        CanGenerate="m.CanGenerate"
                        IsPastPeriod="m.IsPastPeriod"
                        Title="Plan"
-                       Badge="@(!m.Peer && m.SelectedStore is not null ? @<PlanStatusChip State="m.ReviewState" Locked="m.Locked" Page="PlanOrRoster.Plan" /> : null)"
-                       Subtitle="@(m.StoreRow is { } row ? @<text>@row.Name · fortnight @Dates.AuRange(m.PeriodStart, Period.PeriodEndFrom(m.PeriodStart))</text> : null)"
-                       HeaderAction="@(m.ShowReview ? @<ReviewLink Href="@m.ReviewHref" State="m.ReviewState" IsStore="m.IsStoreTier" Locked="m.Locked" /> : null)"
+                       Badge="BadgeFor(m)"
+                       Subtitle="SubtitleFor(m)"
+                       HeaderAction="HeaderActionFor(m)"
                        Notices="Notices(m)"
                        Held="Held(m)"
-                       BarAction="@(m.HasSnapshot ? @<ShowSubtasksToggle Tone="SubtaskToggleTone.Light" Hint="Show which sub-task each Reset, Load Running, Cleaning and Specials tile is, open every group's sub-tasks in Benchmark Hours, and paint them in edit mode" /> : null)"
+                       BarAction="BarActionFor(m)"
                        LockedNote="m.LockedNote"
                        OnGenerated="ReloadAsync" />
 
@@ -142,6 +142,20 @@ else if (m.RedirectTo is null)
     }
 
     private static RenderFragment Text(string s) => b => b.AddContent(0, s);
+
+    private static RenderFragment? BadgeFor(PlanPageModel m) =>
+        !m.Peer && m.SelectedStore is not null ? @<PlanStatusChip State="m.ReviewState" Locked="m.Locked" Page="PlanOrRoster.Plan" /> : null;
+
+    private static RenderFragment? SubtitleFor(PlanPageModel m) =>
+        m.StoreRow is { } row ? Text($"{row.Name} · fortnight {Dates.AuRange(m.PeriodStart, Period.PeriodEndFrom(m.PeriodStart))}") : null;
+
+    private static RenderFragment? HeaderActionFor(PlanPageModel m) =>
+        m.ShowReview ? @<ReviewLink Href="@m.ReviewHref" State="m.ReviewState" IsStore="m.IsStoreTier" Locked="m.Locked" /> : null;
+
+    private static RenderFragment? BarActionFor(PlanPageModel m) =>
+        m.HasSnapshot
+            ? @<ShowSubtasksToggle Tone="SubtaskToggleTone.Light" Hint="Show which sub-task each Reset, Load Running, Cleaning and Specials tile is, open every group's sub-tasks in Benchmark Hours, and paint them in edit mode" />
+            : null;
 
     private static RenderFragment Notices(PlanPageModel m) =>
         @<text>

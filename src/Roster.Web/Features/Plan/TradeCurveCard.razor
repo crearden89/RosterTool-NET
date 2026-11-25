@@ -53,7 +53,7 @@ else
                 @for (var i = 0; i < _ticks.Count; i++)
                 {
                     var v = _ticks[i];
-                    <g @key="i">
+                    <g @key="@($"g-{i}")">
                         <line x1="@N(PadLeft)" x2="@N(W - PadRight)" y1="@N(Y(v))" y2="@N(Y(v))" stroke="var(--brand-border)" stroke-width="1" />
                         <text x="@N(PadLeft - 6)" y="@N(Y(v) + 3)" text-anchor="end" class="fill-[var(--brand-navy)]/35" font-size="10">@($"{Js.ToFixed(v * 100, 2)}%")</text>
                     </g>
@@ -72,8 +72,11 @@ else
                 @for (var i = 0; i < _pts.Count; i++)
                 {
                     var p = _pts[i];
-                    <text @key="p.H" x="@N(X(p.H))" y="@N(Ht - 8)" text-anchor="middle" font-size="10"
-                          class="@(InSpan(p.H) ? "fill-[var(--brand-navy)]/60 font-semibold" : "fill-[var(--brand-navy)]/35")">@(_hours.Count > 10 && i % 2 == 1 ? "" : HourLabel(p.H))</text>
+                    var tick = _hours.Count > 10 && i % 2 == 1 ? "" : HourLabel(p.H);
+                    <g @key="@($"t-{N(p.H)}")">
+                        <text x="@N(X(p.H))" y="@N(Ht - 8)" text-anchor="middle" font-size="10"
+                              class="@(InSpan(p.H) ? "fill-[var(--brand-navy)]/60 font-semibold" : "fill-[var(--brand-navy)]/35")">@tick</text>
+                    </g>
                 }
 
                 @* Crosshair + hit targets, wider than the marks they select. *@
@@ -86,7 +89,7 @@ else
                 }
                 @foreach (var p in _pts)
                 {
-                    <rect @key="p.H" x="@N(X(p.H) - _band / 2)" y="@N(PadTop)" width="@N(_band)" height="@N(PlotH)" fill="transparent"
+                    <rect @key="@($"hit-{N(p.H)}")" x="@N(X(p.H) - _band / 2)" y="@N(PadTop)" width="@N(_band)" height="@N(PlotH)" fill="transparent"
                           @onmouseenter="() => _hoverHour = p.H" />
                 }
             </svg>
