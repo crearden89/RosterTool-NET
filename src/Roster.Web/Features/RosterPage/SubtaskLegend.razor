@@ -1,0 +1,9 @@
+@* Port of src/app/(app)/plan/roster/SubtaskView.tsx (SubtaskLegend): the sub-task codes,
+   group by group, shown under the grid while the switch is on. *@
+<div class="-mt-4 mb-6 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--brand-navy)]/70">
+    <span class="font-semibold text-[var(--brand-navy)]">Sub-tasks:</span>
+    @foreach (var g in Catalogue.SubtaskGroups)
+    {
+        <span @key="g"><span class="font-semibold">@LabourGroups.ByKey[g].Label</span>@(" " + string.Join(", ", Catalogue.SubtasksOf(g).Select(s => $"{s.Code} {s.Label}")))</span>
+    }
+</div>
