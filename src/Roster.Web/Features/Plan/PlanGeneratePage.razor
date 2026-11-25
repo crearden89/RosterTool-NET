@@ -33,7 +33,7 @@ else if (m.RedirectTo is null)
                        Notices="Notices(m)"
                        Held="Held(m)"
                        BarAction="BarActionFor(m)"
-                       LockedNote="m.LockedNote"
+                       LockedNote="@m.LockedNote"
                        OnGenerated="ReloadAsync" />
 
             @if (m.Figures is { } f)
