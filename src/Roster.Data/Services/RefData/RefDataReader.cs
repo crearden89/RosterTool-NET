@@ -24,7 +24,7 @@ namespace Roster.Data.Services.RefData;
 /// Where the TypeScript read a table with no ORDER BY, rows are taken in a fixed order
 /// (see the agent notes' DIFFS): the same rows, never a different set.
 /// </summary>
-public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IRefData, ITradeCurveSource
+public partial class RefDataReader(IRosterDbContextFactory contexts) : IRefData, ITradeCurveSource
 {
     internal static string Hms(TimeOnly t) => t.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 
@@ -468,7 +468,7 @@ public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IR
             return rows.Select(r => new PosQuarterHourRow(0, code, r.Date, Hms(r.BlockTime), r.McoCustomers, r.ScoCustomers, r.McoItems, r.ScoItems)).ToList();
         });
 
-    public Task<IReadOnlyList<PosCustomerRow>> GetPosCustomerRowsAsync(Guid storeId, CancellationToken ct = default) =>
+    public virtual Task<IReadOnlyList<PosCustomerRow>> GetPosCustomerRowsAsync(Guid storeId, CancellationToken ct = default) =>
         RequestMemo.Cached<IReadOnlyList<PosCustomerRow>>("refdata.getPosCustomerRows", [storeId], async () =>
             (await GetPosIntervalRowsAsync(storeId, ct))
                 .Select(r => new PosCustomerRow(r.Date, Grid.TimeToMin(r.BlockTime), r.McoCustomers + r.ScoCustomers)).ToList());
@@ -481,7 +481,7 @@ public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IR
     // placement curve and the plan page's trade-curve card all read it, so a new
     // POS upload changes every one of them at the next request with no derived
     // write in between.
-    public Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetTradeCurveWeekAsync(Guid storeId, CancellationToken ct = default) =>
+    public virtual Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetTradeCurveWeekAsync(Guid storeId, CancellationToken ct = default) =>
         RequestMemo.Cached("refdata.getTradeCurveWeek", [storeId], async () =>
         {
             var pos = await GetPosIntervalRowsAsync(storeId, ct);
