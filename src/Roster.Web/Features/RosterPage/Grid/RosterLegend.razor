@@ -1,0 +1,42 @@
+@* Port of src/components/roster/RosterGrid.tsx (RosterLegend). *@
+@namespace Roster.Web.Features.RosterPage.Grid
+
+<div class="mb-6 flex flex-wrap items-center gap-3 text-xs text-[var(--brand-navy)]/70">
+    @foreach (var item in Tiles.LegendItems)
+    {
+        <span @key="item.Key" class="flex items-center gap-1">
+            <span class="inline-block h-3 w-3 rounded-sm" style="@($"background:{Tiles.Tile[item.Key].Color}")"></span>
+            @item.Label
+        </span>
+    }
+    @if (LoadRunning)
+    {
+        <span class="flex items-center gap-1">
+            <span class="inline-block h-3.5 w-[2px]" style="@Tiles.LrLegendStyle"></span>
+            Load running window
+        </span>
+        <span class="flex items-center gap-1">
+            <span class="inline-block h-3 w-3 rounded-sm" style="@Tiles.ErrorTileStyle"></span>
+            Load Running outside its window
+        </span>
+    }
+    @if (HeatRamp is { Count: > 0 })
+    {
+        <span class="flex items-center gap-1">
+            Sales curve: quieter
+            @foreach (var c in HeatRamp)
+            {
+                <span @key="c" class="inline-block h-3 w-3.5 rounded-[2px]" style="@($"background:{c}")"></span>
+            }
+            busier
+        </span>
+    }
+</div>
+
+@code {
+    /// <summary>The sales-curve heat colours, quietest first (Plan view).</summary>
+    [Parameter] public IReadOnlyList<string>? HeatRamp { get; set; }
+
+    /// <summary>Explain the load running rules and error tile (Plan view).</summary>
+    [Parameter] public bool LoadRunning { get; set; }
+}

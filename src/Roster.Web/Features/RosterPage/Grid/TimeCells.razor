@@ -1,0 +1,46 @@
+@* Port of src/components/roster/RosterRowEdit.tsx (TimeCells).
+   Start + Finish as a pair: they're validated together, and committing on blur
+   (rather than per keystroke) keeps a half-typed "0" from being saved.
+   The caller keys this on the row's times, so a saved change (or a regenerate)
+   remounts it with the new values - no syncing parameters into state. *@
+@namespace Roster.Web.Features.RosterPage.Grid
+
+<td class="@CellClass">
+    <input type="time" class="@InputClass" value="@_s" disabled="@Api.Busy"
+           @oninput="e => _s = e.Value?.ToString() ?? string.Empty" @onblur="Commit" @onkeydown="OnKeyDown" />
+</td>
+<td class="@CellClass">
+    <input type="time" class="@InputClass" value="@_e" disabled="@Api.Busy"
+           @oninput="e => _e = e.Value?.ToString() ?? string.Empty" @onblur="Commit" @onkeydown="OnKeyDown" />
+</td>
+
+@code {
+    private const string InputClass =
+        "w-full min-w-[96px] rounded border border-[var(--brand-border)] px-1.5 py-0.5 text-center text-sm text-[var(--brand-navy)] disabled:opacity-50";
+
+    [Parameter, EditorRequired] public string RowKey { get; set; } = "";
+    [Parameter, EditorRequired] public double Start { get; set; }
+    [Parameter, EditorRequired] public double End { get; set; }
+    [Parameter, EditorRequired] public RowEditApi Api { get; set; } = default!;
+    [Parameter] public string CellClass { get; set; } = "";
+
+    private string _s = "";
+    private string _e = "";
+
+    protected override void OnInitialized()
+    {
+        _s = RowEditFormat.Hhmm(Start);
+        _e = RowEditFormat.Hhmm(End);
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) => e.Key == "Enter" ? Commit() : Task.CompletedTask;
+
+    private Task Commit()
+    {
+        var sm = RowEditFormat.ToMin(_s);
+        var em = RowEditFormat.ToMin(_e);
+        if (_s.Length == 0 || _e.Length == 0 || sm >= em) return Task.CompletedTask; // invalid - leave it for the user
+        if (sm == Start && em == End) return Task.CompletedTask; // unchanged
+        return Api.OnTimes.InvokeAsync((RowKey, sm, em));
+    }
+}
