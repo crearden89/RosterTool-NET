@@ -123,7 +123,13 @@
 
     private static RenderFragment Kpi(string label, string value, string? note = null, bool red = false) => __builder =>
     {
-        RenderFragment big = __b => { <span class="@($"text-3xl {(red ? "text-[var(--ui-bad)]" : "")}")">@value</span> };
+        RenderFragment big = b =>
+        {
+            b.OpenElement(0, "span");
+            b.AddAttribute(1, "class", $"text-3xl {(red ? "text-[var(--ui-bad)]" : "")}");
+            b.AddContent(2, value);
+            b.CloseElement();
+        };
         <StatCard Label="@Text(label)" Value="@big" Sub="@(note is null ? null : Text(note))" />
     };
 }
