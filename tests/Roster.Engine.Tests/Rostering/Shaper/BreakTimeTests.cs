@@ -1,5 +1,6 @@
 // Port of src/lib/stage2/breakTime.test.ts.
 
+using Roster.Engine.Planning;
 using Roster.Engine.Rostering.Shaper;
 
 namespace Roster.Engine.Tests.Rostering.Shaper;
@@ -49,8 +50,8 @@ public class BreakTimeTests
         Assert.Equal(
             "Longer shift so a break doesn't cost work: 0.50 h - Manager now 08:30–15:00 (finishes 30 minutes later), so the work a break would push out is still done in its window",
             note);
-        // A note, never an error (severityOf: see the review checks' tests) -
-        // and the hours check reads the time back.
+        // A note, never an error - and the hours check reads the time back.
+        Assert.Equal(Severity.Warning, ReviewChecks.SeverityOf(note));
         Assert.Equal(0.5, BreakTime.BreakTimeAdded(["something else", note]));
         // Plans held before the rewording are read the same.
         Assert.Equal(0.25, BreakTime.BreakTimeAdded(
@@ -127,6 +128,7 @@ public class BreakTimeTests
             "Longer shifts so breaks don't cost work: 0.75 h - Manager now 11:15–17:30 (starts 15 minutes earlier); Store assistant now 06:45–12:15 (starts 15 minutes earlier and finishes 15 minutes later), so the work a break would push out is still done in its window",
             note);
         Assert.Equal(0.75, BreakTime.BreakTimeAdded([note]));
+        Assert.Equal(Severity.Warning, ReviewChecks.SeverityOf(note));
     }
 
     [Fact]
@@ -140,6 +142,7 @@ public class BreakTimeTests
         Assert.Equal(0, BreakTime.BreakTimeAdded([note]));
         Assert.Equal(0.25, BreakTime.RosterBreakTimeAdded(
             ["Time added on the roster so breaks don't cost work: 0.25 h - Sam 07:00–12:00 kept on to 12:15 (+15 min), so ..."]));
+        Assert.Equal(Severity.Warning, ReviewChecks.SeverityOf(note));
     }
 
     [Fact]
