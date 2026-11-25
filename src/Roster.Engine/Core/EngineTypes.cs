@@ -84,6 +84,16 @@ public sealed record WindowRule
     }
 }
 
+/// <summary>A span of the day, minutes from midnight, end exclusive (a task window, a busy period).</summary>
+public sealed record MinuteWindow(double Start, double End);
+
+/// <summary>
+/// The job window a planned quarter-hour belongs to (the painter's unitWindows):
+/// Named is false for generic time tied to no task, null where the caller did
+/// not say.
+/// </summary>
+public sealed record JobWindow(double Start, double End, bool? Named = null);
+
 /// <summary>The per-role break and work rules (break_rules).</summary>
 public sealed record BreakRule
 {
@@ -99,8 +109,15 @@ public sealed record BreakRule
     public double? Ot19AfterHours { get; init; } // daily paid hours before the 1.9x tier
 }
 
+/// <summary>A tile as the checks read it: its quarter-hour and its group.</summary>
+public interface ITile
+{
+    double Time { get; }
+    string Group { get; }
+}
+
 /// <summary>One painted quarter-hour of a shift. Mutable: the painter recolours tiles in place.</summary>
-public sealed class ShiftBlock
+public sealed class ShiftBlock : ITile
 {
     public double Time { get; set; }
     /// <summary>A task group, or "non_op", "flex" or "break".</summary>
