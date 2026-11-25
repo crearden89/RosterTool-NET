@@ -1,0 +1,107 @@
+@* Port of WindowAdder in src/app/(app)/admin/rules/labour/LabourRulesClient.tsx.
+   Add the same window to one or more days (AddWindowAsync for each). *@
+@inject ILabourRulesService Service
+
+<LeaveGuard Id="window-adder" Dirty="@(_days.Count > 0 || _hours != "")" />
+<div id="add-window" class="mb-4 rounded-xl border border-[var(--ui-control)] bg-[var(--ui-canvas)] p-4">
+    <div class="flex flex-wrap items-end gap-3">
+        <label>
+            <span class="@Ui.FieldLabelClass">Group</span>
+            <select value="@_group" @onchange="e => _group = e.Value?.ToString() ?? _group" class="@Ui.CompactField">
+                @foreach (var g in Groups)
+                {
+                    <option value="@g.Key">@g.Label</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span class="@Ui.FieldLabelClass">From</span>
+            <input type="time" value="@_start" @oninput="e => _start = e.Value?.ToString() ?? string.Empty" class="@Ui.CompactField" />
+        </label>
+        <label>
+            <span class="@Ui.FieldLabelClass">To</span>
+            <input type="time" value="@_end" @oninput="e => _end = e.Value?.ToString() ?? string.Empty" class="@Ui.CompactField" />
+        </label>
+        <label title="Optional hours quota: this window fills first, up to this many hours; the group's other windows take the rest">
+            <span class="@Ui.FieldLabelClass">Hours first</span>
+            <input type="number" min="0.25" step="0.25" value="@_hours" @oninput="e => _hours = e.Value?.ToString() ?? string.Empty"
+                   placeholder="none" class="@($"w-20 text-right {Ui.CompactField}")" />
+        </label>
+    </div>
+    <div class="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Days">
+        @for (var i = 0; i < Period.DayLabels.Count; i++)
+        {
+            var day = i;
+            var on = _days.Contains(day);
+            <button type="button" aria-pressed="@(on ? "true" : "false")" @onclick="() => ToggleDay(day)"
+                    class="@Ui.Cx("rounded-lg px-3 py-1.5 text-sm font-medium", Ui.FocusRing, on ? "bg-[var(--ui-ink)] text-white" : "border border-[var(--ui-control)] bg-white text-[var(--ui-ink)]")">
+                @Period.DayLabels[day]
+            </button>
+        }
+        <button type="button" @onclick="AddAsync" disabled="@(_pending || _days.Count == 0)" class="@($"ml-2 {Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)}")">
+            @(_pending ? "Adding…" : "Add")
+        </button>
+    </div>
+    <p class="mt-2 text-xs text-[var(--ui-muted)]">
+        Select one or more days - the same window is added to each. The optional <strong>hours first</strong>
+        quota makes a window fill first up to that many hours (e.g. Cleaning 09:00-10:00 at 1h, with
+        the evening window taking the remainder); blank = no quota.
+    </p>
+    @if (_error is not null)
+    {
+        <div class="mt-2">
+            <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+        </div>
+    }
+</div>
+
+@code {
+    private string _group = "";
+    // In the order they were picked, as a Set iterates.
+    private readonly List<int> _days = [];
+    private string _start = "06:00";
+    private string _end = "11:00";
+    private string _hours = "";
+    private string? _error;
+    private bool _pending;
+
+    [Parameter, EditorRequired] public IReadOnlyList<WindowGroupChip> Groups { get; set; } = [];
+
+    [Parameter] public EventCallback OnDone { get; set; }
+
+    /// <summary>After windows are added: the page reads the windows again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    protected override void OnInitialized() => _group = Groups.Count > 0 ? Groups[0].Key : "";
+
+    private void ToggleDay(int i)
+    {
+        if (!_days.Remove(i)) _days.Add(i);
+    }
+
+    private async Task AddAsync()
+    {
+        if (_days.Count == 0) return;
+        _error = null;
+        _pending = true;
+        try
+        {
+            double? quota = Js.Trim(_hours) == "" ? null : Js.Number(_hours);
+            var results = new List<SaveResult>();
+            foreach (var dow in _days.ToList()) results.Add(await Service.AddWindowAsync(_group, dow, _start, _end, quota));
+            var failed = results.FirstOrDefault(r => !r.Ok);
+            await OnChanged.InvokeAsync();
+            if (failed is not null)
+            {
+                _error = failed.Error ?? "Could not add the window.";
+                return;
+            }
+            _days.Clear();
+            await OnDone.InvokeAsync();
+        }
+        finally
+        {
+            _pending = false;
+        }
+    }
+}

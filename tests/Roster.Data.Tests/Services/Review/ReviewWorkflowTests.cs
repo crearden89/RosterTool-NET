@@ -330,7 +330,7 @@ public sealed class ReviewWorkflowTests : IDisposable
         await _snapshots.StoreAsync(_store.Id, Period, SnapshotKinds.Roster, Held(480, 900), Now.AddMinutes(-10), null);
         Assert.False((await drift.DetectRosterDriftAsync(_store.Id, date)).Drifted);
 
-        var approval = new RosterApprovalService(_contexts, fn);
+        var approval = new RosterApprovalService(_contexts, fn, null!, _clock);
         Assert.Equal(ApprovalResult.Success, await approval.UnpublishRosterAsync(_store.Id, [date, date.AddDays(1)], User(Tier.Store, "store.example", storeId: _store.Id).Id));
         using var db = _tdb.System();
         Assert.Equal(0, await db.GeneratedShifts.CountAsync());

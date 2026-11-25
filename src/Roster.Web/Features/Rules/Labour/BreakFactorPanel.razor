@@ -1,0 +1,121 @@
+@* Port of src/app/(app)/admin/rules/labour/BreakFactorPanel.tsx.
+   The Breaks group's one national number: how much paid break time sits on top
+   of hours worked on task. The actuals file reports hours BY TASK, and someone
+   on a paid break is not on a task - so their break is missing from those
+   columns while still being paid, and still counted in Kronos. OE divides one
+   by the other, so without this allowance every store reads low.
+   Saved from the page's save bar with SaveBreakFactorAsync (which refuses
+   anything outside 0-100%); a value outside that range isn't sent, as the old
+   Save button wasn't pressable for one. *@
+@using Roster.Engine.Overview
+@inject ILabourRulesService Service
+
+<SettingsSection Id="break-factor">
+    <Title>Paid break factor</Title>
+    <Purpose>Paid break time added to hours worked on task before efficiency is measured.</Purpose>
+    <ChildContent>
+        <SaveSlot Id="break-factor" Changes="Changes" Save="SaveAsync" Discard="Discard" />
+        <label class="block max-w-[12rem]">
+            <span class="@Ui.FieldLabelClass">Break factor</span>
+            <span class="flex items-center gap-2">
+                <input type="number" step="0.1" min="0" max="100" value="@_draft.Value" @oninput="OnInput"
+                       aria-invalid="@(Valid ? null : "true")" class="@($"w-28 {Ui.CompactField}")" />
+                <span class="text-sm text-[var(--ui-muted)]">%</span>
+            </span>
+        </label>
+        <p class="mt-3 rounded-xl bg-[var(--ui-canvas)] px-3 py-2 text-xs text-[var(--ui-muted)]">
+            @if (Valid)
+            {
+                <text>A day with <strong>38.05h</strong> on task counts as <strong>@Paid()h</strong> paid. Against 44.20h of
+                Kronos that is <strong>@Oe()% OE</strong>, where the raw on-task hours alone would read 86.1%.</text>
+            }
+            else
+            {
+                <span class="font-medium text-[var(--ui-bad)]">Enter a percentage between 0 and 100.</span>
+            }
+            Default is @Js.NumberToString(Metrics.DefaultPaidBreakFactorPct)%.
+        </p>
+        <p class="mt-3 text-xs text-[var(--ui-muted)]">
+            The actuals export reports hours by labour group, and a team member on a paid break is not on
+            a group - so their break never lands in that total, even though it is paid and sits inside the
+            Kronos figure. Operational Efficiency divides one by the other, so this allowance is added
+            back to <strong>Actual Hours @@ 100%</strong> before OE is measured. Changing it re-states
+            every day already loaded, not just future uploads.
+        </p>
+        @if (_error is not null)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private FormDraft<string> _draft = new("");
+    private bool _started;
+    private string? _error;
+
+    [Parameter, EditorRequired] public double Pct { get; set; }
+
+    /// <summary>After a save: the page reads the factor again.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private double N => Js.Number(_draft.Value);
+
+    private bool Valid => Js.Trim(_draft.Value) != "" && double.IsFinite(N) && N >= 0 && N <= 100;
+
+    private int Changes => Js.Trim(_draft.Value) != "" && N == Js.Number(_draft.Base) ? 0 : 1;
+
+    private double PaidHours => 38.0511 * (1 + Math.Max(0, N) / 100);
+
+    private string Paid() => Js.ToFixed(PaidHours, 2);
+
+    private string Oe() => Js.ToFixed(PaidHours / 44.2 * 100, 1);
+
+    protected override void OnParametersSet()
+    {
+        var text = Js.NumberToString(Pct);
+        if (!_started)
+        {
+            _draft = new FormDraft<string>(text);
+            _started = true;
+        }
+        else _draft.Sync(text);
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _draft.Set(e.Value?.ToString() ?? "");
+        _error = null;
+    }
+
+    private async Task<bool> SaveAsync()
+    {
+        if (!Valid)
+        {
+            _error = "Enter a percentage between 0 and 100.";
+            StateHasChanged();
+            return false;
+        }
+        var sent = _draft.Value;
+        var res = await Service.SaveBreakFactorAsync(N);
+        if (!res.Ok)
+        {
+            _error = $"Error: {res.Error}";
+            StateHasChanged();
+            return false;
+        }
+        _error = null;
+        _draft.Commit(sent);
+        await OnSaved.InvokeAsync();
+        StateHasChanged();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _error = null;
+    }
+}

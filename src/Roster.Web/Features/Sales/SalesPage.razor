@@ -1,0 +1,256 @@
+@page "/plan/sales"
+@* Port of src/app/(app)/plan/sales/page.tsx and SalesClient.tsx. *@
+@using global::Roster.Engine.Core
+@inject IServiceProvider Services
+@inject NavigationManager Navigation
+
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    var data = _data;
+    var days = SalesFigures.Days(data);
+    // One scale for the fortnight, taken over the original forecasts too, so a
+    // cut shows as a shorter bar beside its outline.
+    var max = Math.Max(1, days.Count == 0 ? 0 : days.Max(x => Math.Max(x.Forecast, x.Shown)));
+    var weeks = SalesFigures.Weeks(days);
+    var range = data.Dates.Count > 0 ? Dates.AuRange(data.Dates[0], data.Dates[^1]) : "";
+    var planHref = $"/plan/generate?store={data.StoreId}&period={data.StartDate.ToIso()}";
+    <div>
+        <PageHeader Title="Sales">
+            <Subtitle>@($"Forecast by day · {range}{(data.ReadOnly ? "" : " · adjust any day with a reason")}")</Subtitle>
+            <Actions>
+                <StorePicker Stores="_stores" Value="data.StoreId" Disabled="_pending" HrefFor="@(id => $"/plan/sales?store={id}")" />
+                <div class="flex items-center rounded-xl border border-[var(--ui-control)] bg-white">
+                    <button type="button" @onclick="() => Step(-1)" aria-label="Previous fortnight"
+                            class="@($"rounded-l-xl px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] {Ui.FocusRing}")">
+                        <Icon Name="IconName.ChevronLeft" Class="h-4 w-4" />
+                    </button>
+                    <span class="min-w-[8.5rem] px-2 text-center text-sm font-semibold text-[var(--ui-ink)]">From @Dates.AuShort(data.StartDate)</span>
+                    <button type="button" @onclick="() => Step(1)" aria-label="Next fortnight"
+                            class="@($"rounded-r-xl px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] {Ui.FocusRing}")">
+                        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+                    </button>
+                </div>
+                @if (_pending)
+                {
+                    <span class="text-sm text-[var(--ui-muted)]">Loading…</span>
+                }
+            </Actions>
+        </PageHeader>
+
+        <div class="@($"space-y-4 transition-opacity {(_pending ? "opacity-60" : "")}")">
+            @* The chart: one bar per day, the main view. *@
+            <Card Class="!px-3 sm:!px-5">
+                <div class="overflow-x-auto">
+                    <div class="flex min-w-[640px]">
+                        @for (var wi = 0; wi < weeks.Count; wi++)
+                        {
+                            var w = weeks[wi];
+                            <div @key="@($"{w.Week}-{wi}")" class="@($"flex-1 px-1 sm:px-2 {(wi > 0 ? "border-l-2 border-dashed border-[var(--ui-line)]" : "")}")" style="@($"flex-grow: {w.Days.Count}")">
+                                <Eyebrow Class="mb-2 px-1">
+                                    Week @w.Week<span class="font-medium normal-case tracking-normal"> · @Dates.AuRange(w.Days[0].Date, w.Days[^1].Date)</span>
+                                </Eyebrow>
+                                <div class="flex items-end gap-1.5 sm:gap-2.5">
+                                    @foreach (var x in w.Days)
+                                    {
+                                        var at = days.IndexOf(x);
+                                        // Tips near the chart's edges open inwards, so the
+                                        // scrolling frame never cuts them off.
+                                        <SalesDayBar @key="x.Date" Day="x" Max="max" ReadOnly="data.ReadOnly"
+                                                     Align="@(at < 3 ? "left" : at > days.Count - 4 ? "right" : "centre")"
+                                                     OnOpen="() => _editing = x.Date" />
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <p class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-[var(--ui-muted)]">
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="block h-2.5 w-2.5 rounded-sm bg-[var(--ui-ink)]"></span> Weekday
+                    </span>
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="block h-2.5 w-2.5 rounded-sm bg-[var(--ui-violet)]"></span> Weekend
+                    </span>
+                    <span class="inline-flex items-center gap-1.5">
+                        <Pill Tone="PillTone.Gold" Class="!px-1.5 !py-0 text-[10px]">+5%</Pill> adjusted - hover or focus a bar for the reason
+                    </span>
+                    @if (!data.ReadOnly)
+                    {
+                        <span>Click a bar to adjust that day.</span>
+                    }
+                </p>
+            </Card>
+
+            @if (data.Summary is { } summary)
+            {
+                <SalesSummaryCards Summary="summary" StoreId="data.StoreId" StartDate="data.StartDate" />
+
+                <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-2xl bg-[var(--ui-ink)] px-5 py-4 text-white sm:px-6">
+                    <div>
+                        <p class="text-[11px] font-semibold tracking-[0.1em] text-white/75 uppercase">Fortnight benchmark</p>
+                        <p class="mt-0.5 text-2xl font-bold tracking-tight">@(summary.Benchmark.Hours is { } bh ? $"{SalesFigures.Hours2(bh)} h" : "Not generated yet")</p>
+                        <p class="text-xs text-white/75">
+                            @(summary.Benchmark.Hours is not null && summary.Benchmark.GeneratedAt is { } at
+                                ? $"From the held plan, generated {Dates.AuDateTime(at)}"
+                                : "The benchmark hours appear once the plan for this fortnight is generated.")
+                        </p>
+                    </div>
+                    <a href="@planHref"
+                       class="inline-flex items-center gap-1.5 rounded-lg px-1 py-1 text-sm font-semibold text-[var(--ui-gold)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ui-gold)]">
+                        Ready to plan <Icon Name="IconName.ArrowRight" Class="h-4 w-4" />
+                    </a>
+                </div>
+            }
+
+            @* Everything the old table showed, day by day. *@
+            <Card Padded="false">
+                <div class="px-5 pt-5 sm:px-6">
+                    <SectionHeader>
+                        <Title>Day by day</Title>
+                        <Aside>Forecast, 12-week average, adjustment and reason</Aside>
+                    </SectionHeader>
+                </div>
+                <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                    <table class="@Ui.Table.Element">
+                        <thead class="@Ui.Table.Head">
+                            <tr>
+                                <th class="@Ui.Table.Th">Day</th>
+                                <th class="@Ui.Table.Th">Date</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">Forecast <span class="ml-3 font-medium normal-case tracking-normal">(12-wk avg)</span></th>
+                                <th class="@($"{Ui.Table.Th} text-right")">Growth %</th>
+                                <th class="@Ui.Table.Th">Override</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">Adjustment</th>
+                                <th class="@($"{Ui.Table.Th} w-full")">Notes</th>
+                                @if (!data.ReadOnly)
+                                {
+                                    <th class="@Ui.Table.Th"></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var x in days)
+                            {
+                                var growth = SalesFigures.Growth(x);
+                                var o = x.Override;
+                                <tr @key="x.Date" class="@Ui.Table.Row">
+                                    <td class="@($"{Ui.Table.Td} whitespace-nowrap")">@SalesFigures.Dow[(int)x.Date.DayOfWeek]</td>
+                                    <td class="@($"{Ui.Table.Td} whitespace-nowrap")">@Dates.AuShort(x.Date)</td>
+                                    <td class="@($"{Ui.Table.Td} whitespace-nowrap text-right")">
+                                        @SalesFigures.Money0(x.Forecast)
+                                        <span class="ml-4 text-xs text-[var(--ui-muted)]">(@(x.Avg is { } avg ? SalesFigures.Money0(avg) : "-"))</span>
+                                    </td>
+                                    <td class="@($"{Ui.Table.Td} whitespace-nowrap text-right")">
+                                        @if (growth is { } g)
+                                        {
+                                            <span class="@(g >= 0 ? "text-[var(--ui-good)]" : "text-[var(--ui-bad)]")">@(g >= 0 ? "+" : "")@(Js.ToFixed(g, 1))%</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-[var(--ui-muted)]">-</span>
+                                        }
+                                    </td>
+                                    <td class="@($"{Ui.Table.Td} whitespace-nowrap")">
+                                        @if (o?.Closed == true)
+                                        {
+                                            <Badge Tone="BadgeTone.Red">Closed</Badge>
+                                        }
+                                        else if (o?.Method == "pct")
+                                        {
+                                            <Badge Tone="BadgeTone.Amber">@(o.Pct is { } p ? Js.NumberToString(p) : "")%</Badge>
+                                        }
+                                        else if (o?.Method == "value")
+                                        {
+                                            <Badge Tone="BadgeTone.Amber">$@(o.Value is { } v ? Js.ToLocaleString(v) : "0")</Badge>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-[var(--ui-muted)]">-</span>
+                                        }
+                                    </td>
+                                    <td class="@($"{Ui.Table.Td} whitespace-nowrap text-right font-semibold")">
+                                        @if (x.Adjusted is { } adjusted)
+                                        {
+                                            // The DIFFERENCE from the original forecast to what the
+                                            // store set (signed), not the resulting figure.
+                                            var diff = adjusted - x.Forecast;
+                                            <span class="@(diff >= 0 ? "text-[var(--ui-good)]" : "text-[var(--ui-bad)]")">@(diff >= 0 ? "+" : "−")@SalesFigures.Money0(Math.Abs(diff))</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="font-normal text-[var(--ui-muted)]">-</span>
+                                        }
+                                    </td>
+                                    <td class="@($"{Ui.Table.Td} w-full text-[var(--ui-muted)]")">@(o?.Notes is { Length: > 0 } notes ? notes : "-")</td>
+                                    @if (!data.ReadOnly)
+                                    {
+                                        <td class="@Ui.Table.Td">
+                                            <button type="button" @onclick="() => _editing = x.Date" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)"
+                                                    aria-label="@($"Adjust {Dates.AuDayLabel(x.Date)}")">Edit</button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+        </div>
+
+        @if (_editing is { } editing && !data.ReadOnly && data.StoreId is { } storeId)
+        {
+            <SalesOverrideModal @key="editing" StoreId="storeId" Date="editing" Forecast="SalesFigures.ForecastFor(data, editing)"
+                                Existing="SalesFigures.SavedOverrideFor(data, editing)"
+                                OnClose="() => _editing = null" OnDone="DoneAsync" />
+        }
+    </div>
+}
+
+@code {
+    private ISalesService? _sales;
+    private SalesPageData? _data;
+    private IReadOnlyList<StoreOption> _stores = [];
+    private DateOnly? _editing;
+    private bool _pending;
+
+    // Resolved on the interactive render, which is where the data loads: the prerender
+    // needs no data access at all.
+    private ISalesService Sales => _sales ??= Services.GetRequiredService<ISalesService>();
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public string? Start { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The data loads once, on the interactive render: the prerender shows the
+        // loading state rather than reading everything twice.
+        if (!RendererInfo.IsInteractive) return;
+        _pending = true;
+        await LoadAsync();
+        _pending = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        Guid? store = Guid.TryParse(Store, out var s) ? s : null;
+        DateOnly? start = DateOnly.TryParseExact(Start, "yyyy-MM-dd", out var d) ? d : null;
+        _data = await Sales.LoadAsync(store, start);
+        _stores = _data.Stores.Select(x => new StoreOption(x.Id, x.Code, x.Name)).ToList();
+    }
+
+    private void Step(int dir)
+    {
+        if (_data is null) return;
+        _pending = true;
+        Navigation.NavigateTo($"/plan/sales?store={_data.StoreId}&start={_data.StartDate.AddDays(dir * 14).ToIso()}");
+    }
+
+    private async Task DoneAsync()
+    {
+        _editing = null;
+        await LoadAsync();
+    }
+}

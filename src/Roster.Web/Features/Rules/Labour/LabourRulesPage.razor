@@ -1,0 +1,60 @@
+@page "/admin/rules/labour"
+@* Port of src/app/(app)/admin/rules/labour/page.tsx and LabourRulesClient.tsx. *@
+@attribute [Authorize(Policy = Policies.SuperUser)]
+@layout RulesLayout
+@inject ILabourRulesService Service
+
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    <SettingsBody Sections="Sections">
+        <SaveNote>Changes apply from the next Generate - plans already held keep their windows.</SaveNote>
+        <ChildContent>
+            <WindowGrid Rules="_data.Rules" Groups="_data.Groups" OnChanged="ReloadAsync" />
+            @* The priority order is a short list, so the break factor takes the space
+               beside it rather than leaving half the row empty. *@
+            <div class="grid gap-4 xl:grid-cols-2">
+                <PriorityEditor Groups="_data.PriorityGroups" OnSaved="ReloadAsync" />
+                <BreakFactorPanel Pct="_data.BreakFactorPct" OnSaved="ReloadAsync" />
+            </div>
+            <LoadStartPanel Rules="_data.LoadStartRules" OnSaved="ReloadAsync" />
+            <AdminTaskCatalogue Tasks="_data.Tasks" RegionPrefixes="_data.RegionPrefixes" OnChanged="ReloadAsync" />
+            <ResetTaskCatalogue Tasks="_data.ResetTasks" OnChanged="ReloadAsync" />
+            <SettingsSection Id="checkout">
+                <Title>Checkout</Title>
+                <Purpose>Registers and SCOs aren't a fixed window like the groups above.</Purpose>
+                <ChildContent>
+                    <p class="text-sm text-[var(--ui-muted)]">
+                        Checkout (Registers + SCOs) isn't a fixed national window like the groups above - it's
+                        demand-driven and confined to each store's own trading hours. A store open 08:30-20:00
+                        only has tills allocated in that range, while groups like Load Running can be scheduled
+                        outside it (e.g. from 06:00). Set each store's open/close on the Store Attributes screen.
+                    </p>
+                </ChildContent>
+            </SettingsSection>
+        </ChildContent>
+    </SettingsBody>
+}
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("windows", "Windows by group"),
+        new("priority", "Overlap priority"),
+        new("break-factor", "Paid break factor"),
+        new("load-start", "Load Running start"),
+        new("admin-tasks", "Admin task catalogue"),
+        new("reset-tasks", "Reset task catalogue"),
+        new("checkout", "Checkout"),
+    ];
+
+    private LabourRulesData? _data;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    // router.refresh(): the page reads everything again after a change.
+    private async Task ReloadAsync() => _data = await Service.LoadAsync();
+}

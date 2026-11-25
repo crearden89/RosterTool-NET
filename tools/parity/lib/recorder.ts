@@ -114,6 +114,8 @@ export async function closeCorpus(): Promise<Map<string, CaseMeta[]>> {
 export interface Budget {
   cases: number;
   bytes: number; // uncompressed
+  /** Cases kept of these functions, outside the byte budget (big cases worth a few of). */
+  fixed?: Record<string, number>;
 }
 
 export function select(metas: CaseMeta[], budget: Budget): Set<string> {
@@ -124,6 +126,13 @@ export function select(metas: CaseMeta[], budget: Budget): Set<string> {
     byFn.set(m.fn, arr);
   }
   const chosen: CaseMeta[] = [];
+  const kept: CaseMeta[] = [];
+  const stride = (list: CaseMeta[], n: number) =>
+    list.length <= n ? list : Array.from({ length: n }, (_, i) => list[Math.floor((i * list.length) / n)]);
+  for (const [fn, n] of Object.entries(budget.fixed ?? {})) {
+    kept.push(...stride(byFn.get(fn) ?? [], n));
+    byFn.delete(fn);
+  }
   const perFn = Math.max(1, Math.floor(budget.cases / Math.max(1, byFn.size)));
   for (const list of byFn.values()) {
     if (list.length <= perFn) {
@@ -142,7 +151,7 @@ export function select(metas: CaseMeta[], budget: Budget): Set<string> {
     dropped.add(m.id);
     bytes -= m.bytes;
   }
-  return new Set(chosen.filter((m) => !dropped.has(m.id)).map((m) => m.id));
+  return new Set([...kept, ...chosen.filter((m) => !dropped.has(m.id))].map((m) => m.id));
 }
 
 /** Copy the chosen cases of `from` (a full corpus file) into `to`, in their original order. */

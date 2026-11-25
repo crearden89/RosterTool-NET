@@ -263,6 +263,45 @@ export function installRecorders(root: string) {
   }));
 }
 
+/**
+ * computeShiftCosts reads its rates, the team, the settings and the day type
+ * itself (lib/payroll/shiftCost.ts); the C# port takes them as arguments
+ * (Pay.ShiftCost.ComputeShiftCosts). The recorder reads them through the same
+ * request-cached functions the TypeScript uses, so the case's input is exactly
+ * what the TypeScript computed with: { date, shifts, payRates, employees,
+ * tiers, paySettings, dayType }.
+ */
+export function installShiftCostRecorder(root: string) {
+  const lib = (p: string) => `${root}/src/lib/${p}`;
+  overrideModule(lib("payroll/shiftCost"), (real) => ({
+    computeShiftCosts: async (storeId: string, date: string, shifts: object[], periodTiers?: unknown) => {
+      const result = await (real.computeShiftCosts as Fn)(storeId, date, shifts, periodTiers);
+      if (!context.enabled || !periodTiers || shifts.length === 0) return result;
+      const settings = require(lib("payroll/settings"));
+      const [payRates, emps, paySettings, dayType] = await Promise.all([
+        settings.getPayRates(),
+        require(lib("refdata")).getEmployees(storeId),
+        settings.getPaySettings(),
+        require(lib("payroll/dayType")).dayType(storeId, date),
+      ]);
+      const employees = (emps as Record<string, unknown>[]).map((e) => ({ id: e.id, positionCode: e.position_code, smYearBand: e.sm_year_band }));
+      const args = {
+        date,
+        shifts: shifts.map((x) => pick(x, ["employeeId", "role", "start", "end", "breakMinutes"])),
+        payRates,
+        employees,
+        tiers: periodTiers,
+        paySettings,
+        dayType,
+      };
+      const inputText = JSON.stringify(encode(args));
+      const s = sink("pay");
+      if (!s.has("computeShiftCosts", inputText)) s.add("computeShiftCosts", inputText, encode(result) ?? null, undefined, 0);
+      return result;
+    },
+  }));
+}
+
 /** Record a call the driver makes itself (no app code calls it offline). */
 export function recordDirect<R>(entry: string, fn: string, args: Record<string, unknown>, call: () => R, output: (r: R) => unknown = (r) => r): R {
   return recordCall({ entry, fn, args }, call, output);

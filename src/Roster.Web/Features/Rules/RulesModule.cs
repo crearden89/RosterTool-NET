@@ -3,6 +3,7 @@
 // (src/app/(app)/admin/break-rules, labour-rules and rostering-rules: permanentRedirect).
 
 using Roster.Web.Features.Rules.Breaks;
+using Roster.Web.Features.Rules.Labour;
 using Roster.Web.Features.Rules.Rostering;
 
 namespace Roster.Web.Features.Rules;
@@ -13,6 +14,7 @@ public sealed class RulesModule : IFeatureModule
     {
         services.AddScoped<IBreakRulesService, BreakRulesService>();
         services.AddScoped<IRosteringRulesService, RosteringRulesService>();
+        services.AddScoped<ILabourRulesService, LabourRulesService>();
     }
 
     public void Map(IEndpointRouteBuilder endpoints)

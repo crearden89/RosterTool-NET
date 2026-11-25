@@ -1,0 +1,884 @@
+@* Port of src/app/(app)/plan/review/ReviewView.tsx (the markup; the state and logic are in
+   ReviewView.razor.cs). *@
+@{ Compute(); }
+<div class="flex flex-col gap-5">
+    @if (CanReview && Queue.Count > 0)
+    {
+        <Card>
+            <SectionHeader>
+                <Title>Your stores</Title>
+                <Aside>@($"{Queue.Count(q => q.Status == QueueStatus.Submitted)} of {Queue.Count} ready for you")</Aside>
+            </SectionHeader>
+            <div class="@Ui.Table.Frame">
+                <table class="@($"{Ui.Table.Element} min-w-[520px]")">
+                    <thead class="@Ui.Table.Head">
+                        <tr>
+                            <th class="@Ui.Table.Th">Store</th>
+                            <th class="@Ui.Table.Th">Status</th>
+                            <th class="@Ui.Table.Th">When</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var q in SortedQueue())
+                        {
+                            <tr @key="q.StoreId" class="@($"{Ui.Table.Row} {(q.StoreId == _sid ? "bg-[var(--brand-yellow-wash)] font-semibold" : "hover:bg-[var(--ui-canvas)]")}")">
+                                <td class="@Ui.Table.Td">
+                                    <a href="@q.Href" class="@($"rounded-sm {Ink} underline-offset-2 hover:underline {Ui.FocusRing}")">
+                                        @q.Name <span class="@($"font-normal {Muted}")">@q.Code</span>
+                                    </a>
+                                </td>
+                                <td class="@Ui.Table.Td">@QueuePill(q.Status)</td>
+                                <td class="@($"{Ui.Table.Td} {Muted}")">@(q.When ?? (q.Status == QueueStatus.Approved ? "" : $"Due {Data.DueLabel}"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    }
+
+    <Card>
+        <section aria-label="Where this fortnight is up to">
+            <StepTrack Steps="_steps" />
+        </section>
+    </Card>
+
+    <div class="@($"rounded-2xl px-4 py-3 text-sm {Ink} {BannerClass(_banner.Tone)}")" role="status">
+        <b>@_banner.Title</b> @_banner.Body
+        @if (!Data.HasSnapshot)
+        {
+            @(" ")
+            <a href="@($"/plan/generate?store={_sid}&period={Iso(_ps)}")" class="font-semibold underline underline-offset-2">Open the Plan page</a>
+        }
+        @if (!string.IsNullOrEmpty(_banner.Quote))
+        {
+            <span class="mt-2 block border-l-[3px] border-[var(--ui-bad)] pl-2.5 whitespace-pre-line">@_banner.Quote</span>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="rounded-2xl border border-[var(--ui-bad)]/40 bg-[var(--brand-red-tint)] px-4 py-3 text-sm text-[var(--ui-bad)]" role="alert">
+            @_error
+        </div>
+    }
+
+    <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" aria-label="Fortnight at a glance">
+        @{
+            var bench = Sum(Data.Days.Select(d => d.Benchmark));
+            var planned = Sum(Data.Days.Select(d => d.Planned));
+            var errN = _p.Errors;
+            var warnN = _checks.Count - errN;
+        }
+        <StatCard>
+            <Label>Benchmark</Label>
+            <Value>@($"{F2(bench)} h")</Value>
+            <Sub>@($"Non-op {F2(Sum(Data.Days.Select(d => d.NonOp)))} h · forecast {Money(Sum(Data.Days.Select(d => d.Forecast ?? 0)))}")</Sub>
+        </StatCard>
+        <StatCard>
+            <Label>Planned</Label>
+            <Value>@($"{F2(planned)} h")</Value>
+            <Sub>@($"{Sgn(planned - bench)} h against the benchmark · {Data.Days.Sum(d => d.PlannedShifts)} shifts")</Sub>
+        </StatCard>
+        <StatCard>
+            <Label>To check</Label>
+            <Value>
+                <span class="tabular-nums">
+                    <span class="@(errN > 0 ? "text-[var(--ui-bad)]" : null)">@errN</span>
+                    <span class="@($"text-base font-semibold {Muted}")">@(errN == 1 ? "error" : "errors")</span> @warnN
+                    <span class="@($"text-base font-semibold {Muted}")">@(warnN == 1 ? "warning" : "warnings")</span>
+                </span>
+            </Value>
+            <Sub>
+                @(_p.HardStops > 0
+                    ? $"{Plural(_p.HardStops, "hard stop", "hard stops")} must be fixed in the plan; every other error needs a note"
+                    : _perspective == Perspective.Reviewer
+                        ? "Every error carries the store's note"
+                        : "Every error needs a note before the plan is submitted")
+            </Sub>
+        </StatCard>
+        @if (_perspective == Perspective.Reviewer)
+        {
+            <StatCard>
+                <Label>Days marked fine</Label>
+                <Value>@($"{_p.OkDays} of 14")</Value>
+                <Sub>
+                    <span class="mt-1 flex flex-col gap-1.5">
+                        @Meter(_p.OkDays / 14.0, "Days marked fine")
+                        @if (_queried.Count > 0)
+                        {
+                            <span>@($"{Plural(_queried.Count, "day", "days")} queried")</span>
+                        }
+                    </span>
+                </Sub>
+            </StatCard>
+        }
+        else
+        {
+            <StatCard>
+                <Label>Checked by the store</Label>
+                <Value>@($"{_p.Done} of {_checks.Count}")</Value>
+                <Sub>
+                    <span class="mt-1 block">
+                        @Meter(_checks.Count > 0 ? (double)_p.Done / _checks.Count : 1, "Checked by the store")
+                    </span>
+                </Sub>
+            </StatCard>
+        }
+    </section>
+
+    <Card Padded="false">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-5 pb-4 sm:px-6">
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h2 class="@($"text-base font-semibold {Ink}")">Checks</h2>
+                <span class="@($"text-xs {Muted}")">Oldest day first · errors on top of each day</span>
+            </div>
+            <FilterChips TKey="CheckFilter" Label="Show"
+                         Options="@([.. CheckList.CheckFilters.Select(f => new FilterChip<CheckFilter>(f.Key, f.Label, _counts[f.Key]))])"
+                         Value="_filter" OnChange="f => _filter = f" />
+        </div>
+        @if (_groups.Count == 0)
+        {
+            <p class="@($"border-t border-[var(--ui-line)] px-4 py-6 text-sm sm:px-6 {Muted}")">@EmptyList()</p>
+        }
+        else
+        {
+            <div class="border-t border-[var(--ui-line)]">
+                @foreach (var g in _groups)
+                {
+                    var d = g.Day;
+                    <section @key="d.Date" aria-labelledby="@($"day-{Iso(d.Date)}")" class="border-b border-[var(--ui-line)] last:border-b-0">
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 bg-[var(--ui-canvas)] px-4 py-2.5 sm:px-6">
+                            <h3 id="@($"day-{Iso(d.Date)}")" class="@($"text-[11px] font-semibold tracking-[0.08em] uppercase {Ink}")">@d.LongLabel</h3>
+                            <span class="@($"text-xs tabular-nums {Muted}")">@($"{F2(d.Planned)} h planned · {F2(d.Benchmark)} h benchmark · {d.PlannedShifts} shifts")</span>
+                            <button type="button" @onclick="() => OpenDay(d.Date)" class="@($"ml-auto {Ui.ButtonClass(ButtonKind.Quiet, ButtonSize.Sm)}")">
+                                Open day <Icon Name="IconName.ArrowRight" Class="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                        <ul>
+                            @foreach (var c in g.Checks)
+                            {
+                                @ListRow(c)
+                            }
+                        </ul>
+                    </section>
+                }
+            </div>
+        }
+    </Card>
+
+    @for (var wi = 0; wi < 2; wi++)
+    {
+        var ds = Data.Days.Skip(wi * 7).Take(7).ToList();
+        if (ds.Count == 0) continue;
+        var week = wi + 1;
+        <section @key="week" aria-label="@($"Week {week}")">
+            <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2 px-0.5">
+                <h2 class="@($"text-base font-semibold {Ink}")">@($"Week {week} · {ds[0].DateLabel} – {ds[^1].DateLabel}")</h2>
+                <span class="@($"text-sm {Muted}")">Hours to two decimals · click a day to open it</span>
+            </div>
+            <div class="@Ui.Table.Frame">
+                <table class="@($"{Ui.Table.Element} min-w-[860px] tabular-nums")">
+                    <thead class="@($"{Ui.Table.Head} text-right")">
+                        <tr>
+                            <th class="px-3 py-2.5 text-left">Day</th>
+                            <th class="px-3 py-2.5">Forecast</th>
+                            <th class="px-3 py-2.5">Non-op</th>
+                            <th class="px-3 py-2.5">Benchmark</th>
+                            <th class="px-3 py-2.5">Planned</th>
+                            <th class="px-3 py-2.5">vs bench</th>
+                            <th class="border-l border-[var(--ui-line)] px-3 py-2.5">Shifts</th>
+                            <th class="border-l border-[var(--ui-line)] px-3 py-2.5 text-left">Flagged</th>
+                            <th class="border-l border-[var(--ui-line)] px-3 py-2.5 text-left">Store</th>
+                            <th class="px-3 py-2.5 text-left">EMSO</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in ds)
+                        {
+                            var diff = d.Planned - d.Benchmark;
+                            <tr @key="d.Date" @onclick="() => OpenDay(d.Date)"
+                                class="@($"cursor-pointer {Ui.Table.Row} {(_openDate == d.Date ? "bg-[var(--brand-yellow-wash)]" : "hover:bg-[var(--ui-canvas)]")}")">
+                                <td class="@($"px-3 py-2 text-left {(NeedsMe(d) ? "shadow-[inset_4px_0_0_var(--ui-gold)]" : "")}")">
+                                    <button type="button" @onclick="() => OpenDay(d.Date)" @onclick:stopPropagation="true"
+                                            class="@($"rounded-sm font-semibold {Ink} {Ui.FocusRing}")">
+                                        @d.Dow<span class="@($"ml-1 font-normal {Muted}")">@d.DateLabel</span>
+                                    </button>
+                                </td>
+                                <td class="px-3 py-2 text-right">@Money(d.Forecast)</td>
+                                <td class="px-3 py-2 text-right">@if (Js.Truthy(d.NonOp)) { @F2(d.NonOp) } else { <span class="@Muted">–</span> }</td>
+                                <td class="px-3 py-2 text-right">@F2(d.Benchmark)</td>
+                                <td class="px-3 py-2 text-right">@F2(d.Planned)</td>
+                                <td class="px-3 py-2 text-right">
+                                    <span class="@(OutsideTolerance(diff) ? "font-semibold text-[var(--ui-amber-ink)]" : Muted)">@Sgn(diff)</span>
+                                </td>
+                                <td class="border-l border-[var(--ui-line)] px-3 py-2 text-right">@if (d.PlannedShifts != 0) { @d.PlannedShifts } else { <span class="@Muted">–</span> }</td>
+                                <td class="border-l border-[var(--ui-line)] px-3 py-2 text-left">@FlagPills(d)</td>
+                                <td class="border-l border-[var(--ui-line)] px-3 py-2 text-left">@StorePill(d)</td>
+                                <td class="px-3 py-2 text-left">@EmsoPill(d)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="@($"bg-[var(--ui-lavender)] font-semibold {Ink}")">
+                        <tr class="border-t border-[var(--ui-line)]">
+                            <td class="px-3 py-2 text-left">Week</td>
+                            <td class="px-3 py-2 text-right">@Money(Sum(ds.Select(d => d.Forecast ?? 0)))</td>
+                            <td class="px-3 py-2 text-right">@F2(Sum(ds.Select(d => d.NonOp)))</td>
+                            <td class="px-3 py-2 text-right">@F2(Sum(ds.Select(d => d.Benchmark)))</td>
+                            <td class="px-3 py-2 text-right">@F2(Sum(ds.Select(d => d.Planned)))</td>
+                            <td class="px-3 py-2 text-right">@Sgn(Sum(ds.Select(d => d.Planned - d.Benchmark)))</td>
+                            <td class="border-l border-[var(--ui-line)] px-3 py-2 text-right">@ds.Sum(d => d.PlannedShifts)</td>
+                            <td class="border-l border-[var(--ui-line)] px-3 py-2 text-left">@($"{ds.Sum(d => d.Checks.Count)} flagged")</td>
+                            <td class="border-l border-[var(--ui-line)] px-3 py-2 text-left">
+                                @($"{ds.Count(d => StoreDay(d) is StoreDayState.Checked or StoreDayState.Clear || d.Closed || !d.HasData)} of 7 done")
+                            </td>
+                            <td class="px-3 py-2 text-left">@($"{ds.Count(d => d.Verdict == DayVerdict.Ok)} of 7 fine")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    }
+
+    <Card>
+        <SectionHeader>
+            <Title>Activity</Title>
+            <Aside>Newest first</Aside>
+        </SectionHeader>
+        @if (Data.Events.Count == 0)
+        {
+            <p class="@($"m-0 text-sm {Muted}")">Nothing yet. Checks, submissions and decisions show here with their notes.</p>
+        }
+        else
+        {
+            <ol class="m-0 flex list-none flex-col gap-2.5 p-0">
+                @foreach (var e in Data.Events)
+                {
+                    <li class="grid gap-x-4 gap-y-0.5 text-sm sm:grid-cols-[150px_minmax(0,1fr)]">
+                        <span class="@($"text-xs tabular-nums {Muted}")">@e.At</span>
+                        <span class="@Ink">
+                            <b>@(e.ActorName ?? "Someone")</b>@if (e.ActorTier == "emso") {<span class="@Muted"> (EMSO)</span>}<span class="@Muted"> · </span>@e.Body
+                        </span>
+                    </li>
+                }
+            </ol>
+        }
+    </Card>
+
+    @* Decision bar: fixed to the window (the app's content column clips
+       sticky positioning), clear of the menu on wide screens. *@
+    <div class="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ui-line)] bg-white/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-6px_18px_rgba(0,0,95,0.07)] backdrop-blur lg:left-60 lg:px-8">
+        <div class="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">@DecisionBar()</div>
+    </div>
+
+    @if (_day is { } day)
+    {
+        <SideSheet TitleId="review-day-title" OnClose="CloseDay">
+            <Eyebrow>@CheckList.DayPosition(_dayIdx, Data.Days.Count)</Eyebrow>
+            <Title>@day.LongLabel</Title>
+            <Badges>
+                @FlagPills(day)
+                @StorePill(day)
+                @if (day.Verdict is not null && StoreDay(day) != StoreDayState.Queried)
+                {
+                    @EmsoPill(day)
+                }
+            </Badges>
+            <Actions>
+                <SheetIconButton Label="Previous day" Disabled="_dayIdx <= 0" OnClick="() => OpenDay(Data.Days[_dayIdx - 1].Date)">
+                    <Icon Name="IconName.ChevronLeft" Class="h-4 w-4" />
+                </SheetIconButton>
+                <SheetIconButton Label="Next day" Disabled="_dayIdx >= Data.Days.Count - 1" OnClick="() => OpenDay(Data.Days[_dayIdx + 1].Date)">
+                    <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+                </SheetIconButton>
+                <SheetIconButton Label="Close" OnClick="CloseDay">
+                    <Icon Name="IconName.X" Class="h-4 w-4" />
+                </SheetIconButton>
+            </Actions>
+            <Footer>@DaySheetFooter(day, _dayIdx)</Footer>
+            <ChildContent>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        @Figure("Forecast", Dollars(day.Forecast))
+                        @Figure("Benchmark", $"{F2(day.Benchmark)} h", $"Non-op {F2(day.NonOp)}")
+                        @Figure("Planned", $"{F2(day.Planned)} h")
+                        @Figure("Shifts", day.PlannedShifts.ToString(System.Globalization.CultureInfo.InvariantCulture), "planned")
+                    </div>
+                    @if (day.HasData && !day.Closed)
+                    {
+                        <p class="@($"text-xs {Muted}")">
+                            @($"{Sgn(day.Planned - day.Benchmark)} h against the benchmark - {(OutsideTolerance(day.Planned - day.Benchmark) ? "outside" : "inside")} the {Js.NumberToString(global::Roster.Engine.Planning.ReviewChecks.HoursTolerance)}-hour tolerance.")
+                        </p>
+                    }
+
+                    @if (!string.IsNullOrEmpty(day.PrevQuery))
+                    {
+                        <div class="flex flex-col gap-2 rounded-2xl bg-[var(--brand-red-tint)] p-4">
+                            <div>@Tag(false, "Earlier query")</div>
+                            <p class="@($"m-0 text-sm whitespace-pre-line {Ink}")">@day.PrevQuery</p>
+                            @if (!string.IsNullOrEmpty(day.PrevReply))
+                            {
+                                @Note(_perspective == Perspective.Store ? "Your reply" : "Store reply", day.PrevReply)
+                            }
+                        </div>
+                    }
+
+                    @if (day.Verdict == DayVerdict.Query)
+                    {
+                        var rk = $"r:{Iso(day.Date)}";
+                        <div class="flex flex-col gap-2 rounded-2xl bg-[var(--brand-red-tint)] p-4">
+                            <div>@Tag(false, _perspective == Perspective.Reviewer ? "Your query" : "EMSO query")</div>
+                            <p class="@($"m-0 text-sm whitespace-pre-line {Ink}")">@day.Query</p>
+                            @if (!string.IsNullOrEmpty(day.Reply))
+                            {
+                                @Note(_perspective == Perspective.Store ? "Your reply" : "Store reply", day.Reply)
+                            }
+                            else if (_storeEditable && _perspective == Perspective.Store && _s == ReviewStatus.Returned)
+                            {
+                                <label for="@rk" class="@($"text-xs font-semibold {Ink}")">Your reply</label>
+                                <textarea id="@rk" rows="3" maxlength="1000" value="@Draft(rk)" @oninput="e => SetDraft(rk, e.Value?.ToString() ?? string.Empty)"
+                                          class="@($"w-full {Ui.FieldClass}")"></textarea>
+                                <div>
+                                    <button type="button" disabled="@(_pending || Blank(Draft(rk)))" @onclick="() => SendReply(day)" class="@Ui.ButtonClass(ButtonKind.Primary)">
+                                        Send reply
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <section>
+                        <SectionHeader>
+                            <Title>Checks</Title>
+                            <Aside>@(day.Checks.Count > 1 ? "Errors first" : null)</Aside>
+                        </SectionHeader>
+                        <div class="flex flex-col gap-3">
+                            @if (day.Checks.Count > 0)
+                            {
+                                @foreach (var c in day.Checks)
+                                {
+                                    @SheetCheck(c)
+                                }
+                            }
+                            else
+                            {
+                                <p class="@($"m-0 rounded-2xl border border-[var(--ui-line)] bg-white p-4 text-sm {Muted}")">
+                                    @(day.Closed
+                                        ? "The store is closed: there's nothing to roster."
+                                        : !day.HasData
+                                            ? "No plan for this day (it needs its benchmark and trading hours)."
+                                            : "Nothing flagged. The plan is within benchmark, with nothing left unplaced.")
+                                </p>
+                            }
+                        </div>
+                    </section>
+
+                    @* Every day takes the reviewer's decision, a closed one too (the
+                       plan is approved when all 14 are fine). *@
+                    @if (_reviewerEditable || (day.HasData && !day.Closed))
+                    {
+                        <section class="rounded-2xl border border-[var(--ui-line)] bg-white p-4">
+                            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                                <h3 class="@($"text-sm font-semibold {Ink}")">@(_reviewerEditable ? "Your decision" : "Reviewer's decision")</h3>
+                                <span class="@($"text-xs {Muted}")">EMSO only</span>
+                            </div>
+                            @if (_reviewerEditable)
+                            {
+                                var qk = $"q:{Iso(day.Date)}";
+                                <div class="mt-2 flex flex-col gap-2.5">
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" aria-pressed="@(day.Verdict == DayVerdict.Ok ? "true" : "false")" disabled="@_pending"
+                                                @onclick="() => MarkFine(day.Date)"
+                                                class="@(day.Verdict == DayVerdict.Ok ? BtnGoodOn : Ui.ButtonClass(ButtonKind.Secondary))">
+                                            <Icon Name="IconName.Check" Class="h-4 w-4" /> Fine
+                                        </button>
+                                        <button type="button" aria-pressed="@(day.Verdict == DayVerdict.Query ? "true" : "false")" disabled="@_pending"
+                                                @onclick="() => OpenQuery(day)"
+                                                class="@(day.Verdict == DayVerdict.Query ? BtnDangerOn : Ui.ButtonClass(ButtonKind.Danger))">
+                                            Query
+                                        </button>
+                                    </div>
+                                    @if (_queryOpen == day.Date || day.Verdict == DayVerdict.Query)
+                                    {
+                                        <label for="@qk" class="@($"text-xs font-semibold {Ink}")">What should the store look at?</label>
+                                        <textarea id="@qk" rows="3" maxlength="1000" value="@QueryDraft(day)" @oninput="e => SetDraft(qk, e.Value?.ToString() ?? string.Empty)"
+                                                  class="@($"w-full {Ui.FieldClass}")"></textarea>
+                                        <div>
+                                            <button type="button" disabled="@(_pending || Blank(QueryDraft(day)))" @onclick="() => SaveQuery(day)" class="@BtnDangerOn">
+                                                @(day.Verdict == DayVerdict.Query ? "Update query" : "Save query")
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="@($"mt-1 text-sm {Muted}")">
+                                    @(day.Verdict == DayVerdict.Ok
+                                        ? "Marked fine."
+                                        : day.Verdict == DayVerdict.Query
+                                            ? "Queried - the query is above."
+                                            : "Not decided yet. The EMSO marks each day fine or queries it once the plan is submitted.")
+                                </p>
+                            }
+                        </section>
+                    }
+                </div>
+            </ChildContent>
+        </SideSheet>
+    }
+
+    @if (_flash is not null)
+    {
+        <div role="status" class="fixed bottom-24 left-1/2 z-[60] max-w-[min(560px,calc(100%-32px))] -translate-x-1/2 rounded-xl bg-[var(--ui-ink)] px-4 py-2.5 text-sm text-white shadow-lg">
+            @_flash
+        </div>
+    }
+</div>
+
+@code {
+    private const string Ink = "text-[var(--ui-ink)]";
+    private const string Muted = "text-[var(--ui-muted)]";
+
+    // Filled buttons the shared set doesn't have: the decisions that send a plan
+    // back (red) and the day the reviewer passed (green).
+    private const string Btn = "inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50 " + Ui.FocusRing;
+    private const string BtnDangerOn = Btn + " border border-[var(--ui-bad)] bg-[var(--ui-bad)] text-white hover:brightness-95";
+    private const string BtnGoodOn = Btn + " border border-[var(--ui-good)] bg-[var(--ui-good)] text-white";
+
+    // The review's own two pill looks: "to check" (outlined) and a query (red).
+    private static RenderFragment Tag(bool todo, string text) =>
+        @<span class="@($"inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap {(todo ? "bg-white text-[var(--ui-ink)] ring-1 ring-inset ring-[var(--ui-ink)]" : "bg-[var(--ui-bad)] text-white")}")">@text</span>;
+
+    // A check's pill: the shared Error / Warning pill, or Hard stop - a legal
+    // breach a note can't clear (owner decision R3).
+    private static RenderFragment CheckPill(ReviewCheckView c) =>
+        c.HardStop
+            ? @<Pill Tone="PillTone.Red"><Icon Name="IconName.OctagonAlert" Class="h-3 w-3" StrokeWidth="2.5" />Hard stop</Pill>
+            : @<SeverityPill Tone="@(c.Severity == CheckSeverity.Error ? CheckTone.Error : CheckTone.Warning)" />;
+
+    private static RenderFragment Meter(double value, string label) =>
+        @<div class="h-2 w-full overflow-hidden rounded-full bg-[var(--ui-lavender)]" role="progressbar" aria-label="@label"
+              aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent(value)">
+            <div class="h-full rounded-full bg-[var(--ui-ink)] transition-[width]" style="@($"width: {Percent(value)}%")"></div>
+        </div>;
+
+    private static RenderFragment QueuePill(QueueStatus s) => s switch
+    {
+        QueueStatus.Submitted => @<Pill Tone="PillTone.Gold">Ready for you</Pill>,
+        QueueStatus.Returned => @<Pill Tone="PillTone.Red">Returned</Pill>,
+        QueueStatus.Approved => @<Pill Tone="PillTone.Green">Approved</Pill>,
+        QueueStatus.InProgress => @<Pill Tone="PillTone.Soft">Store working on it</Pill>,
+        _ => @<Pill Tone="PillTone.Soft">Not started</Pill>,
+    };
+
+    // One of the day's figures in the sheet: a label in small capitals over the
+    // figure, with an optional grey line.
+    private static RenderFragment Figure(string k, string v, string? d = null) =>
+        @<div class="min-w-0 rounded-xl border border-[var(--ui-line)] bg-white px-3 py-2">
+            <p class="text-[10px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase">@k</p>
+            <p class="text-base font-bold tabular-nums text-[var(--ui-ink)]">@v</p>
+            @if (!string.IsNullOrEmpty(d))
+            {
+                <p class="text-[11px] tabular-nums text-[var(--ui-muted)]">@d</p>
+            }
+        </div>;
+
+    private static RenderFragment Note(string who, string text) =>
+        @<div class="rounded-xl bg-[var(--ui-canvas)] px-3 py-2 text-sm whitespace-pre-line text-[var(--ui-ink)]">
+            <span class="mb-0.5 block text-[10px] font-semibold tracking-wider text-[var(--ui-muted)] uppercase">@who</span>
+            @text
+        </div>;
+
+    private RenderFragment CheckControl(ReviewCheckView c, bool inList)
+    {
+        if (c.HardStop && _storeActs)
+            return @<a href="@PlanDayHref(c.Date)" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">Fix in Plan</a>;
+        if (_storeActs && !c.HardStop)
+            return @<Switch Checked="c.Done" Disabled="_pending" OnChange="on => OnCheckSwitch(c, inList, on)" Label="Checked" />;
+        return @<Switch Checked="c.Done" Label="Checked" />;
+    }
+
+    // ─── pieces ───────────────────────────────────────────────────────────────
+    private RenderFragment ListRow(ReviewCheckView c)
+    {
+        var k = $"n:{c.Key}";
+        var needsNote = _storeActs && !c.Done && !c.HardStop && c.Severity == CheckSeverity.Error;
+        return @<li @key="c.Key" class="flex flex-wrap items-start gap-x-4 gap-y-2 border-t border-[var(--ui-line)] px-4 py-3 first:border-t-0 sm:flex-nowrap sm:px-6">
+            <span class="shrink-0 pt-px sm:w-24">@CheckPill(c)</span>
+            <div class="min-w-0 flex-1 basis-full sm:basis-auto">
+                <p class="@($"text-sm font-medium {Ink}")">@c.Message</p>
+                @if (!string.IsNullOrEmpty(c.Detail))
+                {
+                    <p class="@($"mt-0.5 text-xs {Muted}")">Why: @c.Detail</p>
+                }
+                @if (c.HardStop)
+                {
+                    <p class="mt-1 text-xs text-[var(--ui-bad)]">A note can't clear this. Fix it in the plan - an edit or a re-plan - on the Plan page.</p>
+                }
+                else if (needsNote && _inlineNote != c.Key)
+                {
+                    <button type="button" @onclick="() => OpenInlineNote(c.Key)"
+                            class="@($"mt-1 inline-flex items-center gap-1.5 rounded-sm text-left text-xs font-medium text-[var(--ui-amber-ink)] hover:underline {Ui.FocusRing}")">
+                        <Icon Name="IconName.MessageSquare" Class="h-3.5 w-3.5 shrink-0" />
+                        Needs a note: say why it can stand, or fix it on the Plan page
+                    </button>
+                }
+                @if (needsNote && _inlineNote == c.Key)
+                {
+                    <div class="mt-2 flex flex-col gap-2">
+                        <label for="@($"l{k}")" class="@Ui.FieldLabelClass">
+                            Why is this OK? <span class="text-[var(--ui-bad)]">Needed for an error</span>
+                        </label>
+                        <textarea @ref="_inlineNoteBox" id="@($"l{k}")" rows="2" maxlength="1000" value="@Draft(k)"
+                                  @oninput="e => { SetDraft(k, e.Value?.ToString() ?? string.Empty); ClearNoteErr(c.Key); }"
+                                  placeholder="For example: manager cover booked from another store" class="@($"w-full {Ui.FieldClass}")"></textarea>
+                        @if (_noteErr.TryGetValue(c.Key, out var err))
+                        {
+                            <p role="alert" class="text-xs text-[var(--ui-bad)]">@err</p>
+                        }
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" disabled="@(_pending || Blank(Draft(k)))" @onclick="() => MarkChecked(c, true)" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                                Mark checked
+                            </button>
+                            <button type="button" @onclick="() => _inlineNote = null" class="@Ui.ButtonClass(ButtonKind.Quiet, ButtonSize.Sm)">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                }
+                @if (c.Done && !string.IsNullOrEmpty(c.Note))
+                {
+                    <div class="mt-2">@Note(_perspective == Perspective.Store ? "Your note" : "Store note", c.Note)</div>
+                }
+            </div>
+            <div class="shrink-0">@CheckControl(c, true)</div>
+        </li>;
+    }
+
+    private RenderFragment SheetCheck(ReviewCheckView c)
+    {
+        var k = $"n:{c.Key}";
+        var isErr = c.Severity == CheckSeverity.Error;
+        var warnOpen = _warnNotes.Contains(c.Key) || Draft(k) != "";
+        return @<article @key="c.Key" class="@($"rounded-2xl border bg-white p-4 {(isErr && !c.Done ? "border-[var(--ui-bad)]/35" : "border-[var(--ui-line)]")}")">
+            <div class="flex items-start justify-between gap-3">
+                @CheckPill(c)
+                @CheckControl(c, false)
+            </div>
+            <p class="@($"mt-2 text-sm font-semibold {Ink}")">@c.Message</p>
+            @if (!string.IsNullOrEmpty(c.Detail))
+            {
+                <p class="@($"mt-1 text-xs {Muted}")">Why: @c.Detail</p>
+            }
+            @if (c.HardStop)
+            {
+                @* A legal breach is fixed, not explained (owner decision R3). *@
+                <p class="mt-2 text-xs text-[var(--ui-bad)]">
+                    A note can't clear this. Fix it in the plan - an edit or a re-plan - <a href="@PlanDayHref(c.Date)" class="underline underline-offset-2">on the Plan page</a>.
+                </p>
+            }
+            else if (_storeActs && !c.Done)
+            {
+                if (isErr)
+                {
+                    <div class="mt-3">
+                        <label for="@k" class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[var(--ui-amber-ink)]">
+                            <Icon Name="IconName.MessageSquare" Class="h-3.5 w-3.5" />
+                            Note for the reviewer (needed for an error)
+                        </label>
+                        <textarea @ref="_sheetNoteBoxes[k]" id="@k" rows="2" maxlength="1000" value="@Draft(k)"
+                                  @oninput="e => { SetDraft(k, e.Value?.ToString() ?? string.Empty); ClearNoteErr(c.Key); }"
+                                  placeholder="For example: manager cover booked from another store"
+                                  aria-invalid="@(_noteErr.ContainsKey(c.Key) ? "true" : null)" class="@($"w-full {Ui.FieldClass}")"></textarea>
+                        @if (_noteErr.TryGetValue(c.Key, out var err))
+                        {
+                            <p role="alert" class="mt-1 text-xs text-[var(--ui-bad)]">@err</p>
+                        }
+                    </div>
+                }
+                else if (warnOpen)
+                {
+                    <div class="mt-3">
+                        <label for="@k" class="@Ui.FieldLabelClass">Note <span class="font-normal">optional</span></label>
+                        <textarea id="@k" rows="2" maxlength="1000" value="@Draft(k)" @oninput="e => SetDraft(k, e.Value?.ToString() ?? string.Empty)"
+                                  placeholder="Anything your EMSO should know" class="@($"w-full {Ui.FieldClass}")"></textarea>
+                    </div>
+                }
+                else
+                {
+                    <p class="@($"mt-2 text-xs {Muted}")">
+                        A warning only needs a look. <button type="button" @onclick="() => _warnNotes.Add(c.Key)" class="@Ui.LinkClass">Add a note</button> if it helps the reviewer.
+                    </p>
+                }
+            }
+            else if (c.Done && !string.IsNullOrEmpty(c.Note))
+            {
+                <div class="mt-2">@Note(_perspective == Perspective.Store ? "Your note" : "Store note", c.Note)</div>
+            }
+        </article>;
+    }
+
+    private RenderFragment StorePill(ReviewDayView d)
+    {
+        if (d.Closed || !d.HasData) return @<span class="@Muted">–</span>;
+        var left = d.Checks.Count(c => !c.Done);
+        return StoreDay(d) switch
+        {
+            StoreDayState.Clear => @<Pill Tone="PillTone.Soft">Nothing flagged</Pill>,
+            StoreDayState.Checked => @<Pill Tone="PillTone.Green">✓ Checked</Pill>,
+            StoreDayState.Queried => Tag(false, "Queried"),
+            _ => Tag(true, $"{left} to check"),
+        };
+    }
+
+    private RenderFragment EmsoPill(ReviewDayView d)
+    {
+        if (d.Verdict == DayVerdict.Ok) return @<Pill Tone="PillTone.Green">✓ Fine</Pill>;
+        if (d.Verdict == DayVerdict.Query) return Tag(false, "Query");
+        return _s == ReviewStatus.Submitted && !_stale ? Tag(true, "To review") : @<span class="@Muted">–</span>;
+    }
+
+    private RenderFragment FlagPills(ReviewDayView d)
+    {
+        if (d.Closed) return @<Pill Tone="PillTone.Soft">Closed</Pill>;
+        if (!d.HasData) return @<Pill Tone="PillTone.Soft">No plan</Pill>;
+        if (d.Checks.Count == 0) return @<span class="@Muted">–</span>;
+        var e = d.Checks.Count(c => c.Severity == CheckSeverity.Error);
+        var w = d.Checks.Count - e;
+        return @<span class="inline-flex gap-1">
+            @if (e > 0)
+            {
+                <Pill Tone="PillTone.Red">@Plural(e, "error", "errors")</Pill>
+            }
+            @if (w > 0)
+            {
+                <Pill Tone="PillTone.Amber">@Plural(w, "warning", "warnings")</Pill>
+            }
+        </span>;
+    }
+
+    // ─── the day sheet's footer ───────────────────────────────────────────────
+    private RenderFragment DaySheetFooter(ReviewDayView d, int idx)
+    {
+        var last = idx >= Data.Days.Count - 1;
+        Action move = () =>
+        {
+            if (last) CloseDay();
+            else OpenDay(Data.Days[idx + 1].Date);
+        };
+        // Notes typed on this day's checks that aren't checked yet: saving them
+        // checks them (an error is checked by giving it its note).
+        var toSave = _storeActs ? d.Checks.Where(c => !c.Done && !c.HardStop && !Blank(Draft($"n:{c.Key}"))).ToList() : [];
+        return @<text>
+            <a href="@PlanDayHref(d.Date)" class="@Ui.ButtonClass(ButtonKind.Secondary)">Open this day in Plan</a>
+            @if (toSave.Count > 0)
+            {
+                <button type="button" disabled="@_pending" @onclick="() => SaveNotesThen(toSave, move)" class="@Ui.ButtonClass(ButtonKind.Primary)">
+                    @(last ? "Save and close" : "Save and next day")
+                    @if (!last)
+                    {
+                        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+                    }
+                </button>
+            }
+            else
+            {
+                <button type="button" @onclick="move" class="@Ui.ButtonClass(last ? ButtonKind.Secondary : ButtonKind.Primary)">
+                    @(last ? "Close" : "Next day")
+                    @if (!last)
+                    {
+                        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+                    }
+                </button>
+            }
+        </text>;
+    }
+
+    // ─── the decision bar's contents, by side and stage ───────────────────────
+    private RenderFragment DecisionBar()
+    {
+        if (_perspective == Perspective.Store)
+        {
+            if (_storeEditable)
+            {
+                var doneN = _p.Done;
+                var total = _checks.Count;
+                return @<text>
+                    <div class="@($"flex min-w-[240px] flex-1 flex-col gap-1.5 text-sm {Ink}")">
+                        <div>
+                            <b>@(!Data.HasSnapshot
+                                ? "No plan to check yet."
+                                : doneN < total
+                                    ? $"{Plural(total - doneN, "check", "checks")} left."
+                                    : $"All {Plural(total, "check", "checks")} done.")</b>
+                            <span class="@Muted">@(!Data.HasSnapshot
+                                ? "Generate it on the Plan page first."
+                                : _storeReady
+                                    ? $"Submit it to {_reviewers}."
+                                    : doneN < total
+                                        ? $"Submit once every flag is checked{(_s == ReviewStatus.Returned ? " and every query answered" : "")}."
+                                        : "Submit once every query is answered.")</span>
+                            @if (_s == ReviewStatus.Returned)
+                            {
+                                @(" · ")<b>@($"{_p.Answered} of {_queried.Count}")</b>@(" queries answered")
+                            }
+                        </div>
+                        <div class="max-w-sm">@Meter(total > 0 ? (double)doneN / total : 1, "Flags checked")</div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        @if (!_storeReady && Data.HasSnapshot)
+                        {
+                            @foreach (var b in _blockers)
+                            {
+                                <Pill @key="b" Tone="PillTone.Amber">@b</Pill>
+                            }
+                        }
+                        <button type="button" disabled="@(_pending || !_storeReady)" @onclick="Submit" class="@Ui.ButtonClass(ButtonKind.Primary)">
+                            @(_s == ReviewStatus.Returned ? "Resubmit to EMSO" : _s == ReviewStatus.Submitted ? "Submit again" : "Submit to EMSO")
+                        </button>
+                    </div>
+                </text>;
+            }
+            if (_s == ReviewStatus.Submitted && CanStore)
+            {
+                return @<text>
+                    <div class="@($"text-sm {Ink}")">With <b>@_reviewers</b> since @Data.SubmittedAt</div>
+                    <button type="button" disabled="@_pending" @onclick="Withdraw" class="@Ui.ButtonClass(ButtonKind.Secondary)">
+                        Withdraw to make changes
+                    </button>
+                </text>;
+            }
+            if (_s == ReviewStatus.Approved) return ApprovedBar();
+            return @<div class="@($"text-sm {Muted}")">Nothing to do here right now.</div>;
+        }
+        if (_perspective == Perspective.Reviewer)
+        {
+            if (_reviewerEditable)
+            {
+                if (_composing)
+                {
+                    return @<div class="flex w-full flex-col gap-2">
+                        <label for="return-msg" class="@($"text-xs font-semibold {Ink}")">Message to the store</label>
+                        <textarea id="return-msg" rows="3" maxlength="2000" value="@Draft(ReturnDraft)" @oninput="e => SetDraft(ReturnDraft, e.Value?.ToString() ?? string.Empty)"
+                                  class="@($"w-full {Ui.FieldClass}")"></textarea>
+                        <div class="flex flex-wrap justify-end gap-2">
+                            <button type="button" @onclick="() => _composing = false" class="@Ui.ButtonClass(ButtonKind.Secondary)">Cancel</button>
+                            <button type="button" disabled="@(_pending || Blank(Draft(ReturnDraft)))" @onclick="SendReturn" class="@BtnDangerOn">
+                                Send back to the store
+                            </button>
+                        </div>
+                    </div>;
+                }
+                var okDays = _p.OkDays;
+                var unflaggedTodo = _p.UnflaggedTodo;
+                return @<text>
+                    <div class="@($"flex min-w-[240px] flex-1 flex-col gap-1.5 text-sm {Ink}")">
+                        <div>
+                            <b>@($"{okDays} of 14")</b> days fine
+                            @if (_queried.Count > 0)
+                            {
+                                @(" · ")<b>@_queried.Count</b>@(" queried")
+                            }
+                        </div>
+                        <div class="max-w-sm">@Meter(okDays / 14.0, "Days marked fine")</div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        @if (unflaggedTodo > 0)
+                        {
+                            <button type="button" disabled="@_pending" @onclick="MarkUnflaggedFine" class="@Ui.ButtonClass(ButtonKind.Secondary)">
+                                @($"Mark {unflaggedTodo} unflagged day{(unflaggedTodo == 1 ? "" : "s")} fine")
+                            </button>
+                        }
+                        <button type="button" disabled="@(_pending || _queried.Count == 0)" title="@(_queried.Count > 0 ? null : "Query a day first")"
+                                @onclick="StartReturn" class="@Ui.ButtonClass(ButtonKind.Danger)">
+                            Return to store
+                        </button>
+                        <button type="button" disabled="@(_pending || okDays < 14)" title="@(okDays < 14 ? "Mark every day fine first" : null)"
+                                @onclick="Approve" class="@Ui.ButtonClass(ButtonKind.Primary)">
+                            Approve plan
+                        </button>
+                    </div>
+                </text>;
+            }
+            if (_s == ReviewStatus.Approved) return ApprovedBar();
+            return @<text>
+                <div class="@($"text-sm {Ink}")">
+                    @(_s == ReviewStatus.Returned
+                        ? $"Returned to the store · {Data.DecidedAt ?? ""}"
+                        : _s == ReviewStatus.Submitted
+                            ? "The store changed its plan after submitting."
+                            : $"The store hasn't submitted yet · due {Data.DueLabel}")
+                </div>
+                @if (CanReview)
+                {
+                    <button type="button" disabled="@_pending" @onclick="Remind" class="@Ui.ButtonClass(ButtonKind.Secondary)">Send a reminder</button>
+                }
+            </text>;
+        }
+        if (CanUnlock && _s == ReviewStatus.Approved) return ApprovedBar();
+        return @<div class="@($"text-sm {Muted}")">You can see this review but not change it.</div>;
+    }
+
+    private RenderFragment ApprovedBar()
+    {
+        var req = Data.UnlockRequest;
+        var unlocking = _lockForm == LockForm.Unlock;
+        return @<text>
+            <div class="@($"flex min-w-[240px] flex-1 flex-col gap-1 text-sm {Ink}")">
+                <div>
+                    @($"Approved{By(Data.DecidedBy)} · {Data.DecidedAt}. ")<b>The plan is locked</b>@(" - it can't be edited or regenerated unless it is unlocked.")
+                </div>
+                @if (req is not null)
+                {
+                    <div class="text-xs text-[var(--ui-amber-ink)]">@($"Unlock requested{By(req.By)} · {req.At}: “{req.Reason}”")</div>
+                }
+            </div>
+            @if (_lockForm is not null)
+            {
+                <div class="flex w-full flex-col gap-2">
+                    <label for="lock-reason" class="@($"text-xs font-semibold {Ink}")">
+                        @(unlocking ? "Why is the plan being unlocked?" : "Why does the plan need to change?")
+                    </label>
+                    <textarea id="lock-reason" rows="2" maxlength="1000" value="@_lockReason" @oninput="e => _lockReason = e.Value?.ToString() ?? string.Empty"
+                              class="@($"w-full {Ui.FieldClass}")"></textarea>
+                    @if (unlocking)
+                    {
+                        <span class="@($"text-xs {Muted}")">
+                            The plan stops being approved and goes back to the store to change and submit again. A published roster
+                            stays on the floor - shown faded on the Roster page - until it is rebuilt and published again.
+                        </span>
+                    }
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" @onclick="CloseLockForm" class="@Ui.ButtonClass(ButtonKind.Secondary)">Cancel</button>
+                        <button type="button" disabled="@(_pending || Blank(_lockReason))" @onclick="SendLock"
+                                class="@(unlocking ? BtnDangerOn : Ui.ButtonClass(ButtonKind.Primary))">
+                            @(unlocking ? "Unlock the plan" : "Send the request")
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="flex flex-wrap items-center gap-2">
+                    @if (CanUnlock)
+                    {
+                        <button type="button" @onclick="StartUnlock" class="@Ui.ButtonClass(ButtonKind.Secondary)">Unlock the plan</button>
+                    }
+                    else if (CanStore)
+                    {
+                        if (req is not null)
+                        {
+                            <span class="@($"text-xs {Muted}")">@($"Waiting for {_reviewers} to unlock it.")</span>
+                        }
+                        else
+                        {
+                            <button type="button" @onclick="() => _lockForm = LockForm.Request" class="@Ui.ButtonClass(ButtonKind.Secondary)">Request unlock</button>
+                        }
+                    }
+                    <a href="@($"/plan/roster?store={_sid}&period={Iso(_ps)}")" class="@Ui.ButtonClass(ButtonKind.Primary)">Go to the roster</a>
+                </div>
+            }
+        </text>;
+    }
+}

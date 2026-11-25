@@ -1,0 +1,131 @@
+@* Port of AdminTaskCatalogue in src/app/(app)/admin/rules/labour/AdminTaskCatalogue.tsx.
+   The national administration task catalogue: what each named admin task is,
+   when it recurs, how long it takes (fixed or formula) and where in the day it
+   must sit. Placement-only - the benchmark Admin hours already fund the time.
+   Each task is added, changed or deleted on its own, as before; a task form
+   left open counts as an unsaved change when leaving the page. *@
+@inject ILabourRulesService Service
+@inject RosterJs Browser
+
+<LeaveGuard Id="admin-task-form" Dirty="@(_addingNew || _editingId is not null)" />
+<SettingsSection Id="admin-tasks">
+    <Title>Admin task catalogue</Title>
+    <Purpose>Named admin tasks with their schedule, duration and placement window. The benchmark AdminMGmt hours already cover this work - the catalogue controls where each task sits within the plan, shown per day on the Plan page.</Purpose>
+    <Aside>
+        <button type="button" @onclick="StartAdding" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">
+            <Icon Name="IconName.Plus" Class="h-3.5 w-3.5" /> Add task
+        </button>
+    </Aside>
+    <ChildContent>
+        @if (_addingNew)
+        {
+            <AdminTaskForm RegionPrefixes="RegionPrefixes" Pending="_pending"
+                           OnSave="input => RunAsync(() => Service.AddAdminTaskAsync(input), () => _addingNew = false)"
+                           OnCancel="() => { _addingNew = false; _msg = null; }" />
+        }
+
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Task</th>
+                        <th class="@Ui.Table.Th">Schedule</th>
+                        <th class="@Ui.Table.Th">Duration</th>
+                        <th class="@Ui.Table.Th">Window</th>
+                        <th class="@Ui.Table.Th"><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Tasks)
+                    {
+                        var task = t;
+                        if (_editingId == task.Id)
+                        {
+                            <tr @key="task.Id" class="@Ui.Table.Row">
+                                <td colspan="5" class="px-3 py-3">
+                                    <AdminTaskForm Initial="task" RegionPrefixes="RegionPrefixes" Pending="_pending"
+                                                   OnSave="input => RunAsync(() => Service.UpdateAdminTaskAsync(task.Id, input), () => _editingId = null)"
+                                                   OnCancel="() => { _editingId = null; _msg = null; }" />
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            <tr @key="task.Id" class="@($"{Ui.Table.Row} align-top")">
+                                <td class="whitespace-nowrap px-3 py-1.5 font-semibold">@task.Task.Name</td>
+                                <td class="px-3 py-1.5">@task.ScheduleLabel</td>
+                                <td class="px-3 py-1.5">@task.DurationLabel</td>
+                                <td class="px-3 py-1.5">@task.WindowLabel</td>
+                                <td class="whitespace-nowrap px-3 py-1.5 text-right">
+                                    <button type="button" @onclick="() => { _editingId = task.Id; _addingNew = false; _msg = null; }" disabled="@_pending"
+                                            class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">Edit</button>
+                                    <button type="button" @onclick="() => DeleteAsync(task)" disabled="@_pending"
+                                            class="@($"ml-2 {Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)}")">Delete</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (Tasks.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" class="@Ui.Table.Empty">No tasks in the catalogue.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_msg is not null)
+        {
+            <div class="mt-2">
+                <FormMessage Tone="FormMessageTone.Error">@_msg</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private Guid? _editingId;
+    private bool _addingNew;
+    private bool _pending;
+    private string? _msg;
+
+    [Parameter, EditorRequired] public IReadOnlyList<AdminTaskRow> Tasks { get; set; } = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<string> RegionPrefixes { get; set; } = [];
+
+    /// <summary>After a change: the page reads the catalogue again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private void StartAdding()
+    {
+        _addingNew = true;
+        _editingId = null;
+        _msg = null;
+    }
+
+    private async Task RunAsync(Func<Task<SaveResult>> action, Action closeForm)
+    {
+        _pending = true;
+        try
+        {
+            var res = await action();
+            if (res.Ok)
+            {
+                _msg = null;
+                closeForm();
+                await OnChanged.InvokeAsync();
+            }
+            else _msg = res.Error ?? "Error";
+        }
+        finally
+        {
+            _pending = false;
+        }
+    }
+
+    private async Task DeleteAsync(AdminTaskRow t)
+    {
+        if (!await Browser.ConfirmAsync($"Delete '{t.Task.Name}' from the catalogue?")) return;
+        await RunAsync(() => Service.DeleteAdminTaskAsync(t.Id), () => { });
+    }
+}

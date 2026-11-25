@@ -1,20 +1,17 @@
 // Port of src/lib/roster/drift.ts.
 
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
+using Roster.Data.Services.Held;
 using Roster.Engine.Core;
+using Roster.Engine.RosterOps;
 
 namespace Roster.Data.Services.Approval;
 
+// Comparing the held roster with what was published is the engine's
+// RosterOps.Drift; this reads both, as the system.
 public sealed class RosterDriftService(IRosterDbContextFactory contexts) : IRosterDrift
 {
-    // Identity of a rostered shift for comparison: who, from when, to when. Task
-    // tiles are deliberately excluded - a different Registers/SCO split is a
-    // display detail, not a change to anyone's working day.
-    private static string KeyOf(string employeeId, double start, double end) =>
-        $"{employeeId}|{Js.NumberToString(start)}|{Js.NumberToString(end)}";
-
     public async Task<RosterDrift> DetectRosterDriftAsync(Guid storeId, DateOnly date, CancellationToken ct = default)
     {
         // The Floor Display is a public, no-login page, so it cannot read through
@@ -41,56 +38,14 @@ public sealed class RosterDriftService(IRosterDbContextFactory contexts) : IRost
         if (approvedAt is not null && regeneratedAt is not null && regeneratedAt <= approvedAt)
             return new RosterDrift { Approved = approved, ApprovedAt = approvedAt, RegeneratedAt = regeneratedAt };
 
-        var day = HeldDay(snapRow.Payload, date);
-        if (day is null) return new RosterDrift { Approved = approved, ApprovedAt = approvedAt, RegeneratedAt = regeneratedAt };
-
-        var held = new HashSet<string>(StringComparer.Ordinal);
-        if (day.Value.TryGetProperty("shifts", out var shifts) && shifts.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var s in shifts.EnumerateArray())
-            {
-                if (Truthy(s, "unfilled")) continue;
-                var employeeId = s.TryGetProperty("employeeId", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-                if (string.IsNullOrEmpty(employeeId)) continue;
-                held.Add(KeyOf(employeeId, Number(s, "start") ?? -1, Number(s, "end") ?? -1));
-            }
-        }
-        var published = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var s in live)
-            published.Add(KeyOf(s.EmployeeId.ToString("D"), Minutes(s.StartTime), Minutes(s.EndTime)));
-
-        var drifted = held.Count != published.Count || held.Any(k => !published.Contains(k));
-        return new RosterDrift { Drifted = drifted, Approved = approved, ApprovedAt = approvedAt, RegeneratedAt = regeneratedAt };
+        var held = HeldRosters.ParseRoster(new Snapshots.HeldSnapshot(storeId, periodStart, SnapshotKinds.Roster, snapRow.Payload, snapRow.GeneratedAt, null, 1));
+        var drift = Drift.DetectRosterDrift(
+            plan?.RosterStatus, approvedAt, true, regeneratedAt,
+            held.ByDate.TryGet(date, out var day) ? day.Shifts : null,
+            live.Select(s => new PublishedShift(s.EmployeeId.ToString("D"), Minutes(s.StartTime), Minutes(s.EndTime))).ToList());
+        return new RosterDrift { Drifted = drift.Drifted, Approved = drift.Approved, ApprovedAt = drift.ApprovedAt, RegeneratedAt = drift.RegeneratedAt };
     }
 
     private static double Minutes(TimeOnly t) => Grid.TimeToMin(t.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
 
-    /// <summary>payload.byDate.find(([d]) => d === date)?.[1]: the held roster's day.</summary>
-    private static JsonElement? HeldDay(string payload, DateOnly date)
-    {
-        using var doc = JsonDocument.Parse(payload);
-        if (doc.RootElement.ValueKind != JsonValueKind.Object
-            || !doc.RootElement.TryGetProperty("byDate", out var byDate)
-            || byDate.ValueKind != JsonValueKind.Array) return null;
-        var iso = date.ToIso();
-        foreach (var pair in byDate.EnumerateArray())
-        {
-            if (pair.ValueKind != JsonValueKind.Array || pair.GetArrayLength() < 2) continue;
-            if (pair[0].ValueKind == JsonValueKind.String && pair[0].GetString() == iso) return pair[1].Clone();
-        }
-        return null;
-    }
-
-    private static bool Truthy(JsonElement o, string name) =>
-        o.TryGetProperty(name, out var v) && v.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.Number => Js.Truthy(v.GetDouble()),
-            JsonValueKind.String => v.GetString()!.Length > 0,
-            JsonValueKind.Object or JsonValueKind.Array => true,
-            _ => false,
-        };
-
-    private static double? Number(JsonElement o, string name) =>
-        o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
 }
