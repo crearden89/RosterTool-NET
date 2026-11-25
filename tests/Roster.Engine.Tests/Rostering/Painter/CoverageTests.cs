@@ -75,6 +75,10 @@ public class CoverageTests
             [new CoverIssue("lone_worker", 6 * H, 14 * H)],
             Coverage.CoverIssues(day, RosteringRules.Default with { MinPeopleOnFloor = 3, MinAdultsWithJsa = 3 }));
         Assert.Equal(["Fewer than 3 people rostered 06:00–14:00 - someone works alone"], Coverage.CoverFlags(day, new CoverRules(3, 3)));
+        // ...and so do the plan day check's own cover rules.
+        Assert.Equal(
+            ["Fewer than 3 people rostered 06:00–14:00 - someone works alone"],
+            Coverage.CoverFlags(day, new Roster.Engine.Planning.Plan.CoverRules(3, 3)));
     }
 
     [Fact]
