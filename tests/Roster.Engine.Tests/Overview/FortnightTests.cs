@@ -1,7 +1,7 @@
 // Port of src/lib/overview/fortnight.test.ts.
 
 using Roster.Engine.Overview;
-using static Roster.Engine.Overview.Fortnight;
+using static Roster.Engine.Overview.FortnightCard;
 
 namespace Roster.Engine.Tests.Overview;
 

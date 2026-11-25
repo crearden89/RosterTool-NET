@@ -1,0 +1,8 @@
+@* Port of src/app/page.tsx: the home address opens the Dashboard (someone not signed
+   in is sent to sign in first, as every page does). *@
+@page "/"
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnInitialized() => Navigation.NavigateTo("overview", replace: true);
+}

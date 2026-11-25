@@ -1,0 +1,12 @@
+@* Port of Unavailable in src/app/(app)/overview/FortnightPanel.tsx: a section whose
+   reads failed, said plainly, never shown with wrong figures. *@
+<Card>
+    <p class="flex items-center gap-2 text-sm text-[var(--ui-muted)]">
+        <Icon Name="IconName.CircleAlert" Class="h-4 w-4 text-[var(--ui-bad)]" aria-hidden="true" />
+        @What couldn&apos;t be read just now. Reload the page to try again.
+    </p>
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public string What { get; set; } = "";
+}

@@ -1,0 +1,97 @@
+@* Port of src/app/(app)/overview/page.tsx and Dashboard.tsx.
+   ─── The Dashboard (proposal 1, approved 15/11/2026) ─────────────────────────
+   The store's fortnight and what needs doing first, then the month to date,
+   the month as bars and, for area logins, every store they look after; the
+   day-by-day table stays underneath. The month figures come from one
+   computeOverview result; the fortnight, the to-dos and the store table stream
+   in as they are read. (The owner, 15/11/2026: the store table is underneath,
+   so the old view and its switch are gone.) *@
+@page "/overview"
+@inject IOverviewService Overview
+
+@if (_page is { } p)
+{
+    var user = p.User;
+    var store = p.Stores.FirstOrDefault(s => s.Id == p.SelectedStore);
+    // Another store's manager may look at its month, never at its plan's state or its
+    // to-dos (the peer rule in lib/access).
+    StoreAccess? access = store is null ? null : AccessMatrix.StoreAccessFor(user, store.Id, store.AreaId);
+    var areaLogin = TierChecks.IsAreaLogin(user.Tier);
+    var rollupLabel = user.Tier == Tier.Emso ? "All stores (area)" : "All stores";
+    var planning = Period.PlanningPeriodStart(p.Today);
+    var monthName = p.MonthLabel.Split(' ')[0];
+    var fortnight = FortnightCard.RangeLabel(planning, Period.PeriodEndFrom(planning));
+    var subtitle = store is not null
+        ? $"{store.Name} · {DashboardText.LongDate(p.Today)} · planning the fortnight {fortnight}"
+        : $"{(user.Tier == Tier.Emso ? "Your area" : "All stores")} · {DashboardText.LongDate(p.Today)} · planning the fortnight {fortnight}";
+
+    <div class="space-y-4">
+        <PageHeader Title="Dashboard">
+            <Subtitle>@subtitle</Subtitle>
+            <Actions>
+                <HeaderControls Stores="p.Stores" Regions="p.Regions" SelectedStore="p.SelectedStore" IsRollup="p.IsRollup"
+                                RollupLabel="@rollupLabel" MonthStart="p.MonthStart" MonthLabel="@p.MonthLabel"
+                                PrevMonth="p.PrevMonth" NextMonth="p.NextMonth" />
+            </Actions>
+        </PageHeader>
+
+        @if (store is not null && access != StoreAccess.Peer)
+        {
+            <FortnightPanel @key="store.Id" StoreId="store.Id" Today="p.Today" CanWrite="access == StoreAccess.Write"
+                            IsReviewer="user.Tier is Tier.Emso or Tier.SuperUser" />
+        }
+        @if (store is not null && access == StoreAccess.Peer)
+        {
+            <p class="text-sm text-[var(--ui-muted)]">
+                This is another store&apos;s Dashboard: its month is shown below; its plan, review and to-dos stay with its own
+                team.
+            </p>
+        }
+
+        @if (store is null && areaLogin)
+        {
+            <YourStores SelectedStore="p.SelectedStore" MonthStart="p.MonthStart" Today="p.Today" />
+        }
+
+        @if (p.Data is not { } data)
+        {
+            <p class="text-sm text-[var(--ui-muted)]">No store in scope.</p>
+        }
+        else
+        {
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                @foreach (var c in MonthView.MonthCards(data, monthName))
+                {
+                    <StatCard @key="c.Key">
+                        <Label>@c.Label</Label>
+                        <Value>@c.Value</Value>
+                        <Sub>@c.Sub</Sub>
+                    </StatCard>
+                }
+            </div>
+            <MonthChart Data="data" MonthName="@monthName" />
+        }
+
+        @if (store is not null && areaLogin)
+        {
+            <YourStores SelectedStore="p.SelectedStore" MonthStart="p.MonthStart" Today="p.Today" />
+        }
+
+        @if (p.Data is { } table)
+        {
+            <div class="pt-2">
+                <DayTable Data="table" SelectedStore="p.SelectedStore" MonthLabel="@p.MonthLabel" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private DashboardPage? _page;
+
+    [SupplyParameterFromQuery(Name = "store")] public string? StoreParam { get; set; }
+    [SupplyParameterFromQuery(Name = "month")] public string? MonthParam { get; set; }
+
+    protected override async Task OnParametersSetAsync() =>
+        _page = await Overview.LoadDashboardAsync(StoreParam, MonthParam);
+}
