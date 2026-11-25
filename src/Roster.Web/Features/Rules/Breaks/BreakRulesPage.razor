@@ -1,0 +1,45 @@
+@page "/admin/rules/breaks"
+@* Port of src/app/(app)/admin/rules/breaks/page.tsx and BreakRulesClient.tsx. *@
+@attribute [Authorize(Policy = Policies.SuperUser)]
+@layout RulesLayout
+@inject IBreakRulesService Service
+
+@if (_rules is null)
+{
+    <Loading />
+}
+else
+{
+    <SettingsBody Sections="Sections">
+        <SaveNote>The whole table is saved together, for every store.</SaveNote>
+        <ChildContent>
+            <WorkRules Rules="_rules" OnSaved="ReloadAsync" />
+            <SettingsSection Id="set-elsewhere">
+                <Title>Set elsewhere</Title>
+                <Purpose>The pay rules that sit beside these limits live on their own pages.</Purpose>
+                <ChildContent>
+                    <p class="text-sm text-[var(--ui-muted)]">
+                        Overtime, double-time and make-up-pay thresholds are edited on the Rostering Rules page
+                        (Pay rules section); the multipliers and the Sunday 1.9x band live on the Pay Rate
+                        Table's Pay Settings.
+                    </p>
+                </ChildContent>
+            </SettingsSection>
+        </ChildContent>
+    </SettingsBody>
+}
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("work-rules", "Shifts and breaks"),
+        new("set-elsewhere", "Set elsewhere"),
+    ];
+
+    private IReadOnlyList<BreakRuleInput>? _rules;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    // router.refresh(): the page reads the table again after a save.
+    private async Task ReloadAsync() => _rules = await Service.LoadAsync();
+}

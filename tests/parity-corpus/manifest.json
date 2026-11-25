@@ -1,0 +1,39 @@
+{
+  "tsCommit": "a004032",
+  "sources": [
+    "seeds",
+    "kit",
+    "g999"
+  ],
+  "seeds": "0-39",
+  "entries": {
+    "fortnight": {
+      "cases": 4,
+      "full": 67
+    },
+    "painter": {
+      "cases": 150,
+      "full": 6251
+    },
+    "pay": {
+      "cases": 476,
+      "full": 10317
+    },
+    "shaper": {
+      "cases": 94,
+      "full": 1992
+    },
+    "stage1": {
+      "cases": 240,
+      "full": 987
+    },
+    "subtasks": {
+      "cases": 131,
+      "full": 988
+    },
+    "till": {
+      "cases": 1136,
+      "full": 86780
+    }
+  }
+}

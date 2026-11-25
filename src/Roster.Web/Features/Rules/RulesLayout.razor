@@ -1,0 +1,13 @@
+@* Port of src/app/(app)/admin/rules/layout.tsx.
+   The three rule tables are one subject - what the engine is allowed to do -
+   read in parts, so they share a heading and a tab strip rather than three
+   sidebar entries. Each tab is its own route and its own page component; only
+   the chrome is shared (the Super User template, Components/Ui/SettingsHeader). *@
+@inherits LayoutComponentBase
+@layout AppLayout
+<div>
+    <SettingsHeader Area="Rules" Title="Rules" Tabs="NavConfig.RulesTabs">
+        <Subtitle>What the planner and the roster may do · applies to every store</Subtitle>
+    </SettingsHeader>
+    @Body
+</div>
