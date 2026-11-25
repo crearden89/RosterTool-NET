@@ -16,12 +16,14 @@ it later without a rewrite.
 | 7 | **Data comes in as today** — benchmark, sales, payroll leave extract, UKG contacts, POS statistics — through file uploads in the same formats, behind interfaces, so direct feeds from internal systems can replace the uploads later without touching the engine. The UKG roster export is kept. | `src/Roster.Data/Feeds` |
 | 8 | **Floor Display and Load Planner** stay no-login pages reached by a per-store link, with a setting to require a device sign-in instead if security asks for it. | `appsettings.json` → `Kiosk` |
 | 9 | **Australian rules stay as the defaults** (award breaks, junior rules, public holidays); they are the values the rules pages edit. | rules pages |
-| 10 | The code lives under `roster-dotnet/` in this repository for now and can move to its own repository unchanged. | — |
+| 10 | The code lives in its own repository, separate from the TypeScript app, which carries on unchanged. | — |
 
 ## Layout
 
+Who owns which folder, and the coding rules, are in [CONVENTIONS.md](CONVENTIONS.md).
+
 ```
-roster-dotnet/
+RosterTool-NET/
   Roster.sln
   src/Roster.Engine      the rules engine: planning, rostering, breaks and pay, the load
                          planner, sub-tasks. Pure C#, no database, no web.
@@ -33,6 +35,7 @@ roster-dotnet/
   tests/Roster.Web.Tests      page and endpoint tests.
   tools/parity           the script that runs the TypeScript engine on the shared inputs
                          and writes the expected outputs the parity tests compare against.
+  tests/parity-corpus    the shared inputs and the TypeScript engine's outputs on them.
 ```
 
 ## Build and test
