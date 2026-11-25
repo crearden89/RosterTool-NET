@@ -98,15 +98,16 @@ public static class Fortnight
         return $"{Dm(start)} – {Dm(end)}";
     }
 
-    // JavaScript's \s and trim(): the ECMAScript WhiteSpace and LineTerminator
-    // characters (.NET's \s and Trim() differ on U+0085 and U+FEFF).
-    private const string JsSpace = "\t\n\v\f\r                  　﻿";
-    private static readonly Regex Spaces = new("[\t\n\v\f\r    -     　﻿]+", RegexOptions.CultureInvariant);
+    // JavaScript's \s: the ECMAScript WhiteSpace and LineTerminator characters (.NET's \s
+    // differs on U+0085 and U+FEFF), the same set Js.Trim strips.
+    private static readonly Regex Spaces = new(
+        "[\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+",
+        RegexOptions.CultureInvariant);
 
     private static string Shorten(string text, int max)
     {
-        var t = Spaces.Replace(text.Trim(JsSpace.ToCharArray()), " ");
-        return t.Length > max ? t[..(max - 1)].TrimEnd(JsSpace.ToCharArray()) + "…" : t;
+        var t = Spaces.Replace(Js.Trim(text), " ");
+        return t.Length > max ? Js.TrimEnd(t[..(max - 1)]) + "…" : t;
     }
 
     public static List<FortnightStep> FortnightSteps(FortnightState f)
