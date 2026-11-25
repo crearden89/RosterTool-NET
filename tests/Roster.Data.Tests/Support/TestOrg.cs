@@ -18,10 +18,13 @@ public sealed class TestOrg
     public readonly Dictionary<Guid, Guid> ShiftOf = [];
     public Guid[] AllStores => [S1, S2, S3, S4];
 
-    public static TestOrg Create(TestDatabase db)
+    public static TestOrg Create(TestDatabase db) => Create(db.System);
+
+    /// <summary>Seeds through contexts from <paramref name="system"/> (SQLite or SQL Server).</summary>
+    public static TestOrg Create(Func<RosterDbContext> system)
     {
         var o = new TestOrg();
-        using var sys = db.System();
+        using var sys = system();
 
         var d1 = new DirectorGroup { Name = "Example Group One" };
         var d2 = new DirectorGroup { Name = "Example Group Two" };
