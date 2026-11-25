@@ -91,7 +91,6 @@
     --font-weight-bold: 700;
     --font-weight-extrabold: 800;
     --tracking-tight: -.025em;
-    --tracking-normal: 0em;
     --tracking-wide: .025em;
     --leading-tight: 1.25;
     --leading-snug: 1.375;
@@ -613,14 +612,6 @@
     margin-left: calc(var(--spacing) * 2);
   }
 
-  .ml-3 {
-    margin-left: calc(var(--spacing) * 3);
-  }
-
-  .ml-4 {
-    margin-left: calc(var(--spacing) * 4);
-  }
-
   .ml-9 {
     margin-left: calc(var(--spacing) * 9);
   }
@@ -941,10 +932,6 @@
     max-width: 22px;
   }
 
-  .max-w-\[34px\] {
-    max-width: 34px;
-  }
-
   .max-w-\[380px\] {
     max-width: 380px;
   }
@@ -1045,10 +1032,6 @@
     min-width: 460px;
   }
 
-  .min-w-\[640px\] {
-    min-width: 640px;
-  }
-
   .min-w-\[720px\] {
     min-width: 720px;
   }
@@ -1069,7 +1052,7 @@
     flex-shrink: 0;
   }
 
-  .flex-grow, .grow {
+  .grow {
     flex-grow: 1;
   }
 
@@ -1193,10 +1176,6 @@
 
   .items-start {
     align-items: flex-start;
-  }
-
-  .items-stretch {
-    align-items: stretch;
   }
 
   .justify-between {
@@ -1414,11 +1393,6 @@
   .rounded-t {
     border-top-left-radius: .25rem;
     border-top-right-radius: .25rem;
-  }
-
-  .rounded-t-lg {
-    border-top-left-radius: var(--radius-lg);
-    border-top-right-radius: var(--radius-lg);
   }
 
   .rounded-l-xl {
@@ -1837,16 +1811,8 @@
     padding: calc(var(--spacing) * 6);
   }
 
-  .\!px-1\.5 {
-    padding-inline: calc(var(--spacing) * 1.5) !important;
-  }
-
   .\!px-2 {
     padding-inline: calc(var(--spacing) * 2) !important;
-  }
-
-  .\!px-3 {
-    padding-inline: calc(var(--spacing) * 3) !important;
   }
 
   .px-0\.5 {
@@ -1883,10 +1849,6 @@
 
   .px-5 {
     padding-inline: calc(var(--spacing) * 5);
-  }
-
-  .\!py-0 {
-    padding-block: 0 !important;
   }
 
   .\!py-1 {
@@ -2073,11 +2035,6 @@
     font-family: var(--font-geist-mono);
   }
 
-  .\!text-sm {
-    font-size: var(--text-sm) !important;
-    line-height: var(--tw-leading, var(--text-sm--line-height)) !important;
-  }
-
   .text-2xl {
     font-size: var(--text-2xl);
     line-height: var(--tw-leading, var(--text-2xl--line-height));
@@ -2189,11 +2146,6 @@
   .tracking-\[0\.08em\] {
     --tw-tracking: .08em;
     letter-spacing: .08em;
-  }
-
-  .tracking-normal {
-    --tw-tracking: var(--tracking-normal);
-    letter-spacing: var(--tracking-normal);
   }
 
   .tracking-tight {
@@ -2326,10 +2278,6 @@
     color: var(--ui-faint);
   }
 
-  .text-\[var\(--ui-gold\)\] {
-    color: var(--ui-gold);
-  }
-
   .text-\[var\(--ui-good\)\] {
     color: var(--ui-good);
   }
@@ -2410,10 +2358,6 @@
 
   .capitalize {
     text-transform: capitalize;
-  }
-
-  .normal-case {
-    text-transform: none;
   }
 
   .uppercase {
@@ -2506,7 +2450,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .ring, .ring-1 {
+  .ring {
     --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
@@ -2526,16 +2470,6 @@
 
   .ring-\[var\(--ui-gold\)\] {
     --tw-ring-color: var(--ui-gold);
-  }
-
-  .ring-white\/20 {
-    --tw-ring-color: #fff3;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .ring-white\/20 {
-      --tw-ring-color: color-mix(in oklab, var(--color-white) 20%, transparent);
-    }
   }
 
   .ring-offset-1 {
@@ -2751,10 +2685,6 @@
     outline-offset: 2px;
   }
 
-  .focus-visible\:outline-\[color\:var\(--ui-gold\)\]:focus-visible {
-    outline-color: var(--ui-gold);
-  }
-
   .focus-visible\:outline-\[color\:var\(--ui-violet\)\]:focus-visible {
     outline-color: var(--ui-violet);
   }
@@ -2880,10 +2810,6 @@
       gap: calc(var(--spacing) * 1.5);
     }
 
-    .sm\:gap-2\.5 {
-      gap: calc(var(--spacing) * 2.5);
-    }
-
     .sm\:gap-4 {
       gap: calc(var(--spacing) * 4);
     }
@@ -2902,14 +2828,6 @@
 
     .sm\:p-8 {
       padding: calc(var(--spacing) * 8);
-    }
-
-    .sm\:\!px-5 {
-      padding-inline: calc(var(--spacing) * 5) !important;
-    }
-
-    .sm\:px-2 {
-      padding-inline: calc(var(--spacing) * 2);
     }
 
     .sm\:px-5 {
