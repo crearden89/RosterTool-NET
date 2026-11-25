@@ -7,18 +7,6 @@
   ],
   "seeds": "0-39",
   "entries": {
-    "fortnight": {
-      "cases": 4,
-      "full": 67
-    },
-    "load": {
-      "cases": 200,
-      "full": 328
-    },
-    "painter": {
-      "cases": 100,
-      "full": 6251
-    },
     "pay": {
       "cases": 500,
       "full": 11205
@@ -27,17 +15,29 @@
       "cases": 94,
       "full": 1992
     },
+    "painter": {
+      "cases": 100,
+      "full": 6251
+    },
+    "fortnight": {
+      "cases": 4,
+      "full": 67
+    },
+    "till": {
+      "cases": 1136,
+      "full": 86780
+    },
     "stage1": {
-      "cases": 240,
-      "full": 987
+      "cases": 280,
+      "full": 1981
     },
     "subtasks": {
       "cases": 131,
       "full": 988
     },
-    "till": {
-      "cases": 1136,
-      "full": 86780
+    "load": {
+      "cases": 200,
+      "full": 328
     }
   }
 }

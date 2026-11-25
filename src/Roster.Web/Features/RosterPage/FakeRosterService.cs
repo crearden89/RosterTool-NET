@@ -1,5 +1,5 @@
-// New: an invented fortnight for the Roster page, used until the held roster's loaders
-// land (D2, E2, E3). No real store, person or figure: every name and number is made up.
+// New: an invented fortnight for the Roster page, for its tests and for looking at the page
+// without a database (not registered by RosterModule). No real store, person or figure: every name and number is made up.
 // The rows go through the real display builder (Display.BuildRosterRows), so breaks and
 // tiles are decorated exactly as the real page decorates them.
 

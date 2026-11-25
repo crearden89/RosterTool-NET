@@ -156,4 +156,31 @@ public class PlanComponentsTests : UiTestContext
         Assert.Equal(plan.Shifts.Count, saved!.Length);
         Assert.DoesNotContain("Save changes", cut.Markup);
     }
+
+    [Fact]
+    public void The_page_with_no_store_offers_no_Generate_and_says_no_plan_is_held()
+    {
+        _plan.Load = _ => Task.FromResult(new PlanPageModel { PeriodStart = new DateOnly(2026, 11, 23), SelectedDate = new DateOnly(2026, 11, 23) });
+        var cut = Render<PlanGeneratePage>();
+        cut.WaitForAssertion(() => Assert.Contains("No plan held for this fortnight yet", cut.Markup));
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Generate"));
+        Assert.Contains("No plan has been generated for this fortnight yet - press Generate Plan to solve and hold it.", cut.Markup);
+    }
+
+    [Fact]
+    public void The_page_shows_a_locked_plans_note_and_the_overdue_banner()
+    {
+        var store = new PlanStore(Store, "G101", "Northside");
+        _plan.Load = _ => Task.FromResult(new PlanPageModel
+        {
+            Stores = [store], SelectedStore = Store, StoreRow = store, IsStoreTier = true, Locked = true, HasSnapshot = true,
+            ReviewState = PlanReviewState.Approved, PeriodStart = new DateOnly(2026, 11, 23), SelectedDate = new DateOnly(2026, 11, 23),
+            OverduePeriods = [new DateOnly(2026, 11, 9)],
+        });
+        var cut = Render<PlanGeneratePage>();
+        cut.WaitForAssertion(() => Assert.Contains("Approved plans are locked - ask on Review to unlock it, then regenerate.", cut.Markup));
+        Assert.Contains("Previous period(s) not approved: 09/11 – 22/11", cut.Markup);
+        Assert.Contains("Ask to unlock", cut.Markup);
+        Assert.Contains("Approved · locked", cut.Markup);
+    }
 }

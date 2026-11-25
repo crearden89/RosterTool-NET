@@ -1,0 +1,70 @@
+@* Port of DayCard in src/app/(app)/plan/non-op/NonOpClient.tsx. *@
+@using global::Roster.Engine.Core
+@* One day: its weekday and date, its hours, Clear day and Add, and its
+   entries. On a phone the days stack, and an empty day is one line. *@
+<li class="@($"flex min-w-0 flex-col rounded-2xl border p-3 {(ReadOnly ? "xl:min-h-[9rem]" : "xl:min-h-[12.5rem]")} {(Entries.Count > 0 ? "border-[var(--ui-line)] bg-white" : "border-dashed border-[var(--ui-control)] bg-white/50")}")">
+    <div class="flex items-start justify-between gap-2">
+        <div class="flex items-baseline gap-2 xl:block">
+            <p class="@($"text-[11px] font-semibold tracking-[0.08em] uppercase {(NonOpShared.IsWeekend(Date) ? "text-[var(--ui-violet)]" : "text-[var(--ui-faint)]")}")">@NonOpShared.WeekdayOf(Date)</p>
+            <p class="text-lg leading-tight font-bold text-[var(--ui-ink)]">
+                @NonOpShared.DayNumber(Date)<span class="ml-1 text-xs font-semibold text-[var(--ui-muted)] xl:hidden">@NonOpShared.MonthOf(Date)</span>
+            </p>
+        </div>
+        <div class="flex items-center gap-2 xl:block xl:text-right">
+            @if (Minutes > 0)
+            {
+                <p class="text-sm font-bold text-[var(--ui-ink)] tabular-nums">@NonOpShared.HoursText(Minutes) h</p>
+            }
+            @if (!ReadOnly && Entries.Count > 0)
+            {
+                <button type="button" @onclick="OnClear" disabled="@Busy" title="Clear all for the day"
+                        aria-label="@($"Clear all {Entries.Count} Non-Op {(Entries.Count == 1 ? "entry" : "entries")} for {Label}")"
+                        class="@($"inline-flex items-center gap-1 rounded-md text-[11px] font-semibold text-[var(--ui-muted)] hover:text-[var(--ui-bad)] {Ui.FocusRing}")">
+                    <Icon Name="IconName.Trash2" Class="h-3 w-3" StrokeWidth="2.5" /> Clear day
+                </button>
+            }
+            @if (!ReadOnly)
+            {
+                <button type="button" @onclick="OnAdd" disabled="@Busy" aria-label="@($"Add Non-Op hours on {Label}")"
+                        class="@($"xl:hidden {Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)}")">
+                    <Icon Name="IconName.Plus" Class="h-3.5 w-3.5" StrokeWidth="2.5" /> Add
+                </button>
+            }
+        </div>
+    </div>
+    @if (Entries.Count > 0)
+    {
+        <ul class="mt-2 space-y-1.5">
+            @foreach (var e in Entries)
+            {
+                @EntryTemplate(e)
+            }
+        </ul>
+    }
+    else
+    {
+        <p class="mt-2 hidden text-xs text-[var(--ui-faint)] xl:block">Nothing booked</p>
+    }
+    @if (!ReadOnly)
+    {
+        <div class="mt-auto">
+            <button type="button" @onclick="OnAdd" disabled="@Busy" aria-label="@($"Add Non-Op hours on {Label}")"
+                    class="@($"mt-2 hidden w-full items-center justify-center gap-1 rounded-xl border border-dashed border-[var(--ui-control)] py-1.5 text-xs font-semibold text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] xl:flex {Ui.FocusRing}")">
+                <Icon Name="IconName.Plus" Class="h-3.5 w-3.5" StrokeWidth="2.5" /> Add
+            </button>
+        </div>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<NonOpEntryRow> Entries { get; set; } = [];
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+    [Parameter, EditorRequired] public RenderFragment<NonOpEntryRow> EntryTemplate { get; set; } = default!;
+
+    private int Minutes => NonOpShared.MinutesOf(Entries);
+    private string Label => Dates.AuDayLabel(Date);
+}
