@@ -51,7 +51,7 @@ that app (version `a004032`).
 
 | Folder | Owner | Ports |
 |---|---|---|
-| root (`RosterDbContext*.cs`), `Entities/`, `Configurations/`, `Migrations/`, `Scope/`, `Snapshots/`, `Users/` | D | `supabase/migrations/*` (tables, constraints, row-level security as store-scope rules), `lib/storeScope`, `authz`, `access`, `reportingScope`, `planSnapshots`, `auth` |
+| root (`RosterDbContext*.cs`, `DataModules.cs` with `IDataModule` and `AddRosterData`), `Entities/`, `Configurations/`, `Migrations/`, `Scope/`, `Snapshots/`, `Users/` | D | `supabase/migrations/*` (tables, constraints, row-level security as store-scope rules), `lib/storeScope`, `authz`, `access`, `reportingScope`, `planSnapshots`, `auth` |
 | `Services/` | D2 | the SQL functions (`approve_roster_day`, `overview_rollup`, `leave_period_ends`, `is_public_holiday`, `bump_cron_run`), the loaders around the engine (`stage1/compute`, `stage2/compute`, `planSlots`, `priority`, `refdata`, `requestCache`, `payroll/settings`, `payroll/dayType`), `lib/review/gate`, `notify`, `server`, `plan/approval`, `roster/approval`, `roster/drift`, `lib/notifications` (database parts) |
 | `Feeds/` | D3 | `lib/csv/*`, `plan/curveSource`, `api/ingest`, `api/uploads`, `api/export/ukg`, `api/print/ukg-roster` |
 | `Seed/`, `Jobs/`, `tests/Roster.Data.Tests/Infrastructure/` | D4 | invented seed data, the development seeder, `lib/cron`, `lib/emso` (scheduled checks), SQL Server test fixtures |
@@ -70,6 +70,8 @@ that app (version `a004032`).
 | `Features/Rules/`, `Features/Process/` | P7 | `app/(app)/admin/rules/*`, `break-rules`, `labour-rules`, `rostering-rules`, `planning-order`, `roster-order`, `admin/process/*` |
 | `Features/Admin/` | P8 | `app/(app)/admin/store-attributes`, `special-trading-hours`, `calendars`, `load-types`, `non-op-categories`, `pay-rates`, `kiosk-links`, `users`, `emso`, `views`, `data-feed`, `uploads`, `variance-report`, `till-preview` |
 | `Features/Floor/`, `Features/LoadPlanner/` | P9 | `app/floor/[token]`, `app/load/[token]`, `api/floor/[token]` |
+| `Features/Feeds/` | D3 | the HTTP endpoints for `api/uploads`, `api/ingest`, `api/export/ukg`, `api/print/ukg-roster` |
+| `Features/Jobs/` | D4 | scheduled jobs as hosted services, `api/cron/*` |
 
 ### Shared files (one owner each)
 
@@ -111,6 +113,8 @@ JavaScript and C# differ in ways that change numbers. Use the helpers in `Roster
   example `@page "/plan/generate"`), components, view models, an `I<Area>Service` with its
   implementation, and an `<Area>Module : IFeatureModule` that registers them. Modules are found
   at start-up, so adding an area never touches `Program.cs`.
+- Data areas register the same way: each of `Services/`, `Feeds/`, `Seed/` has an `IDataModule`, and
+  `AddRosterData` (called once in `Program.cs`) registers the `DbContext` and every module.
 - Server actions in the TypeScript app (`actions.ts`) become methods on the area's service, with
   the same permission checks in the same places.
 - Styling uses the same Tailwind classes as the TypeScript app, so pages look the same.
