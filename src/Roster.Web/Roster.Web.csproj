@@ -40,7 +40,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <TailwindSource Include="Styles\**\*.css;Components\**\*.razor;Components\**\*.cs" />
+    <TailwindSource Include="Styles\**\*.css;Components\**\*.razor;Components\**\*.cs;Features\**\*.razor;Features\**\*.cs" />
   </ItemGroup>
 
   <Target Name="TailwindBuild" BeforeTargets="BeforeBuild" Condition="Exists('$(TailwindCli)')"

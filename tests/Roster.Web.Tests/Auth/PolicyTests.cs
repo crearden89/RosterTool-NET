@@ -6,7 +6,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Roster.Data.Entities;
+using Roster.Data.Users;
 using Roster.Web.Auth;
+using Roster.Web.Tests.Infrastructure;
 using Roster.Web.Kiosk;
 
 namespace Roster.Web.Tests.Auth;
@@ -97,18 +100,14 @@ public class PolicyTests
     [Fact]
     public async Task When_groups_decide_someone_in_none_of_them_has_no_access()
     {
-        var directory = new ConfigurationDirectory(Monitor(new DirectoryOptions
-        {
-            Stores = [new() { Code = "G101", Name = "Northside", Area = "Area 1" }],
-            Users = [new() { Username = "jlee@example.com", Tier = "Store", Store = "G101" }],
-        }));
+        var directory = new FakeDirectory().WithUser("jlee@example.com", Tier.Store, "G101");
         var groups = new AuthOptions { TierGroups = new() { ["Emso"] = ["Roster.EMSO"] } };
         var resolver = new AppUserResolver(directory, Options.Create(groups), NullLogger<AppUserResolver>.Instance);
 
         Assert.Null(await resolver.ResolveAsync(new SignInIdentity { Method = "entra", Username = "jlee@example.com" }));
-        var emso = await resolver.ResolveAsync(new SignInIdentity { Method = "entra", Username = "JLEE@example.com", GroupTier = "emso" });
+        var emso = await resolver.ResolveAsync(new SignInIdentity { Method = "entra", Username = "JLEE@example.com", GroupTier = Tier.Emso });
         Assert.Equal("emso", emso!.Tier);
-        Assert.NotNull(emso.StoreId);
+        Assert.NotNull(emso.StoreId); // the directory's scope columns, the groups' tier
 
         var stored = new AppUserResolver(directory, Options.Create(new AuthOptions()), NullLogger<AppUserResolver>.Instance);
         Assert.Equal("store", (await stored.ResolveAsync(new SignInIdentity { Method = "windows", Username = "x", AccountName = "jlee@example.com" }))!.Tier);

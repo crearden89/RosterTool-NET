@@ -5,6 +5,7 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
+using Roster.Data.Scope;
 using Roster.Web.Auth;
 using Roster.Web.Kiosk;
 using Roster.Web.Tests.Auth;
@@ -14,13 +15,11 @@ namespace Roster.Web.Tests.Kiosk;
 
 public class KioskLinkTests
 {
-    private static readonly DirectoryOptions Stores = new()
-    {
-        Stores = [new() { Code = "G101", Name = "Northside", State = "NSW", KioskToken = "secret-g101" }],
-    };
+    private readonly AccessContextAccessor _access = new();
 
-    private static KioskLinkCheck Check(bool requireDeviceSignIn, ClaimsPrincipal user) => new(
-        new ConfigurationDirectory(PolicyTests.Monitor(Stores)),
+    private KioskLinkCheck Check(bool requireDeviceSignIn, ClaimsPrincipal user) => new(
+        new FakeDirectory(),
+        _access,
         PolicyTests.Monitor(new KioskOptions { RequireDeviceSignIn = requireDeviceSignIn }),
         new FixedAuthentication(user));
 
@@ -33,10 +32,13 @@ public class KioskLinkTests
         Assert.Equal(KioskLinkStatus.Open, link.Status);
         Assert.Equal(("G101", "Northside", "NSW"), (link.Store!.Code, link.Store.Name, link.Store.State));
         Assert.True(link.NoLoginNeeded);
+        // The page then reads and writes as that store's kiosk.
+        Assert.Equal(AccessKind.Kiosk, _access.Current.Kind);
+        Assert.Equal(link.Store.StoreId, _access.Current.KioskStoreId);
     }
 
     [Theory]
-    [InlineData("secret-g102")]
+    [InlineData("secret-g999")]
     [InlineData("")]
     [InlineData(null)]
     public async Task An_unknown_link_is_not_found(string? token) =>

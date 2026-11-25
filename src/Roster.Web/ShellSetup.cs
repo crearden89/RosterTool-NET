@@ -4,6 +4,8 @@
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Roster.Data;
+using Roster.Data.Scope;
 using Roster.Web.Auth;
 using Roster.Web.Components;
 using Roster.Web.Components.Layout;
@@ -21,6 +23,9 @@ public static class ShellSetup
         services.AddRazorComponents().AddInteractiveServerComponents();
         services.Configure<BrandingOptions>(builder.Configuration.GetSection(BrandingOptions.Section));
 
+        // The data layer: SQL Server (ConnectionStrings:Roster, from user secrets or the
+        // environment), the store scope and the user directory.
+        services.AddRosterData(builder.Configuration);
         builder.AddRosterAuth();
 
         services.AddScoped<RosterJs>();
@@ -52,6 +57,14 @@ public static class ShellSetup
             .AddSupportedUICultures("en-AU"));
 
         app.UseAuthentication();
+        // The data layer reads and writes as whoever is signed in (a kiosk page switches
+        // to its store's kiosk access after its link check).
+        app.Use(async (http, next) =>
+        {
+            if (SignedInUser.FromPrincipal(http.User) is { } user && http.RequestServices.GetService<AccessContextAccessor>() is { } access)
+                access.Current = AccessContext.ForUser(user.ToScopedUser());
+            await next(http);
+        });
         app.UseAuthorization();
         app.UseAntiforgery();
 

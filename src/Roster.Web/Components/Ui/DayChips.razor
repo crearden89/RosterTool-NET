@@ -10,8 +10,9 @@
     @for (var i = 0; i < _weeks.Count; i++)
     {
         var wk = _weeks[i];
+        var week = i + 1; // a copy: the Eyebrow draws its content after the loop has moved on
         <div @key="wk[0].Date" class="min-w-0">
-            <Eyebrow Class="mb-2">Week @(i + 1) · @Dates.AuRange(wk[0].Date, wk[^1].Date)</Eyebrow>
+            <Eyebrow Class="mb-2">Week @week · @Dates.AuRange(wk[0].Date, wk[^1].Date)</Eyebrow>
             <ul class="grid grid-cols-7 gap-1 sm:gap-1.5">
                 @for (var j = 0; j < wk.Count; j++)
                 {

@@ -18,11 +18,12 @@
 
 @import "tailwindcss" source(none);
 
-/* Where the class names are: the Razor components and the C# that holds
-   shared class strings (Components/Ui/Ui.cs). Class names must be written out
-   whole in the source - never assembled from pieces - or the CLI cannot see
-   them. */
+/* Where the class names are: the shell and shared components (Components/,
+   with the shared class strings in Components/Ui/Ui.cs) and every page area
+   (Features/). Class names must be written out whole in the source - never
+   assembled from pieces - or the CLI cannot see them. */
 @source "../Components";
+@source "../Features";
 
 /* Geist, the clean geometric sans the design calls for (the TypeScript app
    loads it through next/font). Self-hosted from wwwroot/fonts so the app needs

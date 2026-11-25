@@ -25,6 +25,23 @@ internal sealed record SignedInUser
 
     public string Name => string.IsNullOrWhiteSpace(DisplayName) ? Username : DisplayName;
 
+    /// <summary>The scope the data layer filters by.</summary>
+    public Roster.Data.Scope.ScopedUser ToScopedUser() =>
+        new(Id, Username, TierKeys.ToTier(Tier), StoreId, RegionId, AreaId, DirectorGroupId);
+
+    /// <summary>The signed-in user for a directory entry.</summary>
+    public static SignedInUser From(Roster.Data.Users.DirectoryUser user) => new()
+    {
+        Id = user.Id,
+        Username = user.Username,
+        DisplayName = user.DisplayName,
+        Tier = Roster.Data.Entities.Tiers.Key(user.Tier),
+        StoreId = user.StoreId,
+        RegionId = user.RegionId,
+        AreaId = user.AreaId,
+        DirectorGroupId = user.DirectorGroupId,
+    };
+
     public IEnumerable<Claim> ToClaims()
     {
         yield return new Claim(RosterClaims.UserId, Id.ToString());

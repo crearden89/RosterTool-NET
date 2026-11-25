@@ -45,7 +45,7 @@
 </SignInFrame>
 
 @code {
-    private IReadOnlyList<DirectoryStore> _stores = [];
+    private IReadOnlyList<global::Roster.Data.Scope.StoreInfo> _stores = [];
 
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
 
@@ -56,6 +56,6 @@
             Navigation.NotFound();
             return;
         }
-        _stores = await Services.GetRequiredService<IStoreDirectory>().ListAsync();
+        _stores = await Services.GetRequiredService<global::Roster.Data.Scope.IStoreDirectory>().ListAsync();
     }
 }

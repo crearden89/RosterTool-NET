@@ -13,12 +13,19 @@ namespace Roster.Web.Tests.Infrastructure;
 public sealed partial class AppFactory(string environment, IReadOnlyDictionary<string, string?>? settings = null,
     Action<IServiceCollection>? services = null) : WebApplicationFactory<Program>
 {
+    /// <summary>The directory the app signs people in against (in place of the database's).</summary>
+    public FakeDirectory Directory { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(environment);
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
             builder.UseSetting(key, value);
-        if (services is not null) builder.ConfigureTestServices(services);
+        builder.ConfigureTestServices(s =>
+        {
+            Directory.Register(s);
+            services?.Invoke(s);
+        });
     }
 
     /// <summary>A client that keeps cookies and shows redirects instead of following them.</summary>
@@ -38,9 +45,16 @@ public sealed partial class AppFactory(string environment, IReadOnlyDictionary<s
     }
 
     /// <summary>The antiforgery token in a page's form.</summary>
-    public static string AntiforgeryToken(string html) =>
-        TokenPattern().Match(html) is { Success: true } m ? WebUtility.HtmlDecode(m.Groups[1].Value) : throw new InvalidOperationException("No antiforgery token in the page.");
+    public static string AntiforgeryToken(string html)
+    {
+        var input = TokenInput().Match(html);
+        if (!input.Success) throw new InvalidOperationException("No antiforgery token in the page.");
+        return WebUtility.HtmlDecode(ValueAttribute().Match(input.Value).Groups[1].Value);
+    }
 
-    [GeneratedRegex("name=\"__RequestVerificationToken\" type=\"hidden\" value=\"([^\"]+)\"|value=\"([^\"]+)\"[^>]*name=\"__RequestVerificationToken\"")]
-    private static partial Regex TokenPattern();
+    [GeneratedRegex("<input[^>]*name=\"__RequestVerificationToken\"[^>]*>")]
+    private static partial Regex TokenInput();
+
+    [GeneratedRegex("value=\"([^\"]*)\"")]
+    private static partial Regex ValueAttribute();
 }

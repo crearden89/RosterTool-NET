@@ -9,7 +9,7 @@ namespace Roster.Web.Components.Ui;
 /// per connection; the module is imported on first use. Call it from
 /// OnAfterRenderAsync (there is no browser while a page prerenders).
 /// </summary>
-public sealed class RosterJs(IJSRuntime js) : IAsyncDisposable
+public sealed class RosterJs(IJSRuntime js) : IAsyncDisposable, IDisposable
 {
     private Task<IJSObjectReference>? _module;
 
@@ -35,6 +35,9 @@ public sealed class RosterJs(IJSRuntime js) : IAsyncDisposable
         await (await Module).InvokeAsync<IJSObjectReference>("comboList", box, listId, target);
 
     internal async ValueTask ScrollIntoViewAsync(string id) => await (await Module).InvokeVoidAsync("scrollIntoView", id);
+
+    /// <summary>A synchronous dispose (a test host): the module is left to the browser.</summary>
+    public void Dispose() { }
 
     public async ValueTask DisposeAsync()
     {

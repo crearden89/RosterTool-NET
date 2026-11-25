@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Roster.Data.Scope;
+using Roster.Data.Users;
 
 namespace Roster.Web.Auth;
 
@@ -84,7 +86,7 @@ public static class AccountEndpoints
             if (username.Length == 0) username = "dev";
             var user = new SignedInUser
             {
-                Id = ConfigurationDirectory.StableId("dev-user", $"{username}|{tier}|{store?.Code}"),
+                Id = DevUserId($"{username}|{tier}|{store?.Code}"),
                 Username = username,
                 DisplayName = name,
                 Tier = tier,
@@ -104,6 +106,10 @@ public static class AccountEndpoints
         }).AllowAnonymous();
         return app;
     }
+
+    // The same choices always give the same user, so a development session can come back.
+    private static Guid DevUserId(string key) =>
+        new(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"dev-user:{key}")).AsSpan(0, 16));
 }
 
 /// <summary>The development sign-in's fields.</summary>

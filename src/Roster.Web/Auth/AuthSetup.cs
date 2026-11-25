@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
+using Roster.Data.Users;
 using Roster.Web.Kiosk;
 
 namespace Roster.Web.Auth;
@@ -103,10 +104,6 @@ public static class AuthSetup
         services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, PageAuthorizationResultHandler>();
         services.AddCascadingAuthenticationState();
         services.TryAddScoped<AppUserResolver>();
-        services.TryAddSingleton<ConfigurationDirectory>();
-        services.TryAddSingleton<IUserDirectory>(sp => sp.GetRequiredService<ConfigurationDirectory>());
-        services.TryAddSingleton<IStoreDirectory>(sp => sp.GetRequiredService<ConfigurationDirectory>());
-        services.Configure<DirectoryOptions>(configuration.GetSection(DirectoryOptions.Section));
         services.TryAddScoped<IKioskLinkCheck, KioskLinkCheck>();
         return builder;
     }
@@ -145,7 +142,7 @@ public static class AuthSetup
             ObjectId = objectId,
             Email = First(ClaimTypes.Email, "email"),
             DisplayName = First(ClaimConstants.Name, ClaimTypes.GivenName),
-            GroupTier = auth.TierFromGroups(p),
+            GroupTier = GroupTier(auth, p),
         };
     }
 
@@ -159,9 +156,12 @@ public static class AuthSetup
             Username = slash >= 0 ? account[(slash + 1)..] : account,
             AccountName = account,
             Email = p.FindFirst(ClaimTypes.Upn)?.Value ?? p.FindFirst(ClaimTypes.Email)?.Value,
-            GroupTier = auth.TierFromGroups(p),
+            GroupTier = GroupTier(auth, p),
         };
     }
+
+    private static Roster.Data.Entities.Tier? GroupTier(AuthOptions auth, ClaimsPrincipal p) =>
+        auth.TierFromGroups(p) is { } key ? TierKeys.ToTier(key) : null;
 
     /// <summary>A return address that stays inside the app.</summary>
     internal static string LocalReturnUrl(HttpContext http, string? returnUrl)

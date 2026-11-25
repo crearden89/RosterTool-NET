@@ -2,6 +2,7 @@
    a page someone may not open sends them where the TypeScript app's requireUser and
    requireTier did (RedirectOnDenied). *@
 @inject StoreSelection Selection
+@inject global::Roster.Data.Scope.AccessContextAccessor Access
 @inject IOptions<BrandingOptions> Branding
 <PageTitle>@Branding.Value.AppName</PageTitle>
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Features.Account.NotFound)">
@@ -22,5 +23,14 @@
     /// <summary>The roster_store_id cookie, read by App.razor on the page load.</summary>
     [Parameter] public string? RememberedStore { get; set; }
 
-    protected override void OnInitialized() => Selection.Load(RememberedStore);
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Selection.Load(RememberedStore);
+        // The interactive connection has its own services: the data layer reads and
+        // writes as the signed-in user here too.
+        if (AuthenticationState is not null && SignedInUser.FromPrincipal((await AuthenticationState).User) is { } user)
+            Access.Current = global::Roster.Data.Scope.AccessContext.ForUser(user.ToScopedUser());
+    }
 }

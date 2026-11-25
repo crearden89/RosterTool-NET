@@ -6,6 +6,8 @@ using Roster.Web.Tests.Infrastructure;
 
 namespace Roster.Web.Tests.Ui;
 
+using UiClasses = Roster.Web.Components.Ui.Ui;
+
 public class PrimitivesTests : UiTestContext
 {
     [Fact]
@@ -95,8 +97,8 @@ public class PrimitivesTests : UiTestContext
     {
         Assert.Equal(
             "inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--ui-violet)] px-3 py-1.5 text-xs bg-[var(--ui-ink)] text-white hover:bg-[#14147a]",
-            Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm));
-        Assert.EndsWith("px-4 py-2 text-sm bg-[var(--brand-orange)] text-white hover:brightness-95", Ui.ButtonClass(ButtonKind.Accent));
+            UiClasses.ButtonClass(ButtonKind.Primary, ButtonSize.Sm));
+        Assert.EndsWith("px-4 py-2 text-sm bg-[var(--brand-orange)] text-white hover:brightness-95", UiClasses.ButtonClass(ButtonKind.Accent));
     }
 
     [Fact]

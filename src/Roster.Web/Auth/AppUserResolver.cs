@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
+using Roster.Data.Users;
 
 namespace Roster.Web.Auth;
 
@@ -29,10 +30,11 @@ internal sealed class AppUserResolver(IUserDirectory directory, IOptions<AuthOpt
             return null;
         }
 
-        if (groupsDecide) user = user with { Tier = identity.GroupTier! };
-        if (string.IsNullOrWhiteSpace(user.DisplayName) && !string.IsNullOrWhiteSpace(identity.DisplayName))
-            user = user with { DisplayName = identity.DisplayName };
-        return user;
+        var signedIn = SignedInUser.From(user);
+        if (groupsDecide) signedIn = signedIn with { Tier = Roster.Data.Entities.Tiers.Key(identity.GroupTier!.Value) };
+        if (string.IsNullOrWhiteSpace(signedIn.DisplayName) && !string.IsNullOrWhiteSpace(identity.DisplayName))
+            signedIn = signedIn with { DisplayName = identity.DisplayName };
+        return signedIn;
     }
 
     /// <summary>

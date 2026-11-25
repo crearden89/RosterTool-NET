@@ -3,6 +3,7 @@
 // token and show nothing else (notFound) for an unknown one; here that check, and
 // the switch to require a device sign-in, are shared by both pages (owner P9).
 
+using Roster.Data.Scope;
 using Roster.Web.Auth;
 
 namespace Roster.Web.Kiosk;
@@ -71,6 +72,7 @@ public interface IKioskLinkCheck
 
 internal sealed class KioskLinkCheck(
     IStoreDirectory stores,
+    AccessContextAccessor access,
     Microsoft.Extensions.Options.IOptionsMonitor<KioskOptions> options,
     Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider authentication) : IKioskLinkCheck
 {
@@ -88,9 +90,12 @@ internal sealed class KioskLinkCheck(
         }
 
         var store = await stores.FindByKioskTokenAsync(token.Trim(), cancellationToken);
-        return store is null
-            ? new KioskLink(KioskLinkStatus.NotFound, null, open)
-            : new KioskLink(KioskLinkStatus.Open, new KioskStore(store.Id, store.Code, store.Name, store.State), open);
+        if (store is null) return new KioskLink(KioskLinkStatus.NotFound, null, open);
+
+        // From here the page reads and writes as that store's kiosk (the data layer's
+        // kiosk access), whoever the device is signed in as.
+        access.Current = AccessContext.ForKiosk(store.Id);
+        return new KioskLink(KioskLinkStatus.Open, new KioskStore(store.Id, store.Code, store.Name, store.State), open);
     }
 
     public string SignInUrl(Microsoft.AspNetCore.Components.NavigationManager navigation) =>

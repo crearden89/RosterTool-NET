@@ -1,7 +1,9 @@
 @* Every page under Features/ needs someone signed in with access to the app,
    unless it says otherwise: a Super User page adds
    @attribute [Authorize(Policy = Policies.SuperUser)]; a kiosk page and the
-   sign-in pages are @attribute [AllowAnonymous]. *@
+   sign-in pages are @attribute [AllowAnonymous].
+   The app's own namespaces are written global:: so a page area named like a
+   namespace (Features/RosterPage) can never hide them. *@
 @using System.Net.Http
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -12,11 +14,12 @@
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
-@using Roster.Engine.Core
-@using Roster.Web
-@using Roster.Web.Auth
-@using Roster.Web.Components
-@using Roster.Web.Components.Layout
-@using Roster.Web.Components.Ui
-@using Roster.Web.Kiosk
+@using global::Roster.Engine.Core
+@using global::Roster.Data.Scope
+@using global::Roster.Web
+@using global::Roster.Web.Auth
+@using global::Roster.Web.Components
+@using global::Roster.Web.Components.Layout
+@using global::Roster.Web.Components.Ui
+@using global::Roster.Web.Kiosk
 @attribute [Authorize]

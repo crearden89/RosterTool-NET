@@ -115,12 +115,21 @@ public class SignInModeTests
     [Fact]
     public async Task Windows_mode_asks_the_browser_for_its_windows_sign_in()
     {
+        // Negotiate needs a real connection (Kestrel), not the in-memory test server.
         await using var app = new AppFactory("Production", new Dictionary<string, string?> { ["Auth:Mode"] = "Windows" });
-        var client = app.Browser();
+        app.UseKestrel(0);
+        app.StartServer();
+        var address = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
+            .Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()!.Addresses.First();
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { BaseAddress = new Uri(address) };
 
         var first = await client.GetAsync("/account/sign-in?returnUrl=%2Foverview");
         Assert.Equal(HttpStatusCode.Redirect, first.StatusCode);
-        Assert.StartsWith("/account/windows-sign-in", first.Headers.Location!.OriginalString.Replace("http://localhost", ""));
+        Assert.Equal("/account/windows-sign-in", first.Headers.Location!.AbsolutePath);
+
+        var challenge = await client.GetAsync(first.Headers.Location);
+        Assert.Equal(HttpStatusCode.Unauthorized, challenge.StatusCode);
+        Assert.Contains(challenge.Headers.WwwAuthenticate, h => h.Scheme == "Negotiate");
     }
 
     internal static async Task SignInAsync(HttpClient client, string tier, string storeCode, string name = "")
