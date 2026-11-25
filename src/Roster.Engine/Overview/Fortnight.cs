@@ -86,7 +86,7 @@ public sealed record FortnightFigures(double? Forecast, double? Benchmark, doubl
 /// <summary>A day of the fortnight as the Review page counts it.</summary>
 public sealed record FortnightFigureDay(double? Forecast, double Benchmark, double Planned, double PlannedShifts);
 
-public static class Fortnight
+public static class FortnightCard
 {
     /// <summary>"Mon 23 Nov", read from the ISO date itself (no time zone involved).</summary>
     public static string DayLabel(DateOnly date) => Dates.AuDayLabel(date);

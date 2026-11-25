@@ -1,0 +1,125 @@
+@* Port of src/app/(app)/overview/YourStores.tsx.
+   "Your stores", for the EMSO, PA and DSO logins: every store they look after
+   (their area, region or regions - lib/reportingScope), among the stores the
+   signed-in login can read, with the fortnight being planned. Shows its
+   skeleton while it reads (the TypeScript streamed it in under Suspense). *@
+@inject IOverviewService Overview
+@inject ILogger<YourStores> Log
+
+@if (_loading)
+{
+    <div aria-busy="true">
+        <Card>
+            <p class="text-sm text-[var(--ui-muted)]">Loading your stores…</p>
+            <div class="mt-4 h-28 rounded-xl bg-[var(--ui-canvas)]"></div>
+        </Card>
+    </div>
+}
+else if (_view is not { } v)
+{
+    <Unavailable What="Your stores" />
+}
+else
+{
+    var rows = v.Rows;
+    <Card Padded="false">
+        <div class="px-5 pt-5 sm:px-6">
+            <SectionHeader>
+                <Title>Your stores</Title>
+                <Aside>Fortnight @FortnightCard.RangeLabel(v.Period, Period.PeriodEndFrom(v.Period)) · @rows.Count store@(rows.Count == 1 ? "" : "s")</Aside>
+            </SectionHeader>
+        </div>
+        @if (rows.Count == 0)
+        {
+            <p class="@($"{Ui.Table.Empty} border-t border-[var(--ui-line)]")">
+                @(v.NoRemit ? "Your login has no area or region set, so there are no stores to list." : "No stores to show.")
+            </p>
+        }
+        else
+        {
+            @* On a phone, one block per store: the table would scroll sideways. *@
+            <ul class="divide-y divide-[var(--ui-line)] border-t border-[var(--ui-line)] sm:hidden">
+                @foreach (var r in rows)
+                {
+                    <li @key="r.Id" class="@($"px-5 py-3 {(r.Id == SelectedStore ? "bg-[var(--ui-canvas)]" : "")}")">
+                        <p class="text-sm">
+                            <a href="@StoreHref(r.Id)" class="@Ui.LinkClass">@r.Code</a>
+                            <span class="text-[var(--ui-muted)]">· @r.Name</span>
+                        </p>
+                        <p class="mt-1.5 flex flex-wrap gap-1.5 text-xs">
+                            <Pill Tone="OverviewTones.Pill(r.Status.Plan.Tone)">Plan: @r.Status.Plan.Label</Pill>
+                            <Pill Tone="OverviewTones.Pill(r.Status.Review.Tone)">Review: @r.Status.Review.Label</Pill>
+                            <Pill Tone="OverviewTones.Pill(r.Status.Roster.Tone)">Roster: @r.Status.Roster.Label</Pill>
+                        </p>
+                        <p class="mt-1.5 text-xs text-[var(--ui-muted)]">
+                            <span class="@(r.Status.ErrorDays is > 0 ? "font-semibold text-[var(--ui-bad)]" : "")">Errors @ErrorText(r)</span>
+                            · Requests @r.Requests · OE month to date @DashboardText.OeMtd(r.OeMtd)
+                        </p>
+                    </li>
+                }
+            </ul>
+            <div class="hidden overflow-x-auto border-t border-[var(--ui-line)] sm:block">
+                <table class="@Ui.Table.Element">
+                    <thead class="@Ui.Table.Head">
+                        <tr>
+                            <th class="@Ui.Table.Th">Store</th>
+                            <th class="@Ui.Table.Th">Plan</th>
+                            <th class="@Ui.Table.Th">Review</th>
+                            <th class="@Ui.Table.Th">Roster</th>
+                            <th class="@($"{Ui.Table.Th} text-right")" title="Plan days the Plan page marks with an error">Errors</th>
+                            <th class="@($"{Ui.Table.Th} text-right")" title="Day-off requests waiting">Requests</th>
+                            <th class="@($"{Ui.Table.Th} text-right")" title="Operational efficiency, month to date">OE MTD</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in rows)
+                        {
+                            <tr @key="r.Id" class="@($"{Ui.Table.Row} {(r.Id == SelectedStore ? "bg-[var(--ui-canvas)]" : "")}")">
+                                <td class="@($"{Ui.Table.Td} whitespace-nowrap")">
+                                    <a href="@StoreHref(r.Id)" class="@Ui.LinkClass">@r.Code</a>
+                                    <span class="text-[var(--ui-muted)]">· @r.Name</span>
+                                </td>
+                                <td class="@Ui.Table.Td"><Pill Tone="OverviewTones.Pill(r.Status.Plan.Tone)">@r.Status.Plan.Label</Pill></td>
+                                <td class="@Ui.Table.Td"><Pill Tone="OverviewTones.Pill(r.Status.Review.Tone)">@r.Status.Review.Label</Pill></td>
+                                <td class="@Ui.Table.Td"><Pill Tone="OverviewTones.Pill(r.Status.Roster.Tone)">@r.Status.Roster.Label</Pill></td>
+                                <td class="@($"{Ui.Table.Td} text-right tabular-nums {(r.Status.ErrorDays is > 0 ? "font-semibold text-[var(--ui-bad)]" : "")}")">@ErrorText(r)</td>
+                                <td class="@($"{Ui.Table.Td} text-right tabular-nums")">@r.Requests</td>
+                                <td class="@($"{Ui.Table.Td} text-right tabular-nums")">@DashboardText.OeMtd(r.OeMtd)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <p class="border-t border-[var(--ui-line)] px-5 py-3 text-xs text-[var(--ui-muted)] sm:px-6">
+            Errors are the plan days the Plan page marks with an error. OE is month to date, as on each store&apos;s own
+            Dashboard. Pick a store to see its fortnight and what it has to do.
+        </p>
+    </Card>
+}
+
+@code {
+    private bool _loading = true;
+    private YourStoresView? _view;
+
+    [Parameter] public Guid? SelectedStore { get; set; }
+    [Parameter, EditorRequired] public DateOnly MonthStart { get; set; }
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+
+    private string StoreHref(Guid id) => $"/overview?store={id}&month={MonthStart.ToIso()}";
+
+    private static string ErrorText(AreaStoreRow r) => r.Status.ErrorDays is { } n ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _view = await Overview.LoadYourStoresAsync(Today);
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "Dashboard: your stores couldn't be read");
+        }
+        _loading = false;
+    }
+}
