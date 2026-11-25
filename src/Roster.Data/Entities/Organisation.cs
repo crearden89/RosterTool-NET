@@ -52,8 +52,11 @@ public class Store
     public Guid RegionId { get; set; }
     public string State { get; set; } = AuStates.Nsw;
     public DateTimeOffset CreatedAt { get; set; }
-    /// <summary>Secret per-store token behind the no-login kiosk links (0014). Unique.</summary>
-    public string KioskToken { get; set; } = "";
+    /// <summary>
+    /// Secret per-store token behind the no-login kiosk links (0014). Unique. A new store gets a
+    /// random one (32 hex characters, as md5(gen_random_uuid()) gave); rotate with <see cref="NewKioskToken"/>.
+    /// </summary>
+    public string KioskToken { get; set; } = NewKioskToken();
     public Guid? AreaId { get; set; }
     /// <summary>The store's DSO, kept as reference from the org extract (0016).</summary>
     public string? DsoName { get; set; }
@@ -61,6 +64,9 @@ public class Store
     public Region? Region { get; set; }
     public Area? Area { get; set; }
     public StoreAttributes? Attributes { get; set; }
+
+    /// <summary>32 random lower-case hex characters.</summary>
+    public static string NewKioskToken() => Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
     public List<StoreTradingHours> TradingHours { get; set; } = [];
 }
 

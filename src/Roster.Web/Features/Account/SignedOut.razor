@@ -1,0 +1,11 @@
+@* New: after signing out (the TypeScript app went back to its login page). *@
+@page "/account/signed-out"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout BareLayout
+
+<SignInFrame Title="Signed out">
+    <p class="text-base font-semibold text-[var(--ui-ink)]">You've signed out</p>
+    <p class="mt-1.5 mb-5 text-sm text-[var(--ui-muted)]">Sign in again with your company account.</p>
+    <a href="account/sign-in" class="@($"w-full !py-2.5 {Ui.ButtonClass(ButtonKind.Primary)}")">Sign In</a>
+</SignInFrame>

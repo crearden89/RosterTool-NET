@@ -26,11 +26,15 @@ public sealed partial class RosterDbContext
         if (await NonOpEntries.IgnoreQueryFilters().AnyAsync(n => n.EmployeeId == employeeId, cancellationToken))
             return "This team member has non-op entries and can't be deleted. Set them inactive instead.";
 
-        await using var tx = await Database.BeginTransactionAsync(cancellationToken);
         Employees.Remove(employee);
-        await SaveChangesAsync(cancellationToken); // the write check runs here, before anything is changed
+        // The write check first (it would otherwise run only inside SaveChanges, after the
+        // bulk update below), so a refused delete changes nothing at all.
+        await Scope.WriteScopeGuard.EnforceAsync(this, cancellationToken);
+
+        await using var tx = await Database.BeginTransactionAsync(cancellationToken);
         await StoreWalkNotes.IgnoreQueryFilters().Where(n => n.AssignedEmployeeId == employeeId)
             .ExecuteUpdateAsync(u => u.SetProperty(n => n.AssignedEmployeeId, (Guid?)null), cancellationToken);
+        await SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return null;
     }

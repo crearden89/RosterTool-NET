@@ -1,0 +1,25 @@
+@* Port of src/components/ui/Bars.tsx. *@
+@* A difference either side of a centre line. Value is the length of one half
+   (0-1); Side says which half. *@
+<span role="img" aria-label="@Label" class="relative block h-3 w-full rounded-full bg-[var(--ui-lavender)]">
+    <span aria-hidden="true" class="absolute inset-y-[-3px] left-1/2 w-px bg-[var(--ui-control)]"></span>
+    @if (Side != BarSide.None && _half > 0)
+    {
+        <span aria-hidden="true" class="absolute inset-y-0 min-w-1.5"
+              style="@(Side == BarSide.Above
+                  ? $"left: 50%; width: {Css.N(_half)}%; background: {AboveColour}; border-radius: 0 9999px 9999px 0"
+                  : $"right: 50%; width: {Css.N(_half)}%; background: {BelowColour}; border-radius: 9999px 0 0 9999px")"></span>
+    }
+</span>
+
+@code {
+    private double _half;
+
+    [Parameter] public double Value { get; set; }
+    [Parameter] public BarSide Side { get; set; } = BarSide.None;
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string AboveColour { get; set; } = "var(--ui-ink)";
+    [Parameter] public string BelowColour { get; set; } = "var(--ui-bad)";
+
+    protected override void OnParametersSet() => _half = Css.Clamp01(Value) * 50;
+}

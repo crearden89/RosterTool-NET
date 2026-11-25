@@ -1,0 +1,70 @@
+@* Port of src/app/(app)/plan/review/PlanReviewStatus.tsx.
+   The plan review's status with the way into it - on the Plan page (where it
+   replaces approving the plan day by day) and the Roster page (whose roster
+   waits for it: Plan -> Review -> Roster). On the Plan page an approved plan
+   shows as locked (owner decision R5), the way to unlock it being the Review. *@
+@using State = Roster.Web.Features.Review.PlanReviewState
+<span class="flex items-center gap-2">
+    <span class="@($"rounded-full px-2.5 py-1 text-xs font-medium {_chipClass}")" title="@(_lock ? LockTitle : null)">@_chipText</span>
+    <a href="@Href" class="rounded-lg border border-[var(--brand-navy)] bg-white px-3.5 py-2 text-sm font-semibold text-[var(--brand-navy)] hover:bg-[var(--brand-navy-tint)]">@_label</a>
+</span>
+
+@code {
+    private const string LockTitle =
+        "An approved plan can't be edited or regenerated. To change it, ask for it to be unlocked on the Review page.";
+
+    private bool _lock;
+    private string _chipText = "";
+    private string _chipClass = "";
+    private string _label = "";
+
+    /// <summary>The way into the review.</summary>
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+
+    [Parameter, EditorRequired] public State State { get; set; }
+
+    /// <summary>The store's own login: the link says what the store has to do.</summary>
+    [Parameter] public bool IsStore { get; set; }
+
+    /// <summary>On the Plan page: an approved plan reads as locked.</summary>
+    [Parameter] public bool ShowLock { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _lock = ShowLock && State == State.Approved;
+        (_chipText, _chipClass) = State switch
+        {
+            State.Approved => (_lock ? "Plan approved · locked" : "Plan approved", "bg-green-100 text-green-800"),
+            State.Submitted => ("Plan with the EMSO", "bg-[var(--brand-navy-tint)] text-[var(--brand-navy)]"),
+            State.Returned => ("Plan returned - action needed", "bg-[var(--brand-red-tint)] text-[var(--brand-red)]"),
+            _ => ("Plan not submitted", "bg-[var(--brand-surface)] text-[var(--brand-navy)]/70"),
+        };
+        _label = IsStore && State == State.NotSubmitted
+            ? "Review & submit"
+            : IsStore && State == State.Returned
+                ? "Answer the query"
+                : IsStore && _lock
+                    ? "Ask to unlock"
+                    : "Open review";
+    }
+
+    /// <summary>
+    /// Where a fortnight's plan review is up to (planReviewState). An approval only holds
+    /// for the plan it was made on - a regenerated or edited plan is back to unsubmitted.
+    /// </summary>
+    /// <param name="status">roster_reviews.status, or null with no review row.</param>
+    /// <param name="snapshotKey">roster_reviews.snapshot_key: the plan it was submitted or approved on.</param>
+    /// <param name="planVersion">The held plan's version, or null with no plan.</param>
+    public static PlanReviewState PlanReviewState(string? status, string? snapshotKey, int? planVersion)
+    {
+        if (status == ReviewStatusKeys.Approved)
+            return snapshotKey == PlanKey(planVersion) ? State.Approved : State.NotSubmitted;
+        if (status == ReviewStatusKeys.Submitted) return State.Submitted;
+        if (status == ReviewStatusKeys.Returned) return State.Returned;
+        return State.NotSubmitted;
+    }
+
+    // planKey (src/lib/review/server.ts): what a submission and an approval are recorded
+    // against, the held plan's version. The data layer's own copy replaces this once it lands.
+    private static string PlanKey(int? planVersion) => $"plan:{planVersion ?? 0}";
+}

@@ -1,0 +1,880 @@
+/* Port of src/app/floor/[token]/floor.module.css: the Floor Display's kiosk design,
+   loaded by Components/Layout/KioskLayout.razor only. A CSS module's class (s.screen,
+   s.otherDay) is the same class here with the prefix floor- (floor-screen,
+   floor-otherDay); the brand tokens are --brand-* (the TypeScript app's --aldi-*).
+   The Load Planner (load.css) uses these too, as the TypeScript app does. */
+
+/* The Floor Display wall screen.
+
+   Laid out on a 1920 x 1080 canvas and scaled to the display: every size is a
+   multiple of --u, one canvas pixel, so the whole screen keeps its proportions
+   on a 1920 x 1080 wall screen, a 1366 x 768 laptop or a 1280 x 800 tablet,
+   with no page scroll. Small text has a floor in real pixels so it stays
+   readable on the smaller screens. The row sizes (--n, --fs-name, ...) are set
+   by the page from rowScale (floorModel.ts) for the number of people on. */
+
+.floor-screen {
+  --u: min(calc(100vw / 1920), calc(100dvh / 1080));
+  /* The app's page tokens (docs/design.md) where the screen shares a role
+     with the rest of the app; the screen's own values where it does not. */
+  --ink: var(--ui-ink);
+  --ink-2: #33366a;
+  --muted: var(--ui-muted);
+  --faint: var(--ui-faint);
+  --line: var(--ui-line);
+  --control: var(--ui-control);
+  --focus: var(--ui-violet);
+  --track: #dfe1ea;
+  --surface: #f3f4f9;
+  --chip: var(--ui-lavender);
+  --wash: var(--brand-yellow-wash);
+  --premium: var(--brand-red-tint);
+  --ncol: calc(var(--u) * 212);
+  --pcol: calc(var(--u) * 262);
+  --gap: calc(var(--u) * 18);
+  --lead: calc(var(--ncol) + var(--pcol) + 2 * var(--gap));
+  --leg-h: max(26px, calc(var(--u) * 38));
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+/* Another day: no now/next column, so the timeline takes its room. */
+.floor-screen.floor-otherDay {
+  --pcol: 0px;
+  --lead: calc(var(--ncol) + var(--gap));
+}
+
+/* ── Header ── */
+.floor-head {
+  flex: none;
+  height: calc(var(--u) * 80);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 24);
+  padding: 0 calc(var(--u) * 44);
+  border-bottom: 2px solid var(--line);
+  white-space: nowrap;
+}
+.floor-head h1 {
+  margin: 0;
+  font-size: max(18px, calc(var(--u) * 34));
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.floor-when {
+  font-size: max(14px, calc(var(--u) * 23));
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.floor-store {
+  margin-left: auto;
+  font-size: max(12px, calc(var(--u) * 19));
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.floor-pill {
+  flex: none;
+  background: var(--chip);
+  color: var(--ink);
+  font-size: max(11px, calc(var(--u) * 16));
+  font-weight: 650;
+  border-radius: 999px;
+  padding: calc(var(--u) * 7) calc(var(--u) * 17);
+}
+.floor-pill.floor-otherDayPill {
+  background: var(--ui-gold);
+}
+.floor-back {
+  flex: none;
+  font-size: max(14px, calc(var(--u) * 17));
+}
+
+/* ── Out-of-date banner: loud on purpose ── */
+.floor-warn {
+  flex: none;
+  margin: calc(var(--u) * 12) calc(var(--u) * 44) 0;
+  background: var(--brand-red);
+  color: #ffffff;
+  border-radius: calc(var(--u) * 14);
+  padding: calc(var(--u) * 9) calc(var(--u) * 26) calc(var(--u) * 11);
+  line-height: 1.2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: calc(var(--u) * 28);
+  row-gap: calc(var(--u) * 2);
+  align-items: baseline;
+}
+.floor-warn b {
+  font-size: max(15px, calc(var(--u) * 25));
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 12);
+}
+.floor-warn small {
+  font-size: max(11px, calc(var(--u) * 15));
+  opacity: 0.92;
+  justify-self: end;
+  text-align: right;
+}
+.floor-warn span {
+  grid-column: 1 / -1;
+  font-size: max(12px, calc(var(--u) * 18));
+  font-weight: 600;
+}
+
+/* ── Main: the rows on the left, admin tasks and walk notes on the right ── */
+.floor-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--u) * 460);
+  gap: calc(var(--u) * 40);
+  padding: calc(var(--u) * 12) calc(var(--u) * 44) 0;
+}
+.floor-left {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.floor-grid {
+  display: grid;
+  grid-template-columns: var(--ncol) var(--pcol) minmax(0, 1fr);
+  column-gap: var(--gap);
+  align-items: center;
+}
+.floor-otherDay .floor-grid {
+  grid-template-columns: var(--ncol) minmax(0, 1fr);
+}
+
+/* The axis: column heads, hour labels, the now tag. Its scrollbar gutter
+   matches the rows', so the hours stay over the bars when the rows scroll. */
+.floor-axis {
+  flex: none;
+  height: calc(var(--u) * 48);
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.floor-colhead {
+  align-self: end;
+  padding-bottom: calc(var(--u) * 8);
+  font-size: max(10px, calc(var(--u) * 13));
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.floor-ticks {
+  position: relative;
+  height: 100%;
+}
+.floor-tick {
+  position: absolute;
+  bottom: calc(var(--u) * 6);
+  transform: translateX(-50%);
+  font-size: max(11px, calc(var(--u) * 16));
+  font-weight: 650;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.floor-nowtag {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #ffffff;
+  border-radius: calc(var(--u) * 7);
+  padding: calc(var(--u) * 1) calc(var(--u) * 9);
+  font-size: max(11px, calc(var(--u) * 15));
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  z-index: 3;
+}
+.floor-bandtag {
+  position: absolute;
+  top: calc(var(--u) * 3);
+  right: 0;
+  padding-left: calc(var(--u) * 40);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: max(9px, calc(var(--u) * 12.5));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7a6000;
+  z-index: 2;
+}
+.floor-axisnow {
+  position: absolute;
+  top: calc(var(--u) * 20);
+  bottom: 0;
+  width: calc(var(--u) * 3);
+  margin-left: calc(var(--u) * -1.5);
+  background: var(--ink);
+  z-index: 2;
+}
+
+/* The rows share the height left between the axis and the legend: as tall as
+   the room allows up to --max-row, down to --min-row, then they scroll. */
+.floor-body {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+}
+.floor-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.floor-rows {
+  position: relative;
+}
+.floor-row {
+  /* The floor is also in real pixels, for the text floors above it; the
+     ceiling follows the screen's height, so a 16:10 tablet's extra height
+     goes to the rows. */
+  height: clamp(
+    max(30px, calc(var(--u) * var(--min-row))),
+    calc((100cqh - var(--leg-h) - 2px) / var(--n)),
+    calc(var(--max-row) * 100dvh / 1080)
+  );
+  min-height: max(30px, calc(var(--u) * var(--min-row)));
+  border-top: 1px solid var(--line);
+  position: relative;
+  z-index: 1;
+  container: row / size;
+}
+.floor-name {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  line-height: 1.1;
+}
+.floor-name b {
+  font-size: max(13px, calc(var(--u) * var(--fs-name)));
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 7);
+}
+.floor-name b span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.floor-name em {
+  flex: none;
+  font-style: normal;
+  font-size: max(9px, calc(var(--u) * var(--fs-tag)));
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--chip);
+  border-radius: calc(var(--u) * 6);
+  padding: calc(var(--u) * 1) calc(var(--u) * 6);
+  color: var(--ink-2);
+}
+.floor-name small {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: max(11px, calc(var(--u) * var(--fs-time)));
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.floor-now {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  row-gap: max(1.5px, calc(var(--u) * var(--now-gap)));
+}
+.floor-task {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: max(14px, calc(var(--u) * var(--pill-h)));
+  line-height: 1;
+  padding: 0 calc(var(--u) * var(--pill-px));
+  border-radius: 999px;
+  font-size: max(11px, calc(var(--u) * var(--fs-pill)));
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.floor-task.floor-out {
+  background: #ffffff;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 2px var(--track);
+  font-weight: 650;
+}
+/* The next changes start where the pill's text starts. */
+.floor-next {
+  max-width: 100%;
+  padding-left: calc(var(--u) * var(--pill-px));
+  line-height: 1.15;
+  font-size: max(11px, calc(var(--u) * var(--fs-next)));
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+/* A row too short for the pill and the line under it (a very busy day on a
+   small screen) keeps the pill; the changes still show on the bar. */
+@container row (max-height: 31.7px) {
+  .floor-next {
+    display: none;
+  }
+}
+.floor-line {
+  position: relative;
+  height: 100%;
+}
+.floor-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--track);
+  border-radius: 2px;
+}
+.floor-bar {
+  position: absolute;
+  top: 50%;
+  height: calc(var(--u) * var(--bar));
+  transform: translateY(-50%);
+  border-radius: calc(var(--u) * 5);
+}
+
+/* Under the bars: premium time, the next-2-hours band over it (as on the
+   roster grid), the hour lines. Over the bars: the line at the current time. */
+.floor-under,
+.floor-over {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--lead);
+  right: 0;
+  pointer-events: none;
+}
+.floor-under {
+  z-index: 0;
+}
+.floor-over {
+  z-index: 2;
+}
+.floor-premium {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--premium);
+}
+.floor-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--wash);
+}
+.floor-hour {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.floor-nowline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--u) * 3);
+  margin-left: calc(var(--u) * -1.5);
+  background: var(--ink);
+}
+
+.floor-legend {
+  flex: none;
+  height: var(--leg-h);
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: calc(var(--u) * 20);
+  align-items: center;
+  border-top: 1px solid var(--line);
+  font-size: max(11px, calc(var(--u) * 15));
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.floor-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 7);
+}
+.floor-legend i {
+  display: inline-block;
+  width: max(10px, calc(var(--u) * 15));
+  height: max(10px, calc(var(--u) * 15));
+  border-radius: calc(var(--u) * 4);
+}
+.floor-legend i.floor-keyNow {
+  width: calc(var(--u) * 3);
+  height: max(12px, calc(var(--u) * 18));
+  border-radius: 2px;
+  background: var(--ink);
+}
+.floor-legend i.floor-keyBand {
+  width: calc(var(--u) * 26);
+  background: var(--wash);
+  box-shadow: inset 0 0 0 1px #efdf9a;
+}
+.floor-legend i.floor-keyPremium {
+  width: calc(var(--u) * 26);
+  background: var(--premium);
+  box-shadow: inset 0 0 0 1px #f0bcbc;
+}
+
+.floor-empty {
+  margin-top: calc(var(--u) * 24);
+  border-radius: calc(var(--u) * 16);
+  background: var(--surface);
+  padding: calc(var(--u) * 48);
+  text-align: center;
+  font-size: max(15px, calc(var(--u) * 26));
+  font-weight: 600;
+  color: var(--ink);
+}
+.floor-empty small {
+  display: block;
+  margin-top: calc(var(--u) * 8);
+  font-size: max(12px, calc(var(--u) * 18));
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ── The right-hand column ── */
+.floor-side {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 10);
+  padding-top: calc(var(--u) * 6);
+}
+.floor-side h2 {
+  margin: 0;
+  font-size: max(15px, calc(var(--u) * 24));
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 12);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.floor-side h2 small {
+  font-size: max(12px, calc(var(--u) * 16));
+  font-weight: 500;
+  color: var(--muted);
+}
+.floor-tasks {
+  display: grid;
+  flex: none;
+}
+.floor-check {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 28) minmax(0, 1fr);
+  column-gap: calc(var(--u) * 14);
+  align-items: center;
+  padding: calc(var(--u) * 5) 0;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+button.floor-check {
+  cursor: pointer;
+}
+button.floor-check:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.floor-box {
+  grid-row: span 2;
+  width: calc(var(--u) * 28);
+  height: calc(var(--u) * 28);
+  border-radius: calc(var(--u) * 7);
+  box-shadow: inset 0 0 0 2px var(--control);
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+}
+.floor-check.floor-done .floor-box {
+  background: var(--ink);
+  box-shadow: none;
+}
+.floor-box svg {
+  width: 70%;
+  height: 70%;
+}
+.floor-check b {
+  font-size: max(13px, calc(var(--u) * 19.5));
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.floor-check span {
+  font-size: max(11px, calc(var(--u) * 14.5));
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.floor-check.floor-done b {
+  color: #8d90ab;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  font-weight: 500;
+}
+.floor-check.floor-done span {
+  color: #9a9db6;
+}
+.floor-notesHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 16);
+  margin-top: calc(var(--u) * 8);
+}
+.floor-notes {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  align-content: start;
+  gap: calc(var(--u) * 10);
+  padding-bottom: calc(var(--u) * 4);
+}
+.floor-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: calc(var(--u) * 14);
+  align-items: center;
+  background: var(--surface);
+  border-radius: calc(var(--u) * 14);
+  padding: calc(var(--u) * 12) calc(var(--u) * 14) calc(var(--u) * 12) calc(var(--u) * 18);
+}
+.floor-note b {
+  display: block;
+  font-size: max(13px, calc(var(--u) * 19));
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.floor-note span {
+  font-size: max(11px, calc(var(--u) * 14.5));
+  color: var(--muted);
+}
+.floor-quiet {
+  font-size: max(12px, calc(var(--u) * 16));
+  color: var(--muted);
+}
+.floor-error {
+  font-size: max(12px, calc(var(--u) * 15));
+  font-weight: 600;
+  color: var(--brand-red);
+}
+.floor-btn {
+  font-size: max(13px, calc(var(--u) * 17));
+  font-weight: 650;
+  line-height: 1;
+  border-radius: calc(var(--u) * 11);
+  padding: calc(var(--u) * 12) calc(var(--u) * 20);
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 10);
+  white-space: nowrap;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+.floor-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.floor-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.floor-solid {
+  background: var(--ink);
+  color: #ffffff;
+}
+.floor-ghost {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--control);
+}
+.floor-btn svg {
+  width: max(14px, calc(var(--u) * 20));
+  height: max(14px, calc(var(--u) * 20));
+  flex: none;
+}
+
+/* ── The Load Planner strip ── */
+.floor-load {
+  flex: none;
+  margin: calc(var(--u) * 12) calc(var(--u) * 44) calc(var(--u) * 14);
+  height: calc(var(--u) * 88);
+  background: var(--surface);
+  border-radius: calc(var(--u) * 16);
+  display: grid;
+  grid-template-columns: calc(var(--u) * 240) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--u) * 30);
+  padding: 0 calc(var(--u) * 28);
+  overflow: hidden;
+}
+a.floor-load {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.floor-load:active {
+  background: var(--chip);
+}
+a.floor-load:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.floor-loadTitle {
+  display: grid;
+  gap: calc(var(--u) * 2);
+  white-space: nowrap;
+}
+.floor-loadTitle b {
+  font-size: max(13px, calc(var(--u) * 21));
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 10);
+}
+.floor-loadTitle b svg {
+  width: calc(var(--u) * 26);
+  height: calc(var(--u) * 20);
+  flex: none;
+}
+.floor-loadTitle b svg.floor-open {
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 16);
+  color: var(--muted);
+}
+.floor-loadTitle span {
+  font-size: max(11px, calc(var(--u) * 16));
+  color: var(--muted);
+}
+.floor-pallets {
+  display: grid;
+  gap: calc(var(--u) * 8);
+  min-width: 0;
+}
+.floor-squares {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: calc(var(--u) * 4);
+}
+.floor-squares i {
+  flex: none;
+  width: calc(var(--u) * var(--sq));
+  height: calc(var(--u) * var(--sq));
+  border-radius: calc(var(--u) * 4);
+}
+.floor-squares i.floor-gap {
+  width: calc(var(--u) * 8);
+}
+.floor-squares.floor-twoLines {
+  flex-wrap: wrap;
+  row-gap: calc(var(--u) * 4);
+  max-height: calc(var(--u) * (2 * var(--sq) + 4));
+}
+.floor-types {
+  font-size: max(11px, calc(var(--u) * 14.5));
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.floor-types b {
+  color: var(--ink-2);
+  font-weight: 650;
+}
+.floor-loadNone {
+  font-size: max(13px, calc(var(--u) * 19));
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.floor-loadEnd {
+  display: grid;
+  gap: calc(var(--u) * 2);
+  text-align: right;
+  white-space: nowrap;
+}
+.floor-loadEnd b {
+  font-size: max(16px, calc(var(--u) * 30));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.floor-loadEnd span {
+  font-size: max(11px, calc(var(--u) * 14.5));
+  color: var(--muted);
+}
+
+/* ── The walk notes view: a form for a tablet held in one hand, so real
+   pixels rather than the wall screen's scale ── */
+.floor-notesView {
+  --u: clamp(0.55px, calc(100vw / 1600), 1px);
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
+}
+.floor-notesView .floor-head {
+  height: auto;
+  min-height: calc(var(--u) * 80);
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding-block: 10px;
+}
+.floor-form {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+  display: grid;
+  gap: 28px;
+  font-size: 17px;
+}
+.floor-form h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.floor-form h2 small {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.floor-card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 20px;
+}
+.floor-form textarea,
+.floor-form select {
+  width: 100%;
+  border: 2px solid var(--control);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 18px;
+}
+.floor-form textarea {
+  padding: 12px 14px;
+  resize: vertical;
+}
+.floor-form select {
+  min-height: 48px;
+  padding: 0 12px;
+  width: auto;
+  min-width: 220px;
+}
+.floor-formRow {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+.floor-formRow label {
+  display: grid;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.floor-form .floor-btn {
+  font-size: 17px;
+  min-height: 48px;
+  border-radius: 12px;
+  padding: 0 22px;
+}
+.floor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.floor-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 14px 16px 14px 20px;
+}
+.floor-list li > div {
+  flex: 1;
+  min-width: 12rem;
+}
+.floor-list p {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.floor-list p + p {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.floor-list li.floor-doneNote p {
+  color: #8d90ab;
+  text-decoration: line-through;
+  font-weight: 500;
+}
+.floor-hint {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+}

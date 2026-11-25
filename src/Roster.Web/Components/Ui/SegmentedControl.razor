@@ -1,0 +1,60 @@
+@* Port of src/components/ui/SegmentedControl.tsx. *@
+@typeparam T
+@* A choice of two or three, side by side. Real radio buttons under the
+   segments, so it works in a plain form (give it a Name and a DefaultValue; the
+   checked segment is styled with CSS, no script needed) or as a controlled
+   control (Value with OnChange or @bind-Value). The arrow keys move between
+   the segments, as they do between any radio buttons. *@
+<div role="radiogroup" aria-label="@Label" class="@Ui.Cx("inline-flex rounded-xl bg-[var(--ui-lavender)] p-1", Class)">
+    @foreach (var o in Options)
+    {
+        <label @key="o.Value" class="@Ui.Cx("cursor-pointer rounded-lg font-semibold whitespace-nowrap text-[var(--ui-muted)] transition-colors hover:text-[var(--ui-ink)] has-[:checked]:bg-white has-[:checked]:text-[var(--ui-ink)] has-[:checked]:shadow-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[color:var(--ui-violet)]", Pad)">
+            <input type="radio" class="sr-only" name="@GroupName" value="@ValueText(o.Value)"
+                   checked="@IsChecked(o.Value)" @onchange="() => Choose(o.Value)" />
+            @o.Label
+        </label>
+    }
+</div>
+
+@code {
+    private readonly string _generatedName = $"seg-{Guid.NewGuid():N}";
+
+    /// <summary>What the choice is about, for screen readers ("Cost basis").</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter, EditorRequired] public IReadOnlyList<SegmentOption<T>> Options { get; set; } = [];
+
+    /// <summary>The form field the choice is sent as.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Controlled: the chosen value (with OnChange or @bind-Value).</summary>
+    [Parameter] public T? Value { get; set; }
+
+    /// <summary>Uncontrolled: the value chosen when the page opens.</summary>
+    [Parameter] public T? DefaultValue { get; set; }
+
+    [Parameter] public EventCallback<T> OnChange { get; set; }
+
+    /// <summary>For @bind-Value.</summary>
+    [Parameter] public EventCallback<T> ValueChanged { get; set; }
+
+    [Parameter] public ControlSize Size { get; set; } = ControlSize.Md;
+    [Parameter] public string? Class { get; set; }
+
+    private bool Controlled => OnChange.HasDelegate || ValueChanged.HasDelegate;
+
+    // Radios without a shared name are not one group (no arrow keys between them).
+    private string GroupName => Name ?? _generatedName;
+
+    private string Pad => Size == ControlSize.Sm ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm";
+
+    private bool IsChecked(T value) => EqualityComparer<T>.Default.Equals(value, Controlled ? Value : DefaultValue);
+
+    private static string ValueText(T value) => value?.ToString() ?? "";
+
+    private async Task Choose(T value)
+    {
+        if (OnChange.HasDelegate) await OnChange.InvokeAsync(value);
+        if (ValueChanged.HasDelegate) await ValueChanged.InvokeAsync(value);
+    }
+}

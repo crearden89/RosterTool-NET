@@ -1,0 +1,8 @@
+@* Port of src/components/ui/primitives.tsx. *@
+@* Small grey capitals: the label over a figure, a column, a week. *@
+<p class="@Ui.Cx("text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ui-faint)]", Class)">@ChildContent</p>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+}
