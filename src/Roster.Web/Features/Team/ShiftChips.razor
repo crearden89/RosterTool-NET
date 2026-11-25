@@ -1,0 +1,21 @@
+@* Port of ShiftChips in src/app/(app)/setup/staff/FixedRosters.tsx: a week's
+   locked shifts as small chips, Monday first. *@
+@if (Rows.Count == 0)
+{
+    <span class="text-xs text-[var(--ui-muted)]">No locked shifts</span>
+}
+else
+{
+    <span class="flex flex-wrap gap-1.5">
+        @foreach (var f in Js.Sorted(Rows, (a, b) => a.DayOfWeek - b.DayOfWeek))
+        {
+            <span @key="f.Id" class="rounded-full bg-[var(--ui-lavender)] px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-[var(--ui-ink)]">
+                @Period.DayLabels[f.DayOfWeek] @TeamRules.Hm(f.StartTime)–@TeamRules.Hm(f.EndTime)
+            </span>
+        }
+    </span>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<FixedShift> Rows { get; set; } = [];
+}

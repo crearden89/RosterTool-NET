@@ -1,0 +1,113 @@
+@* Port of PayRulesSection in src/app/(app)/admin/rules/rostering/RulesClient.tsx.
+   Per-role pay-rule thresholds. Stored on break_rules; edited here because they
+   belong with the rostering rules in the client's model. A blank cell switches
+   the rule off for that role - which is how the salaried SM/ASM are kept out of
+   overtime and double time. Saved as one table (SavePayRulesAsync) from the
+   save bar. *@
+@inject IRosteringRulesService Service
+
+<SettingsSection Id="pay-rules" Flush="true">
+    <Title>Pay rules</Title>
+    <Purpose>When work stops being paid at the ordinary rate, by role.</Purpose>
+    <ChildContent>
+        <SaveSlot Id="pay-rules" Changes="Changes" Save="SaveAsync" Discard="Discard" />
+        <p class="px-5 pb-4 text-sm text-[var(--ui-muted)] sm:px-6">
+            Overtime pays 1.5x - or 1.9x when the hours fall in the Sunday early-morning band - and a
+            shift after a too-short break pays double time until a full break happens. Blank = the rule
+            is off for that role (the salaried SM/ASM). Under-contract hours are always paid up as
+            make-up pay, except for the SM/ASM. The multipliers and the Sunday band live on the Pay Rate
+            Table.
+        </p>
+        <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Role</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Overtime after (paid h / shift)</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Overtime after (paid h / fortnight)</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Double time when break under (h)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _draft.Value)
+                    {
+                        var role = r.Role;
+                        <tr @key="role" class="@Ui.Table.Row">
+                            <td class="@($"{Ui.Table.Td} font-semibold")">@role</td>
+                            <td class="@($"{Ui.Table.Td} text-right")">@Cell(role, r.OtShiftAfterHours, "overtime after hours in a shift", (x, v) => x with { OtShiftAfterHours = v })</td>
+                            <td class="@($"{Ui.Table.Td} text-right")">@Cell(role, r.OtPeriodAfterHours, "overtime after hours in a fortnight", (x, v) => x with { OtPeriodAfterHours = v })</td>
+                            <td class="@($"{Ui.Table.Td} text-right")">@Cell(role, r.DoubleTimeUnderGapHours, "double time when the break is under", (x, v) => x with { DoubleTimeUnderGapHours = v })</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_error is not null)
+        {
+            <div class="border-t border-[var(--ui-line)] px-5 py-3 sm:px-6">
+                <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private FormDraft<IReadOnlyList<PayRuleInput>> _draft = new([]);
+    private bool _started;
+    private string? _error;
+
+    [Parameter, EditorRequired] public IReadOnlyList<PayRuleInput> Initial { get; set; } = [];
+
+    /// <summary>After a save: the page reads the rules again.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private int Changes => SaveBar.CountChanged(_draft.Base, _draft.Value,
+        r => r.OtShiftAfterHours, r => r.OtPeriodAfterHours, r => r.DoubleTimeUnderGapHours);
+
+    protected override void OnParametersSet()
+    {
+        if (!_started)
+        {
+            _draft = new FormDraft<IReadOnlyList<PayRuleInput>>(Initial);
+            _started = true;
+        }
+        else _draft.Sync(Initial);
+    }
+
+    private RenderFragment Cell(string role, double? value, string label, Func<PayRuleInput, double?, PayRuleInput> with) =>
+        @<input type="number" step="0.5" placeholder="off" aria-label="@($"{role} {label}")" value="@(value is { } n ? Js.NumberToString(n) : "")"
+                @oninput="e => Set(role, x => with(x, Blank(e)))" class="@($"w-20 text-right {Ui.CompactField}")" />;
+
+    // A blank cell is null (the rule is off); anything else is Number(text).
+    private static double? Blank(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString() ?? "";
+        return text == "" ? null : Js.Number(text);
+    }
+
+    private void Set(string role, Func<PayRuleInput, PayRuleInput> patch) =>
+        _draft.Set(rows => rows.Select(r => r.Role == role ? patch(r) : r).ToList());
+
+    private async Task<bool> SaveAsync()
+    {
+        var sent = _draft.Value;
+        var res = await Service.SavePayRulesAsync(sent);
+        if (!res.Ok)
+        {
+            _error = $"Error: {res.Error}";
+            StateHasChanged();
+            return false;
+        }
+        _error = null;
+        _draft.Commit(sent);
+        await OnSaved.InvokeAsync();
+        StateHasChanged();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _error = null;
+    }
+}

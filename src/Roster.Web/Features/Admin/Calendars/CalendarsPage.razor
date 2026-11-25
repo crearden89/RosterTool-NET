@@ -1,0 +1,31 @@
+@page "/admin/calendars"
+@* Port of src/app/(app)/admin/calendars/page.tsx. *@
+@inject ICalendarsService Service
+
+<div>
+    <SettingsHeader Area="Stores" Title="Holiday / School-Term Calendar">
+        <Subtitle>The public holidays and school terms the planner reads · every store, by state, with local holidays per store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @if (_view is not null)
+        {
+            <CalendarsClient View="_view" Reload="ReloadAsync" />
+        }
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("national", "National holidays"),
+        new("state", "State holidays"),
+        new("local", "Local holidays"),
+        new("terms", "School terms"),
+    ];
+
+    private CalendarsView? _view;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync() => _view = await Service.LoadAsync();
+}

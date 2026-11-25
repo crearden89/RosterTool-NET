@@ -1,0 +1,131 @@
+@* Port of CustomRules in src/app/(app)/admin/rules/rostering/RulesClient.tsx.
+   Extra key/value entries, each added or deleted on its own, as before. *@
+@inject IRosteringRulesService Service
+
+<LeaveGuard Id="custom-rule" Dirty="@(_newKey != "" || _newValue != "" || _newNote != "")" />
+<SettingsSection Id="custom-rules" Flush="true">
+    <Title>Custom rules</Title>
+    <Purpose>Extra key/value entries for future engine rules. Anything not in the tables above is stored and shown but not yet read by the engines.</Purpose>
+    <ChildContent>
+        <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Key</th>
+                        <th class="@Ui.Table.Th">Value</th>
+                        <th class="@Ui.Table.Th">Note</th>
+                        <th class="@Ui.Table.Th"><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Custom.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="4" class="@Ui.Table.Empty">No custom rules.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var o in Custom)
+                        {
+                            var key = o.Key;
+                            <tr @key="key" class="@Ui.Table.Row">
+                                <td class="@($"{Ui.Table.Td} font-mono text-xs")">@key</td>
+                                <td class="@Ui.Table.Td">@Js.NumberToString(o.Value)</td>
+                                <td class="@($"{Ui.Table.Td} text-[var(--ui-muted)]")">@(o.Note ?? "-")</td>
+                                <td class="@($"{Ui.Table.Td} text-right")">
+                                    <button type="button" @onclick="() => DeleteAsync(key)" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">Delete</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    <tr class="@($"{Ui.Table.Row} bg-[var(--ui-canvas)]")">
+                        <td class="@Ui.Table.Td">
+                            <input placeholder="rule_key" aria-label="New rule key" value="@_newKey" @oninput="e => _newKey = e.Value?.ToString() ?? string.Empty"
+                                   class="@($"w-40 font-mono text-xs {Ui.CompactField}")" />
+                        </td>
+                        <td class="@Ui.Table.Td">
+                            <input type="number" placeholder="0" aria-label="New rule value" value="@_newValue" @oninput="e => _newValue = e.Value?.ToString() ?? string.Empty"
+                                   class="@($"w-24 {Ui.CompactField}")" />
+                        </td>
+                        <td class="@Ui.Table.Td">
+                            <input placeholder="What is this for?" aria-label="What the new rule is for" value="@_newNote" @oninput="e => _newNote = e.Value?.ToString() ?? string.Empty"
+                                   class="@($"w-full {Ui.CompactField}")" />
+                        </td>
+                        <td class="@($"{Ui.Table.Td} text-right")">
+                            <button type="button" @onclick="AddCustomAsync" disabled="@_adding" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">@(_adding ? "Adding…" : "Add")</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        @if (_addErr is not null)
+        {
+            <div class="border-t border-[var(--ui-line)] px-5 py-3 sm:px-6">
+                <FormMessage Tone="FormMessageTone.Error">@_addErr</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private string _newKey = "";
+    private string _newValue = "";
+    private string _newNote = "";
+    private string? _addErr;
+    private bool _adding;
+
+    /// <summary>The overrides whose key is not a built-in rule.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<RuleOverrideRow> Custom { get; set; } = [];
+
+    [Parameter, EditorRequired] public IReadOnlySet<string> KnownKeys { get; set; } = new HashSet<string>();
+
+    /// <summary>After a change: the page reads the rules again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task AddCustomAsync()
+    {
+        var v = Js.Number(_newValue);
+        var key = Js.Trim(_newKey);
+        if (key == "")
+        {
+            _addErr = "Enter a rule key.";
+            return;
+        }
+        if (KnownKeys.Contains(key))
+        {
+            _addErr = "That key is a built-in rule - edit it in the table above.";
+            return;
+        }
+        if (!double.IsFinite(v))
+        {
+            _addErr = "Enter a numeric value.";
+            return;
+        }
+        _addErr = null;
+        _adding = true;
+        try
+        {
+            var note = Js.Trim(_newNote);
+            var res = await Service.SetRuleOverrideAsync(key, v, note == "" ? null : note);
+            if (!res.Ok) _addErr = res.Error ?? "Save failed.";
+            else
+            {
+                _newKey = "";
+                _newValue = "";
+                _newNote = "";
+                await OnChanged.InvokeAsync();
+            }
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private async Task DeleteAsync(string key)
+    {
+        await Service.ClearRuleOverrideAsync(key);
+        await OnChanged.InvokeAsync();
+    }
+}

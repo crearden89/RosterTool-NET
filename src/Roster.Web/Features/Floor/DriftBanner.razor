@@ -1,0 +1,22 @@
+@* Port of DriftBanner in src/app/floor/[token]/FloorScreen.tsx.
+   Deliberately loud: this display hangs on a wall and is read at a glance from
+   across a room. If the plan moved on after this roster was published,
+   everyone walking past needs to see that before they act on the times below. *@
+
+<div class="floor-warn" role="alert">
+    <b>
+        <span aria-hidden="true">&#x26A0;</span>
+        This roster may be out of date
+    </b>
+    <small>
+        Approved @Drift.Approved · plan last changed @Drift.Changed
+    </small>
+    <span>
+        The plan was changed after this roster was approved. Check with your Store Manager before
+        relying on the times below.
+    </span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DriftNote Drift { get; set; } = default!;
+}

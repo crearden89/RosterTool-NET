@@ -37,3 +37,9 @@ public sealed record PlanShiftEdit(string SlotId, string PlanRole, double Start,
 
 /// <summary>The page's query string, as the TypeScript page's <c>searchParams</c> carries it.</summary>
 public sealed record PlanPageQuery(string? Store = null, string? Date = null, string? View = null, string? Period = null);
+
+/// <summary>
+/// Which of the two the shared pieces act for: the plan (Plan page) or the roster (Roster
+/// page) - FilterBar's <c>generates</c>, ApproveButtons' <c>kind</c>, PlanStatusChip's <c>page</c>.
+/// </summary>
+public enum PlanOrRoster { Plan, Roster }

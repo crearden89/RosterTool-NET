@@ -1,0 +1,68 @@
+@* Port of Chooser in src/app/load/[token]/LoadKiosk.tsx.
+   Tap a person's job, pick one of today's load types or Auto. Closes on a
+   pick, Escape, or a tap anywhere else. *@
+@using global::Roster.Engine.Load
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div @ref="root" class="load-chooser @(Up ? "load-chooserUp" : "")" role="dialog" aria-label="@($"{Crew.Name}'s job today")">
+    <p>Pin @Crew.Name.Split(' ')[0] to a job for today, or leave it to the planner.</p>
+    <div class="load-chips">
+        <button type="button" class="load-chip" aria-pressed="@(current is null ? "true" : "false")" @onclick="() => A.Choose(Crew.Key, null)">
+            Auto
+        </button>
+        @foreach (var t in LoadModel.WorkOrder(V.D.Types))
+        {
+            <button @key="t.Id" type="button" class="load-chip" aria-pressed="@(current == t.Name ? "true" : "false")"
+                    @onclick="() => A.Choose(Crew.Key, t.Name)">
+                <i style="background: @t.Color"></i>
+                @t.Name
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CrewSchedule Crew { get; set; } = default!;
+    [Parameter, EditorRequired] public LoadView V { get; set; } = default!;
+    [Parameter, EditorRequired] public ILoadActions A { get; set; } = default!;
+    [Parameter] public bool Up { get; set; }
+
+    private ElementReference root;
+    private IJSObjectReference? module;
+    private IJSObjectReference? handle;
+    private DotNetObjectReference<LoadChooser>? self;
+
+    private string? current => V.Pins.GetValueOrDefault(Crew.Key);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            self = DotNetObjectReference.Create(this);
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./Features/LoadPlanner/LoadPlannerPage.razor.js");
+            handle = await module.InvokeAsync<IJSObjectReference>("chooser", root, self);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public void CloseChooser() => A.OpenChooser(null);
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (handle is not null)
+            {
+                await handle.InvokeVoidAsync("dispose");
+                await handle.DisposeAsync();
+            }
+            if (module is not null) await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        self?.Dispose();
+    }
+}

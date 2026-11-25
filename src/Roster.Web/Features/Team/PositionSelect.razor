@@ -1,0 +1,27 @@
+@* Port of PositionSelect in src/app/(app)/setup/staff/StaffClient.tsx: one
+   <select> listing every payroll position, grouped by role. Choosing a position is
+   the single act that sets someone's role, pay rate and (for the manager
+   positions) their contract size. *@
+<select value="@Value" disabled="@Disabled" @onchange="e => OnChange.InvokeAsync(e.Value?.ToString() ?? string.Empty)" class="@(Class ?? Ui.FieldClass)">
+    @foreach (var g in _groups)
+    {
+        <optgroup @key="g.Role" label="@g.Label">
+            @foreach (var p in g.Items)
+            {
+                <option @key="p.Code" value="@p.Code">@p.Label</option>
+            }
+        </optgroup>
+    }
+</select>
+
+@code {
+    private List<PositionGroup> _groups = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<PositionOption> Positions { get; set; } = [];
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> OnChange { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnParametersSet() => _groups = TeamRules.GroupPositions(Positions);
+}

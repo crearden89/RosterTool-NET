@@ -1,0 +1,336 @@
+@page "/setup/staff"
+@* Port of src/app/(app)/setup/staff/page.tsx and StaffClient.tsx: Team Members -
+   contracts, availability and leave, with the day-off Requests and Fixed rosters
+   cards under the list (the Requests page became a redirect here). *@
+@implements IAsyncDisposable
+@inject ITeamService Team
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div @key="_storeKey">
+    <PageHeader Title="Team Members">
+        <Subtitle>
+            @_count team member@(_count == 1 ? "" : "s") · contracts, availability and leave ·
+            @* The two cards sit under the list; these jump to them. *@
+            <a href="@Anchor("requests")" class="@Ui.LinkClass">Requests@(_pendingCount > 0 ? $" ({_pendingCount} pending)" : "")</a>
+            ·
+            <a href="@Anchor("fixed-rosters")" class="@Ui.LinkClass">Fixed rosters</a>
+        </Subtitle>
+        <Actions>
+            @if (_data is { Stores.Count: > 0 })
+            {
+                <StorePicker Stores="_data.Stores" Value="_data.StoreId" HrefFor="@(id => $"/setup/staff?store={id}")" />
+            }
+            @if (_data is { ReadOnly: false })
+            {
+                <button type="button" @onclick="() => _showAdd = !_showAdd" aria-expanded="@(_showAdd ? "true" : "false")"
+                        aria-controls="add-team-member" class="@Ui.ButtonClass(ButtonKind.Secondary)">
+                    <Icon Name="IconName.Plus" Class="h-4 w-4" StrokeWidth="2.5" />
+                    Add team member
+                </button>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_data is null)
+    {
+        <Loading />
+    }
+    else
+    {
+        @if (!_data.ReadOnly && _showAdd)
+        {
+            <Card Class="mb-5">
+                <div id="add-team-member" class="flex flex-wrap items-end gap-3">
+                    <label>
+                        <span class="@Ui.FieldLabelClass">Name</span>
+                        <input @ref="_nameInput" placeholder="Full name" value="@_formName" @oninput="e => _formName = e.Value?.ToString() ?? string.Empty"
+                               @onkeydown="AddOnEnter" class="@Ui.FieldClass" />
+                    </label>
+                    <label>
+                        <span class="@Ui.FieldLabelClass">Position</span>
+                        <PositionSelect Positions="_data.Positions" Value="@_formPosition" OnChange="PickPosition" />
+                    </label>
+                    <label>
+                        <span class="@Ui.FieldLabelClass">Contract h/fortnight</span>
+                        @if (IsJsaForm)
+                        {
+                            <span class="flex h-[38px] items-center rounded-xl bg-[var(--ui-canvas)] px-3 text-sm text-[var(--ui-muted)]">Casual</span>
+                        }
+                        else
+                        {
+                            <input type="number" inputmode="numeric" min="0" placeholder="30" value="@_formHours"
+                                   @oninput="e => _formHours = e.Value?.ToString() ?? string.Empty" @onkeydown="AddOnEnter" class="@($"w-28 {Ui.FieldClass}")" />
+                        }
+                    </label>
+                    <button @onclick="SubmitAdd" disabled="@(_adding || _formName.Length == 0)" class="@Ui.ButtonClass(ButtonKind.Primary)">
+                        @(_adding ? "Adding…" : "Add team member")
+                    </button>
+                    <button type="button" @onclick="() => _showAdd = false" class="@Ui.ButtonClass(ButtonKind.Quiet)">Close</button>
+                </div>
+            </Card>
+        }
+
+        @* Column labels, desktop only: on a phone each row card stacks. *@
+        <div class="@($"hidden px-5 pb-2 {TeamMemberRow.RowGrid}")" aria-hidden="true">
+            <Eyebrow>Team member</Eyebrow>
+            <Eyebrow>Contract</Eyebrow>
+            <div class="flex gap-1">
+                @foreach (var d in new[] { "M", "T", "W", "T", "F", "S", "S" })
+                {
+                    <span class="w-[18px] text-center text-[11px] font-semibold text-[var(--ui-faint)]">@d</span>
+                }
+            </div>
+            <Eyebrow>Notes</Eyebrow>
+            <span></span>
+        </div>
+
+        @if (_data.Employees.Count == 0)
+        {
+            <Card>
+                <p class="text-center text-sm text-[var(--ui-muted)]">No team members yet.</p>
+            </Card>
+        }
+        else
+        {
+            <ul class="space-y-2" aria-label="Team members">
+                @foreach (var e in _data.Employees)
+                {
+                    <TeamMemberRow @key="e.Id" Employee="e" PositionLabel="@PositionLabel(e)" Restricted="RestrictedFor(e.Id)"
+                                   Leave="LeaveFor(e.Id)" Availability="AvailabilityFor(e.Id)" Fixed="_fixedSet.Contains(e.Id)"
+                                   FixedPaid="_data.FixedPaidHours.GetValueOrDefault(e.Id)" ReadOnly="_data.ReadOnly"
+                                   OnEdit="() => _editing = _editing == e.Id ? null : e.Id" OnOpenFixed="() => _sheetFor = e.Id"
+                                   OnLeaveCleared="RefreshAsync" />
+                }
+            </ul>
+        }
+
+        <p class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-[var(--ui-muted)]">
+            <span class="font-semibold">Availability</span>
+            <span class="inline-flex items-center gap-1.5">
+                <span class="block h-3 w-3 rounded-[3px] bg-[var(--ui-ink)]"></span> all day
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+                <span class="relative block h-3 w-3 overflow-hidden rounded-[3px] border-[1.5px] border-[var(--ui-ink)] bg-white">
+                    <span class="absolute inset-x-0 bottom-0 h-1/2 bg-[var(--ui-ink)]"></span>
+                </span>
+                part of the day (hover for the hours)
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+                <span class="block h-3 w-3 rounded-[3px] border border-[var(--ui-line)]" style="background: @AvailabilitySquares.Hatch"></span> not
+                available
+            </span>
+        </p>
+
+        <div class="mt-8 grid items-start gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <RequestsCard StoreId="_data.StoreId" Requests="_data.Requests" Employees="_data.Employees" ReadOnly="_data.ReadOnly" OnDone="RefreshAsync" />
+            <FixedRostersCard Employees="_data.Employees" Fixed="_data.Fixed" Cycles="_data.Cycles" ReadOnly="_data.ReadOnly"
+                              Today="_today" OnOpen="id => _sheetFor = id" />
+        </div>
+
+        @if (_sheetFor is { } sheetId && _data.Employees.FirstOrDefault(e => e.Id == sheetId) is { } sheetMember)
+        {
+            <FixedRosterSheet @key="sheetId" Employee="sheetMember" Rows="_data.Fixed.Where(f => f.EmployeeId == sheetId).ToList()"
+                              Cycle="_data.Cycles.FirstOrDefault(c => c.EmployeeId == sheetId)" FixedPaid="_data.FixedPaidHours.GetValueOrDefault(sheetId)"
+                              ReadOnly="_data.ReadOnly" Today="_today" OnClose="CloseSheet" OnSaved="SheetSavedAsync" />
+        }
+
+        @if (_editing is { } editId && !_data.ReadOnly && _data.Employees.FirstOrDefault(e => e.Id == editId) is { } editMember)
+        {
+            <EmployeeEditor @key="editId" Employee="editMember" Positions="_data.Positions" Restricted="RestrictedFor(editId)"
+                            Availability="AvailabilityFor(editId)" FixedPaid="_data.FixedPaidHours.GetValueOrDefault(editId)"
+                            OnClose="() => _editing = null" OnDone="EditorDoneAsync" />
+        }
+        @if (_data.ReadOnly)
+        {
+            <p class="mt-3 text-sm text-[var(--ui-muted)]">Read-only - you cannot edit team members.</p>
+        }
+    }
+</div>
+
+@code {
+    private TeamPageData? _data;
+    private string? _loadedStore;
+    private bool _loaded;
+    private int _storeKey;
+    private HashSet<Guid> _fixedSet = [];
+    private int _count;
+    private int _pendingCount;
+    private Dictionary<string, PositionOption> _posByCode = [];
+
+    // The add form.
+    private bool _showAdd;
+    private bool _wasShowingAdd;
+    private ElementReference _nameInput;
+    private string _formName = "";
+    private string _formPosition = "SA-FF";
+    private string _formHours = "60";
+    private bool _adding;
+
+    private Guid? _editing;
+    private Guid? _sheetFor;
+    private string? _scrollTo;
+    private DateOnly _today = Dates.TodayAu();
+    private IJSObjectReference? _module;
+
+    /// <summary>?store=: the store to show.</summary>
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+
+    /// <summary>?fixed=: open this person's fixed-roster sheet on arrival (old Requests links).</summary>
+    [SupplyParameterFromQuery(Name = "fixed")] public string? FixedFor { get; set; }
+
+    /// <summary>?section=: scroll to the Requests or Fixed rosters card on arrival (old Requests links).</summary>
+    [SupplyParameterFromQuery(Name = "section")] public string? Section { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded && Store == _loadedStore) return;
+        var first = !_loaded;
+        _loaded = true;
+        _loadedStore = Store;
+        if (!first)
+        {
+            // Another store: the page starts afresh, as it does when the address changes.
+            _storeKey++;
+            _showAdd = false;
+            _formName = "";
+            _formPosition = "SA-FF";
+            _formHours = "60";
+            _editing = null;
+            _sheetFor = null;
+        }
+        await LoadAsync();
+        if (first)
+        {
+            // Arriving from an old Requests link: open the person's sheet, or bring the card
+            // into view. A link to someone no longer on this team falls back to the Fixed
+            // rosters card.
+            var match = string.IsNullOrEmpty(FixedFor) ? null : _data!.Employees.FirstOrDefault(e => e.Id.ToString() == FixedFor);
+            _sheetFor = match?.Id;
+            var fixedGone = !string.IsNullOrEmpty(FixedFor) && match is null;
+            var section = Section == "fixed" ? "fixed" : Section == "requests" ? "requests" : null;
+            var to = section ?? (fixedGone ? "fixed" : null);
+            _scrollTo = to is null ? null : to == "fixed" ? "fixed-rosters" : "requests";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Features/Team/StaffPage.razor.js");
+            // Today in the BROWSER's time zone (the person is in their store's time zone).
+            var local = DateOnlyExtensions.ParseIso(await _module.InvokeAsync<string>("localToday"));
+            if (local != _today)
+            {
+                _today = local;
+                StateHasChanged();
+            }
+        }
+        if (_module is not null && _scrollTo is { } id && _data is not null)
+        {
+            _scrollTo = null;
+            await _module.InvokeVoidAsync("scrollToId", id);
+        }
+        // The add form's name box takes the focus when the form opens (autoFocus).
+        if (!_showAdd) _wasShowingAdd = false;
+        else if (!_wasShowingAdd)
+        {
+            _wasShowingAdd = true;
+            await _nameInput.FocusAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Guid? requested = Guid.TryParse(Store, out var g) ? g : null;
+        _data = await Team.LoadAsync(requested);
+        _fixedSet = _data.Fixed.Select(f => f.EmployeeId).ToHashSet();
+        _count = _data.Employees.Count;
+        _pendingCount = _data.Requests.Count(r => r.Status == "pending");
+        _posByCode = _data.Positions.GroupBy(p => p.Code).ToDictionary(x => x.Key, x => x.Last());
+    }
+
+    private Task RefreshAsync() => LoadAsync();
+
+    // The cards' anchors: this address with the card's fragment (a bare "#requests"
+    // would resolve against the app's base address).
+    private string Anchor(string id)
+    {
+        var uri = Navigation.Uri;
+        var hash = uri.IndexOf('#');
+        return $"{(hash < 0 ? uri : uri[..hash])}#{id}";
+    }
+
+    private string PositionLabel(TeamMember e) =>
+        _posByCode.TryGetValue(e.PositionCode ?? "", out var p) ? p.Label : "Position not set";
+
+    private IReadOnlyList<string> RestrictedFor(Guid id) =>
+        _data!.Restricted.Where(r => r.EmployeeId == id).Select(r => r.LabourGroup).ToList();
+
+    private IReadOnlyList<LeaveBooking> LeaveFor(Guid id) => _data!.Leave.Where(l => l.EmployeeId == id).ToList();
+
+    private IReadOnlyList<AvailabilityRow> AvailabilityFor(Guid id) => _data!.Availability.Where(a => a.EmployeeId == id).ToList();
+
+    private bool IsJsaForm => _posByCode.TryGetValue(_formPosition, out var p) && p.BaseRole == "JSA";
+
+
+    // Positions quote their contract size WEEKLY; contracts are stored per fortnight.
+    // Picking a sized position prefills that, but the field stays editable for someone
+    // on temporarily reduced hours.
+    private void PickPosition(string code)
+    {
+        var implied = Positions.FortnightHoursFor(_posByCode.GetValueOrDefault(code)?.WeeklyHours);
+        _formPosition = code;
+        if (implied is { } h) _formHours = Js.NumberToString(h);
+    }
+
+    private async Task AddOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SubmitAdd();
+    }
+
+    private async Task SubmitAdd()
+    {
+        if (_formName.Length == 0 || _adding) return;
+        var hours = IsJsaForm ? 0 : Js.Number(_formHours).Or(0);
+        _adding = true;
+        try
+        {
+            await Team.AddEmployeeAsync(_data!.StoreId, _formName, _formPosition, hours);
+            _formName = "";
+            await RefreshAsync();
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    // Closing the sheet drops ?fixed= from the address, so a reload doesn't open it again.
+    private void CloseSheet()
+    {
+        _sheetFor = null;
+        if (FixedFor is not null)
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("fixed", (string?)null), replace: true);
+    }
+
+    private async Task SheetSavedAsync()
+    {
+        CloseSheet();
+        await RefreshAsync();
+    }
+
+    private async Task EditorDoneAsync()
+    {
+        _editing = null;
+        await RefreshAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null) return;
+        try { await _module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

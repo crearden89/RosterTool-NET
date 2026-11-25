@@ -1,0 +1,465 @@
+@* Port of src/app/load/[token]/LoadKiosk.tsx.
+   The kiosk layout: the Floor Display's wall screen, scaled to whatever it runs
+   on, with the plan as a row per person, the finish and the truck down the
+   right, and the morning count as big plus and minus buttons. The classes are
+   the Floor Display's (floor-) and the Load Planner's own (load-), from the
+   kiosk stylesheets. *@
+@using global::Roster.Engine.Load
+
+<div class="floor-screen">
+    <header class="floor-head">
+        <h1>Load Planner</h1>
+        <span class="floor-when">@LoadModel.LongDay(V.D.Day) · @Grid.MinToTime(V.Now)</span>
+        <span class="floor-pill @Tone(V.Status.Tone)">@V.Status.Text</span>
+        <span class="floor-store">@V.D.Store</span>
+        @if (V.D.NoLoginNeeded)
+        {
+            <span class="floor-pill">No login needed</span>
+        }
+        <a href="@V.FloorHref" @onclick="A.BackAsync" @onclick:preventDefault="@(V.Unsaved || V.D.FromFloor)" class="floor-btn floor-ghost">
+            <LoadIcon Name="@LoadIcons.Back" />
+            Floor Display
+        </a>
+    </header>
+    @if (V.Screen == LoadScreen.NoCrew)
+    {
+        <div class="load-main load-mainOne">
+            <div class="floor-empty">
+                @(V.D.RosterApproved ? "No one has Load Running on today's roster." : "No approved roster for today.")
+                <small>
+                    The load plan is built from today's approved roster: everyone with Load Running tiles, from their
+                    first one. @(V.D.RosterApproved
+                        ? "Once someone has Load Running, count the truck here and the plan builds itself."
+                        : "Once the roster is approved, count the truck here and the plan builds itself.")
+                </small>
+            </div>
+        </div>
+    }
+    else if (V.Screen == LoadScreen.Count)
+    {
+        @Count
+    }
+    else if (V.Plan is { } plan)
+    {
+        @PlanScreen(plan)
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public LoadView V { get; set; } = default!;
+    [Parameter, EditorRequired] public ILoadActions A { get; set; } = default!;
+
+    private static string Tone(LoadTone t) => t switch
+    {
+        LoadTone.Go => "load-pillGo",
+        LoadTone.Wait => "load-pillWait",
+        _ => "load-pillEdit",
+    };
+
+    private static string Plural(double n, string one, string? many = null) => $"{Js.NumberToString(n)} {(n == 1 ? one : many ?? one + "s")}";
+
+    private static string Pct(double n) => Js.NumberToString(n) + "%";
+
+    private double? Done => V.DoneAt is { } d && !V.Assigning ? d : null;
+
+    private RenderFragment Message => __builder =>
+    {
+        if (V.Message is { } m)
+        {
+            <p class="@(m.Good ? "load-msgGood" : "load-msgBad")" role="@(m.Good ? "status" : "alert")">@m.Text</p>
+        }
+    };
+
+    private static RenderFragment NewTag(CrewOption? c) => __builder =>
+    {
+        if (c is not null && c.TenureBand != TenureBands.Gt90 && c.Days is { } days)
+        {
+            <em class="load-newTag">New · @(days)d</em>
+        }
+    };
+
+    private RenderFragment PlanScreen(LoadPlan plan) => __builder =>
+    {
+        var done = Done;
+        if (V.Assigning)
+        {
+            <div class="load-banner load-bannerEdit">
+                Tap a person's job to pin them to it for today. The chart redraws as you go; Auto leaves it to the
+                planner, which rotates the jobs.
+            </div>
+        }
+        if (done is { } at)
+        {
+            <div class="load-banner load-bannerDone" role="status">
+                <LoadIcon Name="@LoadIcons.Tick" />
+                Load complete at @Grid.MinToTime(at), @LoadModel.AgainstPlan(plan.TeamFinish, at).
+                <small>Shown on this screen; it is kept in the store's load history once that is switched on.</small>
+            </div>
+        }
+        <div class="load-main">
+            <section class="load-left" aria-label="Who does what">
+                @Timeline(plan, done)
+            </section>
+            <aside class="load-side" aria-label="The finish and the truck">
+                <div class="load-finish @(done is not null ? "load-finishDone" : "")">
+                    <p>@(done is not null ? "Load complete" : "Team finish")</p>
+                    <b>@Grid.MinToTime(done ?? plan.TeamFinish)</b>
+                    <span>
+                        @(done is { } d2
+                            ? $"Planned {Grid.MinToTime(plan.TeamFinish)} · {LoadModel.AgainstPlanShort(plan.TeamFinish, d2)}"
+                            : $"{Plural(plan.TotalPallets, "pallet")} · {LoadModel.WorkingCrew(plan).Count} on the load · from {Grid.MinToTime(plan.TeamStart)}")
+                    </span>
+                </div>
+                @if (V.Assigning && V.Changed.Count > 0 && V.SavedPlan is { } saved)
+                {
+                    <p class="load-note">
+                        Before @(V.Changed.Count == 1 ? "this change" : "these changes"): team finish @Grid.MinToTime(saved.TeamFinish).
+                    </p>
+                }
+                @TruckPanel(plan)
+                <div class="load-actions">
+                    @Message
+                    @if (V.Assigning)
+                    {
+                        <p class="load-note load-noteStrong">
+                            @(V.Changed.Count > 0 ? $"{Plural(V.Changed.Count, "change")} not saved yet" : "Tap a job to change it")
+                        </p>
+                        <button type="button" class="floor-btn floor-solid load-big" @onclick="A.SaveAssignAsync" disabled="@(V.Pending || V.Changed.Count == 0)">
+                            @(V.Pending ? "Saving…" : "Save assignments")
+                        </button>
+                        <button type="button" class="floor-btn floor-ghost load-big" @onclick="A.CancelAssign" disabled="@V.Pending">
+                            Cancel
+                        </button>
+                    }
+                    else
+                    {
+                        if (done is null)
+                        {
+                            <button type="button" class="floor-btn load-go load-big" @onclick="A.MarkCompleteAsync" disabled="@V.Pending">
+                                <LoadIcon Name="@LoadIcons.Tick" />
+                                @(V.Pending ? "Marking…" : "Mark the load complete")
+                            </button>
+                        }
+                        <div class="load-two">
+                            <button type="button" class="floor-btn floor-ghost load-big" @onclick="A.StartCount" disabled="@V.Pending">
+                                Edit the load
+                            </button>
+                            <button type="button" class="floor-btn floor-ghost load-big" @onclick="A.StartAssign" disabled="@V.Pending">
+                                Assign people
+                            </button>
+                        </div>
+                    }
+                </div>
+            </aside>
+        </div>
+    };
+
+    // ── The plan: a row per person on the Floor Display's timeline ──
+
+    private RenderFragment Timeline(LoadPlan plan, double? done) => __builder =>
+    {
+        var span = LoadModel.TimelineSpanFor(plan, done is not null ? null : V.Now);
+        var (lo, hi) = (span.Lo, span.Hi);
+        double P(double t) => (t - lo) / (hi - lo) * 100;
+        var step = LoadModel.TickStep(lo, hi);
+        // On the quarter, half or whole hour, whichever the span ticks in.
+        var ticks = new List<double>();
+        for (var t = Math.Ceiling(lo / step) * step; t <= hi; t += step) ticks.Add(t);
+        var people = LoadModel.WorkingCrew(plan);
+        var crewByKey = new Dictionary<string, CrewOption>();
+        foreach (var c in V.D.Crew) crewByKey[c.Key] = c;
+        var anyNew = V.D.Crew.Any(c => c.TenureBand != TenureBands.Gt90);
+
+        <div class="load-tl @(done is not null ? "load-faded" : "")">
+            <div class="load-grid load-axis">
+                <div class="load-colhead">Team member</div>
+                <div class="load-colhead">Their job</div>
+                <div class="load-ticks">
+                    @foreach (var t in ticks)
+                    {
+                        <span @key="t" class="load-tick @(t % 60 != 0 ? "load-minor" : "")" style="left: @Pct(P(t))">@LoadModel.TickLabel(t)</span>
+                    }
+                    @if (span.Now is { } nowAt)
+                    {
+                        <span class="load-nowtag" style="@LoadModel.TagPlaceFor(P(nowAt)).Style">Now @Grid.MinToTime(nowAt)</span>
+                    }
+                    @if (LoadModel.FinishTagFits(lo, hi, span.Now, plan.TeamFinish))
+                    {
+                        <span class="load-fintag" style="@LoadModel.TagPlaceFor(P(plan.TeamFinish)).Style">Finish @Grid.MinToTime(plan.TeamFinish)</span>
+                    }
+                </div>
+                <div class="load-colhead load-colheadEnd">Done</div>
+            </div>
+            <div class="load-body">
+                <div class="load-rows">
+                    <div class="load-under">
+                        @if (span.Now is { } past && past > lo)
+                        {
+                            <div class="load-past" style="width: @Pct(P(past))"></div>
+                        }
+                        @foreach (var t in ticks.Where(t => t > lo && t < hi))
+                        {
+                            <div @key="t" class="@(t % 60 == 0 ? "load-hline" : "load-qline")" style="left: @Pct(P(t))"></div>
+                        }
+                    </div>
+                    <div class="load-over">
+                        <div class="load-finline" style="left: @Pct(P(plan.TeamFinish))"></div>
+                        @if (span.Now is { } line)
+                        {
+                            <div class="load-nowline" style="left: @Pct(P(line))"></div>
+                        }
+                    </div>
+                    @for (var i = 0; i < people.Count; i++)
+                    {
+                        // The lower rows open their chooser upwards, so it stays on the screen.
+                        @PersonRow(people[i], crewByKey.GetValueOrDefault(people[i].Key), plan, P, done, i >= Math.Max(2, (int)Math.Ceiling(people.Count / 2.0)))
+                    }
+                </div>
+            </div>
+            <div class="load-legend">
+                <span>
+                    <i class="load-stretch"></i>
+                    Stretching, @Js.NumberToString(Allocate.StretchMinutes) min
+                </span>
+                @if (span.Now is not null)
+                {
+                    <span><i class="load-keyNow"></i>Now</span>
+                }
+                <span><i class="load-keyFin"></i>Team finish</span>
+                @if (anyNew)
+                {
+                    <span>
+                        <em class="load-newTag">New</em>
+                        Under 90 days: their pallets take their band's minutes
+                    </span>
+                }
+                <span>Each bar: the job and its pallets</span>
+            </div>
+        </div>
+    };
+
+    private RenderFragment PersonRow(CrewSchedule c, CrewOption? crew, LoadPlan plan, Func<double, double> P, double? done, bool up) => __builder =>
+    {
+        var pinned = LoadModel.IsPinned(c, V.Pins);
+        var open = V.Assigning && V.ChooserFor == c.Key;
+        var last = LoadModel.IsLast(c, plan);
+        var colour = V.D.Types.FirstOrDefault(t => t.Name == c.PrimaryType)?.Color;
+        var pallets = LoadModel.PalletsOf(c);
+        <div @key="c.Key" class="load-grid load-row @(V.Changed.Contains(c.Key) ? "load-changed" : "") @(open ? "load-rowOpen" : "")">
+            <div class="load-name">
+                <b>
+                    <span>@c.Name</span>
+                    @NewTag(crew)
+                </b>
+                <small>@Grid.MinToTime(c.StartMin) → @Grid.MinToTime(c.FinishMin) · @Plural(pallets, "pallet")</small>
+            </div>
+            <div class="load-own">
+                @if (V.Assigning)
+                {
+                    <button type="button" data-job="@c.Key" aria-haspopup="dialog" aria-expanded="@(open ? "true" : "false")"
+                            aria-label="@($"{c.Name}'s job: {(pinned ? $"{c.PrimaryType}, pinned" : $"Auto, {c.PrimaryType ?? "helps where needed"}")}")"
+                            class="load-job @(pinned ? "" : "load-jobAuto") @(open ? "load-jobOpen" : "")"
+                            style="@(pinned && colour is not null ? $"background: {colour}" : null)"
+                            @onclick="() => A.OpenChooser(open ? null : c.Key)">
+                        @if (pinned)
+                        {
+                            <LoadIcon Name="@LoadIcons.Pin" />
+                        }
+                        <span>@(pinned ? c.PrimaryType : $"Auto · {c.PrimaryType ?? "helps"}")</span>
+                        <LoadIcon Name="@LoadIcons.Caret" />
+                    </button>
+                }
+                else
+                {
+                    <span class="load-job" style="@(colour is not null ? $"background: {colour}" : null)">
+                        @if (pinned)
+                        {
+                            <LoadIcon Name="@LoadIcons.Pin" />
+                        }
+                        <span>@(c.PrimaryType ?? "Helping")</span>
+                    </span>
+                }
+                <span class="load-why">@LoadModel.WhyLine(c, V.Pins, V.D.TypeCounts)</span>
+            </div>
+            <div class="load-lane">
+                @for (var i = 0; i < c.Segments.Count; i++)
+                {
+                    @Bar(c.Segments[i], P)
+                }
+                @if (done is not null)
+                {
+                    <span class="load-doneTick" style="left: @Pct(P(c.FinishMin))">
+                        <LoadIcon Name="@LoadIcons.Tick" />
+                    </span>
+                }
+            </div>
+            <div class="load-done @(last ? "load-last" : "")">
+                <b>@Grid.MinToTime(c.FinishMin)</b>
+                <span>@(last ? "last to finish" : "done")</span>
+            </div>
+            @if (open)
+            {
+                <LoadChooser Crew="c" V="V" A="A" Up="up" />
+            }
+        </div>
+    };
+
+    private static RenderFragment Bar(LoadSegment s, Func<double, double> P) => __builder =>
+    {
+        var stretch = Allocate.IsStretch(s);
+        var when = $"{Grid.MinToTime(s.Start)}–{Grid.MinToTime(s.End)}";
+        <i class="load-seg @(stretch ? "load-stretch" : "")"
+           title="@(stretch ? $"Stretching, {when}" : $"{s.Type}: {Plural(s.Qty, "pallet")}, {when}")"
+           style="left: calc(@Pct(P(s.Start)) + 1px); width: calc(@Pct(P(s.End) - P(s.Start)) - 2px)@(stretch ? "" : $"; background: {s.Color}")">
+            @if (!stretch)
+            {
+                // Written count first: the label runs right to left so the job is
+                // what wraps away when the bar is too short for both.
+                <span class="load-segLabel">
+                    <small>×@Js.NumberToString(s.Qty)</small>
+                    <span>@s.Type</span>
+                </span>
+            }
+        </i>
+    };
+
+    // ── The right-hand column ──
+
+    /// <summary>The truck in the order it is worked, with when each part will be clear.</summary>
+    private RenderFragment TruckPanel(LoadPlan plan) => __builder =>
+    {
+        var order = LoadModel.WorkOrder(V.D.Types);
+        var total = order.Sum(t => t.Qty);
+        var sq = total > 60 ? 14 : total > 40 ? 17 : 20;
+        <div class="load-panel">
+            <h2>
+                The truck <small>@Plural(total, "pallet")</small>
+            </h2>
+            <div class="load-sq" style="--sq: @sq" aria-hidden="true">
+                @for (var i = 0; i < order.Count; i++)
+                {
+                    var t = order[i];
+                    if (i > 0)
+                    {
+                        <i class="load-gap"></i>
+                    }
+                    for (var j = 0; j < t.Qty; j++)
+                    {
+                        <i style="background: @t.Color"></i>
+                    }
+                }
+            </div>
+            <div class="load-truck">
+                @foreach (var t in order)
+                {
+                    var clear = LoadModel.ClearBy(plan, t.Name);
+                    <div @key="t.Id" class="load-trow">
+                        <i style="background: @t.Color"></i>
+                        <span>
+                            @t.Name <small>· @Js.NumberToString(t.MinutesPerPallet) min</small>
+                        </span>
+                        <b>@Js.NumberToString(t.Qty)</b>
+                        <em>@(clear is { } at ? $"clear {Grid.MinToTime(at)}" : "")</em>
+                    </div>
+                }
+            </div>
+        </div>
+    };
+
+    // ── Counting the truck: a card per load type, plus and minus ──
+
+    private RenderFragment Count => __builder =>
+    {
+        var plan = V.Plan;
+        // Two columns keep each name whole; a third only for a very long list.
+        var cols = V.D.Types.Count > 16 ? 3 : 2;
+        double? first = V.D.Crew.Count > 0 ? V.D.Crew.Min(c => c.StartMin) : null;
+        <div class="load-main">
+            <section class="load-left" aria-label="Count today's truck">
+                <div class="load-countHead">
+                    <h2>@(V.FirstCount ? "Count today's truck" : "Edit today's load")</h2>
+                    <span>
+                        @(V.FirstCount
+                            ? "Tap + for each pallet. Anyone can enter it; the plan builds itself."
+                            : "Change the counts. The plan is built again when you save.")
+                    </span>
+                </div>
+                <div class="load-cards" style="--cols: @cols">
+                    @foreach (var t in V.D.Types)
+                    {
+                        var q = V.Qty.GetValueOrDefault(t.Id, 0);
+                        <div @key="t.Id" class="load-card @(V.LastTapped == t.Id ? "load-cardOn" : "")">
+                            <i style="background: @t.Color"></i>
+                            <div style="min-width: 0">
+                                <h3>@t.Name</h3>
+                                <p>@Js.NumberToString(t.MinutesPerPallet) min a pallet</p>
+                            </div>
+                            <div class="load-stepper">
+                                <button type="button" class="load-step" aria-label="@($"One less {t.Name}")" disabled="@(q <= 0 || V.Pending)"
+                                        @onclick="() => A.Bump(t.Id, -1)">
+                                    <LoadIcon Name="@LoadIcons.Minus" />
+                                </button>
+                                <b class="load-count @(q == 0 ? "load-zero" : "")" aria-live="polite">@Js.NumberToString(q)</b>
+                                <button type="button" class="load-step load-plus" aria-label="@($"One more {t.Name}")" disabled="@(q >= 99 || V.Pending)"
+                                        @onclick="() => A.Bump(t.Id, 1)">
+                                    <LoadIcon Name="@LoadIcons.Plus" />
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+            <aside class="load-side" aria-label="The finish and today's crew">
+                <div class="load-finish" role="status">
+                    <p>Team finish, with the counts so far</p>
+                    <b class="@(plan is not null && V.Total > 0 ? "" : "load-dim")">@(plan is not null && V.Total > 0 ? Grid.MinToTime(plan.TeamFinish) : "--:--")</b>
+                    <span>
+                        @Plural(V.Total, "pallet") · @V.D.Crew.Count on the load@(first is { } f ? $" · from {Grid.MinToTime(f)}" : "")
+                    </span>
+                </div>
+                @CrewPanel
+                <div class="load-actions">
+                    @Message
+                    <button type="button" class="floor-btn floor-solid load-big" @onclick="A.SaveCountAsync" disabled="@V.Pending">
+                        @(V.Pending ? "Saving…" : V.FirstCount ? "Save and build the plan" : "Save the load")
+                    </button>
+                    @if (V.FirstCount)
+                    {
+                        <p class="load-note">The counts can be changed later from the plan, by anyone.</p>
+                    }
+                    else
+                    {
+                        <button type="button" class="floor-btn floor-ghost load-big" @onclick="A.CancelCount" disabled="@V.Pending">
+                            Cancel
+                        </button>
+                    }
+                </div>
+            </aside>
+        </div>
+    };
+
+    private RenderFragment CrewPanel => __builder =>
+    {
+        var sorted = Js.Sorted(V.D.Crew, (x, y) => (x.StartMin - y.StartMin).Or(Js.LocaleCompare(x.Name, y.Name)));
+        <div class="load-panel">
+            <h2>
+                Today's crew <small>from the approved roster</small>
+            </h2>
+            <div class="load-crewList">
+                @foreach (var c in sorted)
+                {
+                    <div>
+                        <b>
+                            <span>@c.Name</span>
+                            @NewTag(c)
+                        </b>
+                        <span>from @Grid.MinToTime(c.StartMin)</span>
+                    </div>
+                }
+            </div>
+            <p class="load-note">
+                Everyone with Load Running tiles, from their first one. Who unloads what is worked out once the load is in.
+            </p>
+        </div>
+    };
+}

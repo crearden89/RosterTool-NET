@@ -1,0 +1,26 @@
+@* Port of src/app/(app)/plan/roster/DayDatePicker.tsx: the Roster page's date, beside the
+   day's title - any date, as the header's date field took it (a date in another fortnight
+   opens that fortnight). *@
+@inject NavigationManager Navigation
+@inject StoreSelection Selection
+@inject RosterJs Js
+
+<input type="date" aria-label="Date" value="@RosterPageModel.Iso(Date)" disabled="@_pending" @onchange="OnChangeAsync" class="@Ui.FieldClass" />
+
+@code {
+    [Parameter, EditorRequired] public Guid Store { get; set; }
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+    [Parameter, EditorRequired] public string BasePath { get; set; } = "";
+
+    private bool _pending;
+
+    private async Task OnChangeAsync(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        _pending = true;
+        Selection.Remember(Store);
+        await Js.SetCookieAsync(StoreSelection.CookieName, Store.ToString(), TimeSpan.FromDays(365));
+        Navigation.NavigateTo($"{BasePath}?store={Store}&date={Uri.EscapeDataString(value)}");
+        _pending = false;
+    }
+}

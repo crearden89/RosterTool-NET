@@ -1,0 +1,17 @@
+@page "/setup/requests"
+@* Port of src/app/(app)/setup/requests/page.tsx. Requests moved into Team Members
+   (owner, 15/11/2026: "The new employee tab revamp allows me to manage
+   requests/fixed rosters on it so the requests tab can be removed"). The menu no
+   longer lists it; this route stays so every old link - the Dashboard's "Needs
+   doing", notifications, bookmarks - still lands where it meant, with its store
+   (the mapping is in RequestsRedirect.cs). *@
+@inject NavigationManager Navigation
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    [SupplyParameterFromQuery(Name = "employee")] public string? Employee { get; set; }
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+
+    protected override void OnInitialized() =>
+        Navigation.NavigateTo(RequestsRedirect.Target(Tab, Employee, Store), replace: true);
+}

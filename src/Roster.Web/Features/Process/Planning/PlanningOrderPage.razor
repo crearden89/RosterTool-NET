@@ -1,0 +1,42 @@
+@page "/admin/process/planning"
+@* Port of src/app/(app)/admin/process/planning/page.tsx. *@
+@attribute [Authorize(Policy = Policies.SuperUser)]
+@layout ProcessLayout
+@inject IPlanningOrderService Service
+
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    <SettingsBody Sections="Sections">
+        <SaveNote>Newly generated plans use the saved order; approved rosters are untouched until regenerated.</SaveNote>
+        <ChildContent>
+            <PlacementEditor Saved="_data.Saved" Settings="_data.Settings" OnChanged="ReloadAsync">
+                <StepOrderCard>
+                    <StepOrder Order="_data.StepOrder" OnSaved="ReloadAsync" />
+                </StepOrderCard>
+            </PlacementEditor>
+        </ChildContent>
+    </SettingsBody>
+}
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("switch", "Placement switch"),
+        new("steps", "Step order"),
+        new("placement", "Group placement"),
+        new("busy-period", "Busy period"),
+        new("night-trader", "Heavy night trader"),
+        new("elsewhere", "Decided elsewhere"),
+    ];
+
+    private PlanningOrderData? _data;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    // router.refresh(): the page reads the configuration again after a change.
+    private async Task ReloadAsync() => _data = await Service.LoadAsync();
+}

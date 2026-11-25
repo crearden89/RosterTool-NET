@@ -1,0 +1,30 @@
+@page "/admin/process/roster"
+@* Port of src/app/(app)/admin/process/roster/page.tsx. *@
+@attribute [Authorize(Policy = Policies.SuperUser)]
+@layout ProcessLayout
+@inject IRosterOrderService Service
+
+@if (_saved is null)
+{
+    <Loading />
+}
+else
+{
+    <SettingsBody Sections="Sections">
+        <SaveNote>Changes apply from the next Generate.</SaveNote>
+        <ChildContent>
+            <PhaseOrderEditor Saved="_saved" OnChanged="ReloadAsync" />
+        </ChildContent>
+    </SettingsBody>
+}
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections = [new("phases", "Phases in order")];
+
+    private IReadOnlyList<OrderStep>? _saved;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    // router.refresh(): the page reads the order again after a change.
+    private async Task ReloadAsync() => _saved = await Service.LoadAsync();
+}

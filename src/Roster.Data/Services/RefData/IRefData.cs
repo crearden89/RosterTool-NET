@@ -4,6 +4,7 @@ using Roster.Engine.Core;
 using Roster.Engine.Planning;
 using Roster.Engine.Planning.Stage1;
 using Roster.Engine.Rostering.Painter;
+using Roster.Data.Feeds;
 
 namespace Roster.Data.Services.RefData;
 
@@ -137,6 +138,19 @@ public interface IRefData
     /// each day sorted by block time.
     /// </summary>
     Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetQuarterHourWeekAsync(Guid storeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// getPosIntervalRows: the store's POS interval statistics (the measured trade behind the
+    /// curve), by date then block time, as the feed's rows (Row 0, StoreCode = the store's id).
+    /// </summary>
+    Task<IReadOnlyList<PosQuarterHourRow>> GetPosIntervalRowsAsync(Guid storeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// getTradeCurveWeek: THE curve a store plans with - derived at read time from the POS
+    /// interval statistics (public holidays and zero-trade dates excluded), per weekday
+    /// (Mon = 0), falling back per weekday to the legacy quarter_hour_allocation rows.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetTradeCurveWeekAsync(Guid storeId, CancellationToken ct = default);
 
     /// <summary>
     /// getPosCustomerRows: the POS interval statistics' customers (MCO + SCO) by date and
