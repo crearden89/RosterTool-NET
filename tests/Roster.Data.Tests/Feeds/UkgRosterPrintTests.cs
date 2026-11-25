@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using Roster.Data.Entities;
 using Roster.Data.Feeds;
 using Roster.Data.Scope;
+using Roster.Engine.Pay;
 using Roles = Roster.Engine.Core.Roles;
 
 namespace Roster.Data.Tests.Feeds;
@@ -196,4 +197,43 @@ public sealed partial class UkgRosterPrintTests : IDisposable
         // The unlabelled published rows were labelled on read, as Cleaning sub-tasks.
         Assert.Matches("""<div class="subs">(FE|SF|BH)( (FE|SF|BH))?</div>""", Days(html, "Alex Chen")[2]);
     }
+
+    // GET /api/export/ukg has no TypeScript test; these pin its format.
+    [Fact]
+    public async Task Exports_the_fortnight_as_UKG_import_rows_with_formula_cells_neutralised()
+    {
+        using (var db = System())
+        {
+            var shift = Shift(_e2, Roles.SA, new DateOnly(2026, 9, 5), 8, 14, 30);
+            shift.EmployeeName = "=Kim \"KP\" Patel";
+            db.GeneratedShifts.AddRange(shift, Shift(_e3, Roles.SM, new DateOnly(2026, 9, 14), 9, 17, 30)); // the day after the fortnight
+            db.SaveChanges();
+        }
+        await using var scope = _services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<AccessContextAccessor>().Current = AccessContext.System("export tests");
+        var file = await scope.ServiceProvider.GetRequiredService<IUkgRosterFiles>().ExportCsvAsync(_store.ToString(), "2026-08-31", Start);
+        var unpaid = Breaks.BreakForRole(Roles.SA, 6).UnpaidMinutes;
+        Assert.Equal(
+            "StoreCode,Date,Employee,Position,StartTime,EndTime,UnpaidBreakMins\n" +
+            $"\"G999\",2026-09-05,\"'=Kim \"\"KP\"\" Patel\",\"SA\",08:00,14:00,{unpaid}",
+            file.Csv);
+        Assert.Equal("ukg_G999_2026-08-31.csv", file.FileName);
+    }
+
+    [Fact]
+    public async Task Exports_only_the_header_for_a_store_id_that_is_no_id()
+    {
+        await using var scope = _services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<AccessContextAccessor>().Current = AccessContext.System("export tests");
+        var file = await scope.ServiceProvider.GetRequiredService<IUkgRosterFiles>().ExportCsvAsync("st1", "2026-08-31", Start);
+        Assert.Equal(("StoreCode,Date,Employee,Position,StartTime,EndTime,UnpaidBreakMins", "ukg_store_2026-08-31.csv"), (file.Csv, file.FileName));
+    }
+
+    [Theory]
+    [InlineData("2026-08-31", "2026-08-31")]
+    [InlineData("2026-02-30", "2026-03-02")] // new Date() rolls a day past the month's end over
+    [InlineData("2026-13-01", null)]
+    [InlineData("2026-01-00", null)]
+    public void Reads_the_start_date_as_the_TypeScript_did(string start, string? expected) =>
+        Assert.Equal(expected, UkgRosterFiles.FortnightStart(start)?.ToString("yyyy-MM-dd"));
 }
