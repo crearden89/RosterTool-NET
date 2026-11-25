@@ -103,3 +103,24 @@ public class ShellTests : UiTestContext
         Assert.Equal("View only", cut.Find("p").TextContent);
     }
 }
+
+public class StoreSelectionTests
+{
+    [Fact]
+    public void The_store_chosen_last_is_remembered_for_the_data_layer()
+    {
+        var selection = new StoreSelection();
+        var remembered = (Roster.Data.Scope.IRememberedStore)selection;
+        Assert.Null(remembered.StoreId);
+        selection.Load("not a store");
+        Assert.Null(remembered.StoreId);
+        var store = Guid.NewGuid();
+        selection.Load(store.ToString());
+        Assert.Equal(store, remembered.StoreId);
+        // A cookie read later never undoes a choice made on this connection.
+        var chosen = Guid.NewGuid();
+        selection.Remember(chosen);
+        selection.Load(Guid.NewGuid().ToString());
+        Assert.Equal(chosen, remembered.StoreId);
+    }
+}
