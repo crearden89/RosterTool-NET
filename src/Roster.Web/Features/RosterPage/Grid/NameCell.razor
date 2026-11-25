@@ -1,0 +1,31 @@
+@* Port of src/components/roster/RosterRowEdit.tsx (NameCell): the row's person as a
+   type-ahead picker, with Pin and Remove beside it. *@
+@namespace Roster.Web.Features.RosterPage.Grid
+
+<div class="flex items-center gap-1">
+    <NameCombobox Value="@RowKey" Options="@Options()" Disabled="@Api.Busy" OnChange="OnChange" Class="min-w-[150px] flex-1" />
+    <button type="button" disabled="@Api.Busy" @onclick="() => Api.OnToggleLock.InvokeAsync(RowKey)"
+            title="@(Locked ? "Pinned - the engine keeps this shift" : "Pin this shift")" aria-label="@(Locked ? "Unpin shift" : "Pin shift")"
+            class="@($"rounded px-1 text-sm leading-none {(Locked ? "text-[var(--brand-navy)]" : "text-[var(--brand-navy)]/25 hover:text-[var(--brand-navy)]/60")}")">@(Locked ? "🔒" : "🔓")</button>
+    <button type="button" disabled="@Api.Busy" @onclick="() => Api.OnRemove.InvokeAsync(RowKey)"
+            title="@($"Remove {Name ?? "this shift"}")" aria-label="Remove shift"
+            class="rounded px-1 text-xs font-bold leading-none text-[var(--brand-red)] hover:bg-[var(--brand-red-tint)]">✕</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string RowKey { get; set; } = "";
+    [Parameter] public string? Name { get; set; }
+    [Parameter, EditorRequired] public RowEditApi Api { get; set; } = default!;
+
+    private bool Locked => Api.LockedKeys.Contains(RowKey);
+
+    // Everyone already on this day (other than this row) can't be picked twice.
+    private IReadOnlyList<ComboOption> Options() =>
+        Api.Employees
+            .Select(o => Api.EditableKeys.Contains(o.Id) && o.Id != RowKey
+                ? o with { Disabled = true, DisabledReason = "Already rostered on this day" }
+                : o)
+            .ToList();
+
+    private Task OnChange(string id) => id != RowKey ? Api.OnPerson.InvokeAsync((RowKey, id)) : Task.CompletedTask;
+}
