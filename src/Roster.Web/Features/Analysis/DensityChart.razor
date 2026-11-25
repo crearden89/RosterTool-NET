@@ -1,0 +1,121 @@
+@* Port of src/app/(app)/analysis/DensityChart.tsx: stacked labour by group per 15-minute
+   block. The TypeScript measured the chart's width to keep the SVG 1:1 with the page; here
+   the plot's x positions are percentages of its own width, which keeps the text unstretched
+   the same way, with the y axis's labels beside it. *@
+
+@if (Density.Count == 0)
+{
+    <p class="text-sm text-[var(--brand-navy)]/50">No labour data in this range yet.</p>
+}
+else
+{
+    var shown = _isolate is { } only ? new[] { only } : Groups;
+    var n = Density.Count;
+    var perDay = Math.Max(1, Days);
+    double Val(DensityBlock d, string g) => d.Groups.GetOr(g, 0) / perDay;
+    // Max stacked height across blocks (for the shown groups) - the y-axis always spans
+    // at least 0-10 so the gridlines stay meaningful.
+    var rawMax = Js.Max(Density.Select(d => shown.Aggregate(0.0, (s, g) => s + Val(d, g))).Prepend(1));
+    var axisMax = Math.Max(10, Math.Ceiling(rawMax));
+    double YScale(double v) => H - PadB - v / axisMax * (H - PadB - PadT);
+    var tickStep = Math.Max(1, Math.Ceiling(axisMax / 12));
+    var yTicks = new List<double>();
+    for (var t = tickStep; t <= axisMax + 1e-9; t += tickStep) yTicks.Add(t);
+    double ColPct(int i) => i * 100.0 / n;
+
+    <div>
+        <div class="mb-2 flex flex-wrap gap-2">
+            <button type="button" @onclick="() => _isolate = null"
+                    class="@($"rounded-full px-3 py-1 text-xs {(_isolate is null ? "bg-[var(--brand-navy)] text-white" : "bg-[var(--brand-surface)]")}")">
+                All groups
+            </button>
+            @foreach (var g in Groups)
+            {
+                <button type="button" @key="g" @onclick="() => _isolate = _isolate == g ? null : g"
+                        class="@($"flex items-center gap-1 rounded-full px-3 py-1 text-xs {(_isolate == g ? "text-white" : "bg-[var(--brand-surface)] text-[var(--brand-navy)]")}")"
+                        style="@(_isolate == g ? $"background: {Colour(g)}" : null)">
+                    <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: @Colour(g)"></span>
+                    @AnalysisText.GroupLabel(g)
+                </button>
+            }
+        </div>
+
+        <div class="flex">
+            <svg width="@PadL" height="@H" class="shrink-0" aria-hidden="true">
+                @foreach (var t in yTicks)
+                {
+                    @SvgText("0", N(YScale(t) + 3), Js.NumberToString(t))
+                }
+            </svg>
+            <svg width="100%" height="@H" class="min-w-0 flex-1">
+                @* y-axis gridlines (1..10, or higher if the day needs it) *@
+                @foreach (var t in yTicks)
+                {
+                    <line @key="t" x1="0" x2="100%" y1="@N(YScale(t))" y2="@N(YScale(t))" stroke="var(--brand-border)" stroke-width="1" />
+                }
+                @* stacked bars per 15-min block *@
+                @for (var i = 0; i < n; i++)
+                {
+                    var d = Density[i];
+                    var acc = 0.0;
+                    <g @key="d.Time">
+                        @foreach (var g in shown)
+                        {
+                            var v = Val(d, g);
+                            if (v <= 0) continue;
+                            var y0 = YScale(acc);
+                            var y1 = YScale(acc + v);
+                            acc += v;
+                            <rect x="@($"{N(ColPct(i))}%")" y="@N(y1)" width="@($"{N(100.0 / n)}%")" height="@N(y0 - y1)" fill="@Colour(g)" stroke="white" stroke-width="0.25" />
+                        }
+                    </g>
+                }
+                @* x-axis hour ticks *@
+                @for (var i = 0; i < n; i++)
+                {
+                    if (Density[i].Time % 60 != 0) continue;
+                    @SvgText($"{N(ColPct(i))}%", N(H - 6), Grid.MinToTime(Density[i].Time)[..2])
+                }
+            </svg>
+        </div>
+        <p class="mt-1 text-xs text-[var(--brand-navy)]/50">
+            @(Days > 1
+                ? $"Stacked labour by group for an AVERAGE day across this range (x = time, y = staff on the floor, averaged over {Days} trading day{(Days == 1 ? "" : "s")} - closed days excluded). Click a group to isolate it."
+                : "Stacked headcount by labour group across the day (x = time, y = staff). Click a group to isolate it.")
+        </p>
+    </div>
+}
+
+@code {
+    private static readonly string[] Groups = ["checkout", "load_running", "reset", "admin", "specials", "cleaning"];
+    private const int H = 260;
+    private const int PadL = 30;
+    private const int PadB = 20;
+    private const int PadT = 10;
+    private string? _isolate;
+
+    [Parameter, EditorRequired] public IReadOnlyList<DensityBlock> Density { get; set; } = [];
+
+    /// <summary>
+    /// Days contributing to the summed density. More than one averages every block, so a
+    /// range reads on exactly the same axis as a single day ("staff on the floor at this
+    /// time"), just as a typical day rather than one specific one.
+    /// </summary>
+    [Parameter] public int Days { get; set; } = 1;
+
+    private static string Colour(string g) => AnalysisText.GroupColour(g) ?? "transparent";
+
+    private static string N(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+
+    // An SVG <text> (Razor keeps the tag name for itself).
+    private static RenderFragment SvgText(string x, string y, string content) => b =>
+    {
+        b.OpenElement(0, "text");
+        b.AddAttribute(1, "x", x);
+        b.AddAttribute(2, "y", y);
+        b.AddAttribute(3, "font-size", "9");
+        b.AddAttribute(4, "class", "fill-[var(--brand-navy)]/50");
+        b.AddContent(5, content);
+        b.CloseElement();
+    };
+}

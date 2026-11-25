@@ -1,0 +1,70 @@
+@* Port of src/app/(app)/analysis/notes/NotesFilterBar.tsx: mirrors the Analysis filter
+   bar so the two screens read as one section. *@
+@inject NavigationManager Navigation
+@inject StoreSelection Selection
+@inject RosterJs Js
+
+<form @onsubmit="SubmitAsync" class="mb-5 flex flex-wrap items-end gap-3">
+    @if (ShowStoreSelect && Stores.Count > 0)
+    {
+        <label class="text-sm">
+            <span class="@Ui.FieldLabelClass">Store</span>
+            <select name="store" @bind="_store" class="@Ui.FieldClass">
+                @foreach (var s in Stores)
+                {
+                    <option @key="s.Id" value="@s.Id">@s.Code - @s.Name</option>
+                }
+            </select>
+        </label>
+    }
+    <label class="text-sm">
+        <span class="@Ui.FieldLabelClass">Raised from</span>
+        <input type="date" name="start" value="@_start" @onchange="e => _start = e.Value?.ToString() ?? string.Empty" class="@Ui.FieldClass" />
+    </label>
+    <label class="text-sm">
+        <span class="@Ui.FieldLabelClass">to</span>
+        <input type="date" name="end" value="@_end" @onchange="e => _end = e.Value?.ToString() ?? string.Empty" class="@Ui.FieldClass" />
+    </label>
+    <label class="text-sm">
+        <span class="@Ui.FieldLabelClass">Status</span>
+        <select name="status" @bind="_status" class="@Ui.FieldClass">
+            <option value="completed">Completed</option>
+            <option value="open">Still open</option>
+            <option value="all">All</option>
+        </select>
+    </label>
+    <button type="submit" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Accent)">@(_pending ? "Loading…" : "Apply")</button>
+</form>
+
+@code {
+    private string _store = "", _start = "", _end = "", _status = "completed";
+    private bool _pending;
+
+    [Parameter, EditorRequired] public IReadOnlyList<AnalysisStore> Stores { get; set; } = [];
+    [Parameter] public Guid? StoreId { get; set; }
+    [Parameter] public string StartDate { get; set; } = "";
+    [Parameter] public string EndDate { get; set; } = "";
+    [Parameter] public NoteStatus Status { get; set; }
+    [Parameter] public bool ShowStoreSelect { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _store = StoreId?.ToString() ?? "";
+        _start = StartDate;
+        _end = EndDate;
+        _status = Status switch { NoteStatus.Open => "open", NoteStatus.All => "all", _ => "completed" };
+        _pending = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        _pending = true;
+        var query = $"store={Uri.EscapeDataString(_store)}&start={Uri.EscapeDataString(_start)}&end={Uri.EscapeDataString(_end)}&status={Uri.EscapeDataString(_status)}";
+        if (Guid.TryParse(_store, out var id))
+        {
+            Selection.Remember(id);
+            await Js.SetCookieAsync(StoreSelection.CookieName, id.ToString(), TimeSpan.FromDays(365));
+        }
+        Navigation.NavigateTo($"/analysis/notes?{query}");
+    }
+}

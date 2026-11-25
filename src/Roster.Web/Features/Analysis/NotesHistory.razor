@@ -1,0 +1,129 @@
+@* Port of src/app/(app)/analysis/notes/page.tsx.
+   Notes History - what was spotted on store walks, and whether it got done. *@
+@page "/analysis/notes"
+@inject IServiceProvider Services
+@inject ILogger<NotesHistory> Log
+
+<div>
+    <PageHeader Title="Notes History">
+        <Subtitle>Store walk notes raised on the kiosk, and whether they got done</Subtitle>
+    </PageHeader>
+
+    @if (_failed)
+    {
+        <Unavailable What="The notes" />
+    }
+    else if (_page is { } p)
+    {
+        var summary = p.Summary;
+        <NotesFilterBar Stores="p.Stores" StoreId="p.StoreId" StartDate="@p.StartDate" EndDate="@p.EndDate" Status="p.Status" ShowStoreSelect="p.ShowStoreSelect" />
+
+        <div class="mb-5 grid gap-4 sm:grid-cols-4">
+            @Kpi("Notes in range", summary.Raised.ToString(CultureInfo.InvariantCulture))
+            @Kpi("Completed", summary.Completed.ToString(CultureInfo.InvariantCulture))
+            @* Null, not 0: nothing closed yet is a different statement from "closed the same
+               day", and 0 would read as the second. *@
+            @Kpi("Median days to close", summary.MedianDaysToClose is { } m ? Js.NumberToString(m) : "-", "completed notes only")
+            @Kpi("Oldest still open", summary.OldestOpenDays is { } o ? $"{o}d" : "-",
+                summary.Open > 0 ? $"{summary.Open} outstanding" : "nothing outstanding",
+                summary.OldestOpenDays is > 14)
+        </div>
+
+        <Card Padded="false">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="ui-thead">
+                        <tr>
+                            <th class="@Th">Note</th>
+                            <th class="@Th">Allocated to</th>
+                            <th class="@Th">Raised</th>
+                            <th class="@Th">Completed</th>
+                            <th class="@($"{Th} text-right")">Days to close</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (p.Notes.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="px-3 py-8 text-center text-[var(--ui-muted)]">No notes match this range.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var n in p.Notes)
+                            {
+                                var days = global::Roster.Engine.Walk.Notes.DaysToClose(n.RaisedDate, n.CompletedAt);
+                                <tr @key="n.Id" class="border-t border-[var(--ui-line)]">
+                                    <td class="@($"{Td} text-[var(--ui-ink)]")">@n.Note</td>
+                                    <td class="@($"{Td} text-[var(--ui-muted)]")">
+                                        @if (n.AssignedName is not null)
+                                        {
+                                            @n.AssignedName
+                                        }
+                                        else
+                                        {
+                                            <span class="text-[var(--ui-muted)]">-</span>
+                                        }
+                                    </td>
+                                    <td class="@($"{Td} whitespace-nowrap")">@Dates.AuFull(n.RaisedDate)</td>
+                                    <td class="@($"{Td} whitespace-nowrap")">
+                                        @if (n.CompletedAt is { } done)
+                                        {
+                                            @Dates.AuFull(global::Roster.Engine.Walk.Notes.CompletedDate(done))
+                                        }
+                                        else
+                                        {
+                                            <span class="font-semibold text-[var(--ui-amber-ink)]">Still open</span>
+                                        }
+                                    </td>
+                                    <td class="@($"{Td} text-right")">@(days is { } d ? d.ToString(CultureInfo.InvariantCulture) : "-")</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+
+        <p class="mt-3 text-xs text-[var(--ui-muted)]">
+            Raised on the store kiosk during a walk and completed there. The range filters on the date a
+            note was <strong>raised</strong>, so a note raised inside the range still appears when it was
+            completed after it. Median rather than average days to close: one note left for months would
+            drag an average far enough to hide how the store normally performs.
+        </p>
+    }
+</div>
+
+@code {
+    private const string Th = "px-3 py-2 text-left font-medium";
+    private const string Td = "px-3 py-2 align-top";
+    private NotesPage? _page;
+    private bool _failed;
+
+    [SupplyParameterFromQuery(Name = "store")] public string? StoreParam { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public string? StartParam { get; set; }
+    [SupplyParameterFromQuery(Name = "end")] public string? EndParam { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusParam { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _page = await Services.GetRequiredService<IAnalysisService>().LoadNotesAsync(StoreParam, StartParam, EndParam, StatusParam);
+            _failed = false;
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "Notes History couldn't be read");
+            _failed = true;
+        }
+    }
+
+    private static RenderFragment Text(string text) => b => b.AddContent(0, text);
+
+    private static RenderFragment Kpi(string label, string value, string? note = null, bool red = false) => __builder =>
+    {
+        RenderFragment big = __b => { <span class="@($"text-3xl {(red ? "text-[var(--ui-bad)]" : "")}")">@value</span> };
+        <StatCard Label="@Text(label)" Value="@big" Sub="@(note is null ? null : Text(note))" />
+    };
+}
