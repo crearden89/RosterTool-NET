@@ -1,0 +1,32 @@
+@* Port of src/app/(app)/plan/generate/PlanStatus.tsx (ReviewLink). *@
+@using global::Roster.Web.Features.Review
+@* The Review's door in the page header: what the viewer does there next. *@
+<a href="@ShellPaths.Href(Href)" class="@Ui.ButtonClass(ButtonKind.Secondary)">
+    @if (Unlock)
+    {
+        <Icon Name="IconName.Lock" Class="h-4 w-4" />
+    }
+    @Label
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+
+    [Parameter, EditorRequired] public PlanReviewState State { get; set; }
+
+    /// <summary>The store's own login: the link says what the store has to do.</summary>
+    [Parameter] public bool IsStore { get; set; }
+
+    [Parameter] public bool Locked { get; set; }
+
+    private bool Unlock => IsStore && Locked && State == PlanReviewState.Approved;
+
+    private string Label =>
+        IsStore && State == PlanReviewState.NotSubmitted
+            ? "Review & submit"
+            : IsStore && State == PlanReviewState.Returned
+                ? "Answer the query"
+                : Unlock
+                    ? "Ask to unlock"
+                    : "Open review";
+}

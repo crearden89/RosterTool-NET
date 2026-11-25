@@ -1,0 +1,60 @@
+@* Port of src/app/(app)/plan/generate/PlanRosterView.tsx. *@
+@using global::Roster.Engine.Planning.Plan
+@using global::Roster.Engine.Planning.Stage1
+@using global::Roster.Web.Features.RosterPage.Grid
+@* The plan's shifts on the shared tile grid: no names (the plan is a virtual
+   pool of slots), the tills' headcount row, and in edit mode the paint, stretch,
+   remove and role-cycle hooks. The legend is RosterLegend (TS: PlanLegend). *@
+<RosterGrid Rows="_rows"
+            TillsByTime="_tillsByTime"
+            EmptyLabel="No shifts planned."
+            OnCellClick="OnCellClick"
+            Extendable="Extendable"
+            OnRemoveRow="OnRemoveRow"
+            OnRoleClick="OnRoleClick"
+            HeatRow="HeatRow"
+            LoadRunningPeriods="LoadRunningPeriods"
+            BreakAsHours="true"
+            Subtasks="@(new GridSubtasks(OpenGroups ?? new HashSet<string>()))" />
+
+@code {
+    private IReadOnlyList<RosterGridRow> _rows = [];
+    private IReadOnlyDictionary<double, double> _tillsByTime = new Dictionary<double, double>();
+
+    [Parameter, EditorRequired] public PlanShiftComputation Plan { get; set; } = PlanShifts.Empty();
+
+    /// <summary>The checkout headcount per quarter-hour (Stage 1's checkout blocks).</summary>
+    [Parameter] public IReadOnlyList<(double Time, double Headcount)> CheckoutBlocks { get; set; } = [];
+
+    [Parameter] public EventCallback<GridCell> OnCellClick { get; set; }
+
+    [Parameter] public bool Extendable { get; set; }
+
+    [Parameter] public EventCallback<string> OnRemoveRow { get; set; }
+
+    [Parameter] public EventCallback<string> OnRoleClick { get; set; }
+
+    [Parameter] public HeatRow? HeatRow { get; set; }
+
+    [Parameter] public IReadOnlyList<LoadRunning.Period>? LoadRunningPeriods { get; set; }
+
+    /// <summary>Groups opened into their sub-tasks in the Benchmark Hours table.</summary>
+    [Parameter] public IReadOnlySet<string>? OpenGroups { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        var tills = new Dictionary<double, double>();
+        foreach (var (time, headcount) in CheckoutBlocks) tills[time] = headcount; // a Map: the last one wins
+        _tillsByTime = tills;
+        _rows = Plan.Shifts.Select(s => new RosterGridRow
+        {
+            Key = s.SlotId,
+            Badge = s.PlanRole,
+            Start = s.Start,
+            End = s.End,
+            BreakMinutes = s.BreakMinutes,
+            UnpaidBreakMinutes = s.UnpaidBreakMinutes,
+            Blocks = s.Blocks,
+        }).ToList();
+    }
+}

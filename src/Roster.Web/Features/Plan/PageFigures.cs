@@ -6,7 +6,10 @@
 // every flag a check graded by lib/review/checks.ts. Pure.
 
 using System.Globalization;
+using Roster.Data.Services.Held;
 using Roster.Engine.Core;
+using Roster.Engine.Planning;
+using Roster.Engine.Planning.Plan;
 
 namespace Roster.Web.Features.Plan;
 
@@ -55,6 +58,50 @@ public sealed record PlanFortnightFigures
 
 public static partial class PageFigures
 {
+    public static PlanFortnightFigures PlanFortnightFigures(IReadOnlyList<PlanSnapshotDay> days)
+    {
+        var out_ = days.Select(d =>
+        {
+            var (result, plan) = (d.Result, d.Plan);
+            var closed = result.Closed;
+            var planned = !closed && result.HasData && plan?.HasData == true;
+            // The one definition of planned hours every page reads (HeldDayHours).
+            var held = new HeldPlanDay(BenchmarkParts.Of(result), plan);
+            var benchmark = HeldDayHours.BenchmarkHours(held);
+            var worked = HeldDayHours.PlannedHours(held);
+            var checks = planned ? ReviewChecks.FlagsToChecks(d.Date, [.. result.Flags, .. plan?.Flags ?? []]) : [];
+            return new PlanDayFigures
+            {
+                Date = d.Date,
+                Closed = closed,
+                Planned = planned,
+                Ok = d.Ok,
+                Benchmark = benchmark,
+                Worked = worked,
+                Variance = worked - benchmark,
+                Shifts = plan?.Shifts.Count ?? 0,
+                Errors = checks.Count(c => c.Severity == Severity.Error),
+                Warnings = checks.Count(c => c.Severity == Severity.Warning),
+            };
+        }).ToList();
+        double Sum(Func<PlanDayFigures, double> f) => out_.Aggregate(0.0, (n, d) => n + f(d));
+        var plannedDays = out_.Where(d => d.Planned).ToList();
+        return new PlanFortnightFigures
+        {
+            Days = out_,
+            OkDays = out_.Count(d => d.Ok),
+            ErrorDays = out_.Count(d => !d.Ok),
+            PlannedDays = plannedDays.Count,
+            WithinDays = plannedDays.Count(d => Math.Abs(d.Variance) <= ReviewChecks.HoursTolerance + 1e-9),
+            Benchmark = Sum(d => d.Benchmark),
+            Worked = Sum(d => d.Worked),
+            NonOp = days.Aggregate(0.0, (n, d) => n + (d.Result.Allocations?.FirstOrDefault(a => a.Group == "non_op")?.BenchmarkHours ?? 0)),
+            Shifts = (int)Sum(d => d.Shifts),
+            Errors = (int)Sum(d => d.Errors),
+            Warnings = (int)Sum(d => d.Warnings),
+        };
+    }
+
     /// <summary>"+0.09" or "−0.13": a signed figure, two decimals (the minus is U+2212).</summary>
     public static string Signed(double n)
     {
