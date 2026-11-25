@@ -1,0 +1,162 @@
+@* Port of src/app/floor/[token]/WalkNotes.tsx.
+   The full Store Walk Notes surface: raise a note, allocate it, tick it off.
+   Sized for a tablet held in one hand while walking - large type, 44px+ targets,
+   and no hover-only affordances. *@
+@using global::Roster.Engine.Walk
+@inject IFloorService Floor
+
+<div class="floor-form">
+    <section class="floor-card">
+        <h2>Add a note</h2>
+        <textarea @bind="text" @bind:event="oninput" rows="3" maxlength="@Notes.MaxNoteLength" aria-label="Note"
+                  placeholder="What did you notice? e.g. Chiller 3 needs re-facing"></textarea>
+        <div class="floor-formRow">
+            <label>
+                Allocate to
+                <select @bind="assignee">
+                    <option value="">Nobody yet</option>
+                    @foreach (var c in Crew)
+                    {
+                        <option @key="c.Id" value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            </label>
+            <button type="button" @onclick="SubmitAsync" disabled="@(busy || Js.Trim(text).Length == 0)" class="floor-btn floor-solid">
+                @(busy ? "Saving…" : "Add note")
+            </button>
+            @if (error is not null)
+            {
+                <span class="floor-error">@error</span>
+            }
+        </div>
+        @if (Crew.Count == 0)
+        {
+            <p class="floor-hint">
+                Nobody is rostered today, so there is no one to allocate to - the note can still be
+                raised and allocated later.
+            </p>
+        }
+    </section>
+
+    <section>
+        <h2>
+            Open notes @if (open.Count > 0)
+            {
+                <small>(@open.Count)</small>
+            }
+        </h2>
+        @if (open.Count == 0)
+        {
+            <div class="floor-card">
+                <p class="floor-quiet">
+                    Nothing outstanding. Anything raised on a walk shows here until it is ticked off.
+                </p>
+            </div>
+        }
+        else
+        {
+            <ul class="floor-list">
+                @foreach (var n in open)
+                {
+                    <li @key="n.Id">
+                        <div>
+                            <p>@n.Note</p>
+                            <p>Raised @Notes.AgeLabel(n.RaisedDate, Today) · @(n.AssignedName ?? "unallocated")</p>
+                        </div>
+                        <button type="button" @onclick="() => RunAsync(() => Floor.CompleteWalkNoteAsync(Token, n.Id))" disabled="@busy"
+                                class="floor-btn floor-solid">
+                            Complete
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    @* Completed notes stay visible for the rest of the day so a mis-tap can
+       be undone by whoever is standing at the tablet - there is no login to
+       appeal to, and retyping loses when the note was raised. *@
+    @if (CompletedToday.Count > 0)
+    {
+        <section>
+            <h2>
+                Completed today <small>(@CompletedToday.Count)</small>
+            </h2>
+            <ul class="floor-list">
+                @foreach (var n in CompletedToday)
+                {
+                    <li @key="n.Id" class="floor-doneNote">
+                        <div>
+                            <p>@n.Note</p>
+                        </div>
+                        <button type="button" @onclick="() => RunAsync(() => Floor.ReopenWalkNoteAsync(Token, n.Id))" disabled="@busy"
+                                class="floor-btn floor-ghost">
+                            Undo
+                        </button>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Token { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<WalkNote> Items { get; set; } = []; // the open notes
+    [Parameter, EditorRequired] public IReadOnlyList<CrewOption> Crew { get; set; } = [];
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<WalkNote> CompletedToday { get; set; } = [];
+
+    /// <summary>Reads the page again (the TypeScript's router.refresh()).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string text = "";
+    private string assignee = "";
+    private string? error;
+    private bool busy;
+    private List<WalkNote> open = [];
+
+    protected override void OnParametersSet() => open = Notes.SortOpen(Items);
+
+    private async Task SubmitAsync()
+    {
+        error = null;
+        busy = true;
+        try
+        {
+            var res = await Floor.AddWalkNoteAsync(Token, text, assignee.Length > 0 ? assignee : null);
+            if (!res.Ok)
+            {
+                error = res.Error ?? "Could not save that note.";
+                return;
+            }
+            text = "";
+            assignee = "";
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task RunAsync(Func<Task<KioskResult>> fn)
+    {
+        error = null;
+        busy = true;
+        try
+        {
+            var res = await fn();
+            if (!res.Ok)
+            {
+                error = res.Error ?? "Something went wrong.";
+                return;
+            }
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

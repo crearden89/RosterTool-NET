@@ -6,7 +6,14 @@ using Roster.Engine.Walk;
 namespace Roster.Web.Features.Floor;
 
 /// <summary>The header, shared by the wall screen and the walk notes view.</summary>
-public sealed record FloorHeaderInfo(string When, string Store, bool OtherDay);
+public sealed record FloorHeaderInfo(string When, string Store, bool OtherDay)
+{
+    /// <summary>
+    /// The "No login needed" pill. Always shown in the TypeScript app; here it goes
+    /// when Kiosk:RequireDeviceSignIn makes the tablet sign in, as it would be untrue.
+    /// </summary>
+    public bool NoLoginNeeded { get; init; } = true;
+}
 
 /// <summary>The out-of-date banner's two times, preformatted.</summary>
 public sealed record DriftNote(string Approved, string Changed);
