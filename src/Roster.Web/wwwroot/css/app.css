@@ -84,6 +84,8 @@
     --text-xl--line-height: calc(1.75 / 1.25);
     --text-2xl: 1.5rem;
     --text-2xl--line-height: calc(2 / 1.5);
+    --text-3xl: 1.875rem;
+    --text-3xl--line-height: calc(2.25 / 1.875);
     --text-5xl: 3rem;
     --text-5xl--line-height: 1;
     --font-weight-normal: 400;
@@ -467,6 +469,10 @@
     left: 50%;
   }
 
+  .isolate {
+    isolation: isolate;
+  }
+
   .z-10 {
     z-index: 10;
   }
@@ -513,6 +519,10 @@
 
   .my-auto {
     margin-block: auto;
+  }
+
+  .-mt-1 {
+    margin-top: calc(var(--spacing) * -1);
   }
 
   .-mt-2 {
@@ -1666,6 +1676,10 @@
     border-color: var(--ui-line);
   }
 
+  .border-\[var\(--ui-muted\)\] {
+    border-color: var(--ui-muted);
+  }
+
   .border-\[var\(--ui-violet\)\]\/35 {
     border-color: var(--ui-violet);
   }
@@ -1887,6 +1901,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .fill-\[var\(--brand-navy\)\]\/35 {
       fill: color-mix(in oklab, var(--brand-navy) 35%, transparent);
+    }
+  }
+
+  .fill-\[var\(--brand-navy\)\]\/50 {
+    fill: var(--brand-navy);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .fill-\[var\(--brand-navy\)\]\/50 {
+      fill: color-mix(in oklab, var(--brand-navy) 50%, transparent);
     }
   }
 
@@ -2200,6 +2224,11 @@
   .text-2xl {
     font-size: var(--text-2xl);
     line-height: var(--tw-leading, var(--text-2xl--line-height));
+  }
+
+  .text-3xl {
+    font-size: var(--text-3xl);
+    line-height: var(--tw-leading, var(--text-3xl--line-height));
   }
 
   .text-5xl {
@@ -3205,6 +3234,10 @@
 
     .lg\:scroll-mt-6 {
       scroll-margin-top: calc(var(--spacing) * 6);
+    }
+
+    .lg\:grid-cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .lg\:grid-cols-3 {
