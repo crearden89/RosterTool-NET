@@ -45,7 +45,7 @@ public sealed record RosterDayView
 public sealed record RosterFortnightCost(double Ideal, double Actual, double Delta);
 
 /// <summary>One person more than half an hour off their fortnight contract (lib/roster/contracts ContractGap).</summary>
-public sealed record RosterContractGap(Guid EmployeeId, string Name, string Role, bool Over, double Hours);
+public sealed record RosterContractGap(string EmployeeId, string Name, string Role, bool Over, double Hours);
 
 /// <summary>
 /// Where the team landed against contract this fortnight (lib/roster/contracts
