@@ -34,7 +34,9 @@ public static class Js
         if (double.IsNaN(x) || double.IsInfinity(x)) return x;
         var f = Math.Floor(x);
         // x - floor(x) is exact for every finite double.
-        return x - f >= 0.5 ? f + 1 : f;
+        var r = x - f >= 0.5 ? f + 1 : f;
+        // Math.round keeps the sign of zero: -0 for -0 and for -0.5 <= x < 0.
+        return r == 0 && double.IsNegative(x) ? -0.0 : r;
     }
 
     /// <summary>JavaScript truthiness of a number: false for 0, -0 and NaN.</summary>
