@@ -54,7 +54,7 @@ public static class Notes
     /// </summary>
     public static CleanedNote CleanNote(string raw)
     {
-        var text = JsTrim(raw);
+        var text = Js.Trim(raw);
         if (text.Length == 0) return CleanedNote.Invalid("Type a note first.");
         if (text.Length > MaxNoteLength)
             return CleanedNote.Invalid($"Keep it under {MaxNoteLength} characters (currently {text.Length}).");
@@ -142,15 +142,4 @@ public static class Notes
             OldestOpenDays: openAges.Count > 0 ? openAges.Max() : null);
     }
 
-    // JavaScript's String.prototype.trim: WhiteSpace (tab, VT, FF, ZWNBSP and
-    // every Space_Separator) and LineTerminator (LF, CR, LS, PS). .NET's Trim()
-    // differs on two characters (it trims U+0085 and keeps U+FEFF).
-    private static readonly char[] JsWhiteSpace = new[]
-    {
-        0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x0020, 0x00A0, 0x1680,
-        0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007,
-        0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF,
-    }.Select(c => (char)c).ToArray();
-
-    private static string JsTrim(string s) => s.Trim(JsWhiteSpace);
 }
