@@ -25,11 +25,9 @@ public static class ParityRunner
         IReadOnlyDictionary<string, Func<ParityCase, ParityResult>> adapters,
         ITestOutputHelper log)
     {
+        // A Slow full-corpus run with no corpus must not read as a pass.
         if (dir is null)
-        {
-            log.WriteLine($"{entry}: no full corpus here (run tools/parity/dump.ts, or set PARITY_FULL_CORPUS) - nothing to compare.");
-            return;
-        }
+            Assert.Fail($"{entry}: full corpus not generated: run tools/parity/dump.ts (or set PARITY_FULL_CORPUS to its --full folder)");
         var file = ParityCorpus.FileFor(dir, entry);
         Assert.True(File.Exists(file), $"{file} is missing: run tools/parity/dump.ts");
 
