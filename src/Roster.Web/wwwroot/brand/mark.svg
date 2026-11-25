@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- The app's default mark: a neutral R on the app's navy (Branding:LogoUrl replaces it). -->
+  <rect width="32" height="32" rx="7" fill="#00005f"/>
+  <path fill="#ffffff" fill-rule="evenodd" d="M10 8h7.4c2.9 0 5 2 5 4.8 0 2.1-1.2 3.7-3 4.4L23 24h-4.6l-3.1-6.2h-1.1V24H10Zm4.2 3.6v2.8h2.9c.9 0 1.4-.6 1.4-1.4s-.5-1.4-1.4-1.4Z"/>
+</svg>

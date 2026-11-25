@@ -1,0 +1,53 @@
+@* Port of src/components/ui/StepTrack.tsx. *@
+@* A row of steps, each done, under way or still to come: the fortnight's way
+   through Plan, Review, Approval and Roster on the Dashboard. The state is
+   written in words for screen readers, not left to the circle's colour. *@
+<ol class="grid grid-cols-1 gap-x-4 gap-y-3 min-[480px]:grid-cols-2 md:grid-cols-4">
+    @for (var i = 0; i < Steps.Count; i++)
+    {
+        var s = Steps[i];
+        var n = i + 1;
+        <li @key="s.Key" class="flex min-w-0 items-start gap-2.5">
+            <span aria-hidden="true" class="@Ui.Cx("grid h-7 w-7 flex-none place-items-center rounded-full text-xs font-bold", Circle(s.State))">
+                @if (s.State == StepState.Done)
+                {
+                    <Icon Name="IconName.Check" Class="h-3.5 w-3.5" StrokeWidth="3" />
+                }
+                else if (s.State == StepState.Attention)
+                {
+                    @("!")
+                }
+                else
+                {
+                    @n
+                }
+            </span>
+            <span class="min-w-0">
+                <span class="@Ui.Cx("block text-sm font-semibold", s.State == StepState.Todo ? "text-[var(--ui-muted)]" : "text-[var(--ui-ink)]")">
+                    @s.Title<span class="sr-only">, @Words(s.State)</span>
+                </span>
+                <span class="block text-xs text-[var(--ui-muted)]">@s.Detail</span>
+            </span>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Step> Steps { get; set; } = [];
+
+    private static string Circle(StepState state) => state switch
+    {
+        StepState.Done => "bg-[var(--ui-ink)] text-white",
+        StepState.Current => "bg-[var(--ui-gold)] text-[var(--ui-ink)]",
+        StepState.Attention => "bg-[var(--ui-bad)] text-white",
+        _ => "border-2 border-[var(--ui-line)] bg-white text-[var(--ui-muted)]",
+    };
+
+    private static string Words(StepState state) => state switch
+    {
+        StepState.Done => "done",
+        StepState.Current => "next",
+        StepState.Attention => "needs attention",
+        _ => "still to come",
+    };
+}

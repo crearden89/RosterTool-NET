@@ -1,0 +1,20 @@
+@* New: where a page sends someone it may not show, within the interactive app (a
+   full page load gets the same answer from the server): not signed in, to the
+   sign-in and back; signed in without access to the app, to "No access"; without
+   the tier the page needs, to the Dashboard (requireTier in src/lib/auth.ts). *@
+@inject NavigationManager Navigation
+
+@code {
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = AuthenticationState is null ? null : (await AuthenticationState).User;
+        if (user?.Identity?.IsAuthenticated != true)
+            Navigation.NavigateTo($"account/sign-in?returnUrl={Uri.EscapeDataString(new Uri(Navigation.Uri).PathAndQuery)}", forceLoad: true);
+        else if (!user.HasClaim(c => c.Type == RosterClaims.Tier))
+            Navigation.NavigateTo("account/no-access", forceLoad: true);
+        else
+            Navigation.NavigateTo("overview");
+    }
+}

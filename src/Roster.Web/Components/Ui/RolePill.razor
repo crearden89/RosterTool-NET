@@ -1,0 +1,7 @@
+@* Port of src/components/ui/primitives.tsx. *@
+@* The small dark-navy role pill beside a name (SM, ASM, SA, JSA). *@
+<span class="inline-flex items-center rounded-md bg-[var(--ui-ink)] px-1.5 py-px text-[10px] font-bold tracking-wide text-white uppercase">@Role</span>
+
+@code {
+    [Parameter, EditorRequired] public string Role { get; set; } = "";
+}

@@ -1,0 +1,35 @@
+@* New: read-only tiers see no write controls (the TypeScript pages pass readOnly to
+   their client components and hide the controls). Wrap a page's write controls in
+   it: <WriteGate CanWrite="_access == StoreAccess.Write"><button ...>Save</button></WriteGate>.
+   CanWrite is the page's own answer for its store (from the data layer's store
+   scope); without it only the tier counts (PA and DSO never write). ReadOnly is
+   shown instead, when given. *@
+@using Roster.Web.Auth
+@if (_canWrite)
+{
+    @ChildContent
+}
+else
+{
+    @ReadOnly
+}
+
+@code {
+    private bool _canWrite;
+
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    /// <summary>Whether the person may write the page's store; null when the page has no store.</summary>
+    [Parameter] public bool? CanWrite { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>What a person who cannot write sees instead (nothing when not given).</summary>
+    [Parameter] public RenderFragment? ReadOnly { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = AuthenticationState is null ? null : SignedInUser.FromPrincipal((await AuthenticationState).User);
+        _canWrite = user is { IsReadOnly: false } && CanWrite != false;
+    }
+}

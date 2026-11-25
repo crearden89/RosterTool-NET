@@ -1,0 +1,33 @@
+@* Port of src/app/error.tsx. *@
+@* What a page shows when it hits an error it did not expect: a plain card
+   with a retry, instead of a broken page. The error still reaches the log. *@
+<div class="flex min-h-[60vh] items-center justify-center p-6">
+    <div class="w-full max-w-md rounded-xl border border-[var(--brand-border)] bg-white p-6 text-center">
+        <p class="text-lg font-semibold text-[var(--brand-navy)]">Something went wrong</p>
+        <p class="mt-2 text-sm text-[var(--brand-navy)]/70">
+            The page hit an unexpected error. Try again - if it keeps happening, note what you were
+            doing and let the roster admin know.
+        </p>
+        @if (!string.IsNullOrEmpty(Reference))
+        {
+            <p class="mt-2 text-xs text-[var(--brand-navy)]/40">Reference: @Reference</p>
+        }
+        @if (RetryHref is not null)
+        {
+            <a href="@RetryHref" class="mt-4 inline-block rounded-lg bg-[var(--brand-orange)] px-5 py-2 text-sm font-semibold text-white hover:brightness-110">Try again</a>
+        }
+        else
+        {
+            <button type="button" @onclick="OnRetry"
+                    class="mt-4 rounded-lg bg-[var(--brand-orange)] px-5 py-2 text-sm font-semibold text-white hover:brightness-110">Try again</button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Reference { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>Retry by loading an address instead (a page with no live connection); "" is the app's home.</summary>
+    [Parameter] public string? RetryHref { get; set; }
+}
