@@ -1,0 +1,54 @@
+@* Port of SummaryCards in src/app/(app)/plan/sales/SalesClient.tsx. *@
+@using global::Roster.Engine.Core
+<div class="grid gap-4 sm:grid-cols-3">
+    <StatCard>
+        <Label>Non-Op</Label>
+        <Value>@(Summary.NonOp.Hours > 0 ? $"+{SalesFigures.Hours2(Summary.NonOp.Hours)} h" : "None")</Value>
+        <Sub>@(Summary.NonOp.Hours > 0 ? $"{string.Join(", ", Summary.NonOp.Categories)} · this fortnight" : "No Non-Op booked this fortnight")</Sub>
+        <Footer><a href="@($"/plan/non-op?{Query}")" class="@Ui.LinkClass">Non-Op →</a></Footer>
+    </StatCard>
+    <StatCard>
+        <Label>Leave</Label>
+        <Value>@(People > 0 ? $"{People} on leave" : "No leave")</Value>
+        <Sub>@LeaveLine</Sub>
+        <Footer><a href="@($"/setup/staff?store={StoreId}")" class="@Ui.LinkClass">Team Members →</a></Footer>
+    </StatCard>
+    <StatCard>
+        <Label>Weekends</Label>
+        <Value>@(Summary.Weekends.Switches > 0 ? $"{Summary.Weekends.Switches} switch{(Summary.Weekends.Switches == 1 ? "" : "es")} set" : "None set")</Value>
+        <Sub>@WeekendLine</Sub>
+        <Footer><a href="@($"/setup/weekends?{Query}")" class="@Ui.LinkClass">Weekends →</a></Footer>
+    </StatCard>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SalesSummary Summary { get; set; } = default!;
+    [Parameter] public Guid? StoreId { get; set; }
+    [Parameter] public DateOnly StartDate { get; set; }
+
+    private string Query => $"store={StoreId}&start={StartDate.ToIso()}";
+
+    private int People => Summary.Leave.Select(l => l.Name).Distinct().Count();
+
+    private string LeaveLine
+    {
+        get
+        {
+            var leave = Summary.Leave;
+            if (leave.Count == 0) return "Nobody is booked off this fortnight";
+            return string.Join(", ", leave.Take(2).Select(l => $"{l.Name} · {Dates.AuRange(l.Start, l.End)}"))
+                + (leave.Count > 2 ? $" and {leave.Count - 2} more" : "");
+        }
+    }
+
+    private string WeekendLine
+    {
+        get
+        {
+            var w = Summary.Weekends;
+            if (w.Saturdays.Count == 0) return "No weekend in these dates";
+            var dates = w.Saturdays.Select(sat => Dates.AuRange(sat, sat.AddDays(1)));
+            return $"{w.People} team member{(w.People == 1 ? "" : "s")} off a weekend day · {string.Join(", ", dates)}";
+        }
+    }
+}

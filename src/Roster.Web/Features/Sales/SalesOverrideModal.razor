@@ -1,0 +1,173 @@
+@* Port of OverrideModal in src/app/(app)/plan/sales/SalesClient.tsx. *@
+@using global::Roster.Engine.Core
+@implements IAsyncDisposable
+@inject ISalesService Sales
+@inject RosterJs Browser
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-ink)]/40 p-4" role="dialog" aria-modal="true" aria-labelledby="override-title">
+    <div class="w-full max-w-md rounded-2xl border border-[var(--ui-line)] bg-white p-6 shadow-xl">
+        <h3 id="override-title" class="text-lg font-bold text-[var(--ui-ink)]">Adjust @Dates.AuDayLabel(Date)</h3>
+        <p class="mb-4 text-sm text-[var(--ui-muted)]">Forecast @SalesFigures.Money0(Forecast)</p>
+        <Switch Checked="_closed" OnChange="v => _closed = v" Label="Store closed this day (zeroes all planning)" Class="mb-4 !text-sm" />
+
+        @if (!_closed)
+        {
+            <div class="mb-3 flex gap-2">
+                <button type="button" @onclick='() => _method = "pct"' aria-pressed="@(_method == "pct" ? "true" : "false")" class="@Seg(_method == "pct")">Adjust by %</button>
+                <button type="button" @onclick='() => _method = "value"' aria-pressed="@(_method == "value" ? "true" : "false")" class="@Seg(_method == "value")">New value</button>
+            </div>
+            @if (_method == "pct")
+            {
+                <label class="mb-3 block">
+                    <span class="@Ui.FieldLabelClass">Percentage (100 = no change)</span>
+                    <input type="number" value="@Js.NumberToString(_pct)" @oninput="e => _pct = Js.Number(e.Value?.ToString())" class="@($"w-full {Ui.FieldClass}")" />
+                </label>
+            }
+            else
+            {
+                <label class="mb-3 block">
+                    <span class="@Ui.FieldLabelClass">New forecast value ($)</span>
+                    <input type="number" value="@Js.NumberToString(_value)" @oninput="e => _value = Js.Number(e.Value?.ToString())" class="@($"w-full {Ui.FieldClass}")" />
+                </label>
+            }
+        }
+        <label class="mb-3 block">
+            <span class="@Ui.FieldLabelClass">
+                Reason
+                @if (NoteRequired)
+                {
+                    <span class="text-[var(--ui-bad)]">(required)</span>
+                }
+                else
+                {
+                    <span class="font-normal">(optional)</span>
+                }
+            </span>
+            <input value="@_note" @oninput="e => _note = e.Value?.ToString() ?? string.Empty" class="@($"w-full {Ui.FieldClass}")" />
+        </label>
+        <p class="text-xs text-[var(--ui-muted)]">Saving un-approves this day&apos;s plan and roster. So does resetting a changed sales figure.</p>
+        @if (_err is not null)
+        {
+            <p class="mt-2 text-sm text-[var(--ui-bad)]">@_err</p>
+        }
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+            @if (Adjusted)
+            {
+                <button type="button" @onclick="ResetAsync" disabled="@(_busy is not null)" class="@Ui.ButtonClass(ButtonKind.Quiet)">@(_busy == "reset" ? "Resetting…" : "Reset to forecast")</button>
+            }
+            <div class="ml-auto flex gap-2">
+                <button type="button" @onclick="OnClose" class="@Ui.ButtonClass(ButtonKind.Secondary)">Cancel</button>
+                <button type="button" @onclick="SaveAsync" disabled="@(_busy is not null)" class="@Ui.ButtonClass(ButtonKind.Accent)">@(_busy == "save" ? "Saving…" : "Save")</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _closed;
+    private string _method = "pct";
+    private double _pct = 100;
+    private double _value;
+    private string _note = "";
+    private string? _err;
+    private string? _busy;
+    private DotNetObjectReference<SalesOverrideModal>? _self;
+    private IJSObjectReference? _escape;
+
+    [Parameter, EditorRequired] public Guid StoreId { get; set; }
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+    [Parameter] public double Forecast { get; set; }
+    [Parameter] public SalesOverrideRow? Existing { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnDone { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _closed = Existing?.Closed ?? false;
+        _method = Existing?.Method ?? "pct";
+        _pct = Existing?.Pct ?? 100;
+        _value = Existing?.Value ?? 0;
+        _note = Adjustment.NoteOf(Existing ?? new SalesOverrideRow(Date, false, null, null, null, null, null));
+    }
+
+    // Escape closes it, like every other dialog.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _self = DotNetObjectReference.Create(this);
+        _escape = await Browser.OnKeyAsync("Escape", _self, nameof(EscapeAsync));
+    }
+
+    [JSInvokable]
+    public Task EscapeAsync() => OnClose.InvokeAsync();
+
+    // Something to reset: an adjustment that changes the day or carries a reason.
+    private bool Adjusted => Existing is not null && !Adjustment.IsEmptyAdjustment(Existing);
+
+    // A note is compulsory whenever the sales figure is being changed (a
+    // non-100% / non-zero override) or the store is marked closed.
+    private bool ChangingSales => !_closed && ((_method == "pct" && _pct != 100) || (_method == "value" && _value > 0));
+    private bool NoteRequired => _closed || ChangingSales;
+
+    private static string Seg(bool on) =>
+        $"rounded-lg px-3 py-1.5 text-sm font-semibold {Ui.FocusRing} " +
+        (on ? "bg-[var(--ui-ink)] text-white" : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)]");
+
+    // Back to the forecast: the day's adjustment is removed, pill and all.
+    private async Task ResetAsync()
+    {
+        _err = null;
+        _busy = "reset";
+        var res = await Sales.ResetOverrideAsync(StoreId, Date);
+        _busy = null;
+        if (res.Ok) await OnDone.InvokeAsync();
+        else _err = res.Error ?? "Error";
+    }
+
+    private async Task SaveAsync()
+    {
+        if (NoteRequired && Js.Trim(_note) == "")
+        {
+            _err = _closed ? "A note is required when marking the store closed." : "A note is required when changing the sales figure.";
+            return;
+        }
+        // No change and no reason is the forecast as it stands: clear any
+        // adjustment rather than save an empty one (F10).
+        if (!NoteRequired && Js.Trim(_note) == "")
+        {
+            if (Existing is not null)
+            {
+                await ResetAsync();
+                return;
+            }
+            await OnClose.InvokeAsync();
+            return;
+        }
+        _busy = "save";
+        var res = await Sales.SaveOverrideAsync(new SaveOverrideInput(
+            StoreId,
+            Date,
+            _closed,
+            _closed ? null : _method,
+            !_closed && _method == "pct" ? _pct : null,
+            !_closed && _method == "value" ? _value : null,
+            _note));
+        _busy = null;
+        if (res.Ok) await OnDone.InvokeAsync();
+        else _err = res.Error ?? "Error";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_escape is not null)
+        {
+            try
+            {
+                await _escape.InvokeVoidAsync("dispose");
+                await _escape.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+        }
+        _self?.Dispose();
+    }
+}
