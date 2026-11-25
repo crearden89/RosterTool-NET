@@ -1,8 +1,9 @@
 // New: the unread count for the menu's Notifications item and the phone bar (the
-// TypeScript app's getUnreadCount, src/lib/notifications.ts). A stand-in until the
-// data layer's notifications service (owner D2) is on main: then the shell calls that.
+// TypeScript app's getUnreadCount, src/lib/notifications.ts), read through the
+// Notifications page area's service (owner P3).
 
 using Roster.Web.Auth;
+using Roster.Web.Features.Notifications;
 
 namespace Roster.Web.Components.Layout;
 
@@ -12,9 +13,9 @@ internal interface IUnreadNotifications
     Task<int> CountAsync(SignedInUser user, CancellationToken cancellationToken = default);
 }
 
-/// <summary>No notifications; for trying the shell, the count in <c>Notifications:PlaceholderUnreadCount</c>.</summary>
-internal sealed class PlaceholderUnreadNotifications(IConfiguration configuration) : IUnreadNotifications
+/// <summary>The signed-in person's unread count, from the notifications service.</summary>
+internal sealed class ServiceUnreadNotifications(INotificationService notifications) : IUnreadNotifications
 {
     public Task<int> CountAsync(SignedInUser user, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Math.Max(0, configuration.GetValue("Notifications:PlaceholderUnreadCount", 0)));
+        notifications.UnreadCountAsync(cancellationToken);
 }
