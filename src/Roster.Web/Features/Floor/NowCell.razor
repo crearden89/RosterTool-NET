@@ -1,0 +1,40 @@
+@* Port of NowCell in src/app/floor/[token]/FloorScreen.tsx: what one person is on
+   now, and the next changes. *@
+
+<div class="floor-now">
+    @switch (State)
+    {
+        case NowState.After after:
+            <span class="floor-task floor-out">Finished @Grid.MinToTime(after.Finished)</span>
+            break;
+        case NowState.Before before:
+            <span class="floor-task floor-out">Starts @Grid.MinToTime(before.Starts)</span>
+            break;
+        case NowState.On { Group: { } group }:
+            <span class="floor-task" style="background: @FloorTiles.Color(group); color: @FloorTiles.Text(group)">@FloorTiles.Label(group)</span>
+            break;
+        default:
+            <span class="floor-task floor-out">On shift</span>
+            break;
+    }
+    @if (Next.Count > 0)
+    {
+        <span class="floor-next">@string.Join(" · ", Next)</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public NowState State { get; set; } = default!;
+
+    private List<string> Next => State switch
+    {
+        NowState.Before b => Words(b.Next),
+        NowState.On o => Words(o.Next),
+        _ => [],
+    };
+
+    private static List<string> Words(IEnumerable<NextChange> next) =>
+        next.Select(c => c.What == NextChange.Finish
+            ? $"Finishes {Grid.MinToTime(c.Time)}"
+            : $"{Grid.MinToTime(c.Time)} {FloorTiles.Label(c.What)}").ToList();
+}

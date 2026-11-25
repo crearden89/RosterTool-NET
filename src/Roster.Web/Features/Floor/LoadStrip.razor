@@ -1,0 +1,88 @@
+@* Port of LoadStrip in src/app/floor/[token]/FloorScreen.tsx: the truck along the
+   bottom. With Href, the whole strip opens the store's Load Planner page in a new
+   tab, so the wall screen stays open behind it and closing that tab (one tap, no
+   keyboard) comes straight back here. *@
+
+@if (Href is not null)
+{
+    <a class="floor-load" href="@Href" target="_blank" rel="noopener noreferrer" title="Open the Load Planner in a new tab">@Body</a>
+}
+else
+{
+    <section class="floor-load" aria-label="Load Planner">@Body</section>
+}
+
+@code {
+    [Parameter, EditorRequired] public LoadSummary Load { get; set; } = default!;
+    [Parameter] public bool OtherDay { get; set; }
+
+    /// <summary>The store's Load Planner page, or null when the strip is not a link.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    private string When => OtherDay ? "this day" : "today";
+    private bool HasPallets => Load.Entered && Load.Total > 0;
+
+    private RenderFragment Body => __builder =>
+    {
+        var sq = FloorModel.SquareSize(Load.Total, Load.Items.Count);
+        <div class="floor-loadTitle">
+            <b>
+                <svg viewBox="0 0 26 20" aria-hidden="true">
+                    <rect x="1" y="3" width="15" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2" />
+                    <path d="M16 7h5l3.5 4V14H16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <circle cx="6" cy="16.5" r="2.2" fill="#ffffff" stroke="currentColor" stroke-width="2" />
+                    <circle cx="20" cy="16.5" r="2.2" fill="#ffffff" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Load Planner
+                @if (Href is not null)
+                {
+                    <svg class="floor-open" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M6 3h7v7M13 3L5.5 10.5M11 9.5V13H3V5h3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                }
+            </b>
+            <span>@(HasPallets ? $"{FloorTiles.N(Load.Total)} pallets {When}" : "Nothing to unload yet")</span>
+        </div>
+        @if (HasPallets)
+        {
+            <div class="floor-pallets">
+                <div class="floor-squares @(sq.Lines == 2 ? "floor-twoLines" : "")" style="--sq: @FloorTiles.N(sq.Size)">
+                    @for (var i = 0; i < Load.Items.Count; i++)
+                    {
+                        var it = Load.Items[i];
+                        if (i > 0)
+                        {
+                            <i class="floor-gap"></i>
+                        }
+                        for (var k = 0; k < it.Qty; k++)
+                        {
+                            <i title="@it.Type" style="background: @it.Color"></i>
+                        }
+                    }
+                </div>
+                <div class="floor-types">
+                    @for (var i = 0; i < Load.Items.Count; i++)
+                    {
+                        var it = Load.Items[i];
+                        <span>@(i > 0 ? " · " : "")<b>@it.Type</b> @FloorTiles.N(it.Qty)</span>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="floor-loadNone">@(Load.Entered ? $"No pallets entered for {When} yet." : $"No load entered for {When} yet.")</div>
+        }
+        <div class="floor-loadEnd">
+            @if (Load.TeamFinish is { } finish)
+            {
+                <b>@Grid.MinToTime(finish)</b>
+                <span>planned finish · @Load.OnLoad on the load</span>
+            }
+            else if (HasPallets && Load.Crew == 0)
+            {
+                <span>No one on Load Running on the approved roster</span>
+            }
+        </div>
+    };
+}
