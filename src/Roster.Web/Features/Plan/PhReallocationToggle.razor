@@ -1,0 +1,103 @@
+@* Port of src/app/(app)/plan/generate/PhReallocationToggle.tsx. *@
+@inject IPlanService Plan
+@inject TimeProvider Clock
+@* Shown on the Plan view when the selected day is a public holiday: offers to
+   move 75% of the day's Load Running to the prior evening (after 6pm) to dodge
+   the PH pay rate. Toggling persists on day_plans and re-runs Stage 1 for both
+   this day (keeps 25%) and the night before (gains the 75%): the fortnight's
+   plan is regenerated in steps, as Generate does. *@
+<div class="mb-4 rounded-xl border border-[var(--brand-orange)]/40 bg-[var(--brand-orange)]/5 p-4">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <p class="text-sm font-semibold text-[var(--brand-navy)]">
+                Public holiday — reallocate load running?
+            </p>
+            <p class="mt-0.5 text-sm text-[var(--brand-navy)]/70">
+                Move 75% of this day&apos;s load running to the evening before (after 6pm) to minimise
+                public-holiday labour cost. The remaining 25% stays on the holiday.
+            </p>
+        </div>
+        <button type="button" @onclick="Toggle" disabled="@(Disabled || _pending)" aria-pressed="@(_on ? "true" : "false")"
+                class="@($"shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition {(_on ? "bg-[var(--brand-navy)] text-white hover:brightness-110" : "border border-[var(--brand-border)] bg-white text-[var(--brand-navy)] hover:bg-[var(--brand-surface)]")} {(Disabled || _pending ? "cursor-not-allowed opacity-60" : "")}")">
+            @(_on ? "Reallocation on" : "Reallocation off")
+        </button>
+    </div>
+    @if (_status is not null)
+    {
+        <p class="mt-2 text-sm font-medium text-[var(--brand-navy)]" aria-live="polite">@_status</p>
+    }
+</div>
+
+@code {
+    private bool _on;
+    // Plain state: the toggle is free again once the plan is saved.
+    private bool _pending;
+    private readonly SingleFlight _startOnce = new();
+    private string? _status;
+    private DateOnly? _seenDate;
+
+    [Parameter, EditorRequired] public Guid StoreId { get; set; }
+
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+
+    [Parameter] public bool InitialOn { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Called once the setting is saved and the plan has followed it, so the page reads afresh.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // useState(initialOn): the state starts from the day's setting, and starts afresh
+    // on another day (React would mount a new toggle for it).
+    protected override void OnParametersSet()
+    {
+        if (_seenDate == Date) return;
+        _seenDate = Date;
+        _on = InitialOn;
+        _status = null;
+    }
+
+    private void Toggle() => _startOnce.Start(ToggleAsync);
+
+    private async Task ToggleAsync()
+    {
+        var next = !_on;
+        _on = next; // optimistic
+        _status = null;
+        _pending = true;
+        StateHasChanged();
+        try
+        {
+            PlanResult saved;
+            try
+            {
+                saved = await Plan.SetPhReallocationAsync(StoreId, Date, next);
+            }
+            catch
+            {
+                saved = new PlanResult(false, "The connection to the server dropped. Nothing was changed - try again.");
+            }
+            if (!saved.Ok)
+            {
+                _on = !next; // revert on failure
+                _status = saved.Error ?? "The setting could not be saved.";
+                return;
+            }
+            // The setting is saved; the plan follows it.
+            var res = await RunPlanGeneration.RunAsync(Plan, StoreId, Period.PeriodStartFor(Date), Status, new PlanChangeReason(Date), Clock);
+            _status = res.Ok ? null : $"The setting is saved, but the plan was not updated: {res.Error ?? "generation failed"} (press Regenerate).";
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _pending = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Status(string text)
+    {
+        _status = text;
+        StateHasChanged();
+    }
+}

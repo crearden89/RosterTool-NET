@@ -1,0 +1,389 @@
+@* Port of EmployeeEditor in src/app/(app)/setup/staff/StaffClient.tsx. A MODAL, not
+   a panel appended under the table: with a full team the table runs well past the
+   fold, so an inline editor opened from a row near the top rendered entirely
+   off-screen and the Edit button read as broken. *@
+@inject ITeamService Team
+@using System.Globalization
+@inject RosterJs Browser
+
+<div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--ui-ink)]/40 p-4 sm:p-8"
+     role="dialog" aria-modal="true" aria-label="@($"Edit {Employee.Name}")" @onclick="OnClose">
+    <div class="my-auto w-full max-w-2xl rounded-2xl border border-[var(--ui-line)] bg-white p-6 shadow-xl" @onclick:stopPropagation="true">
+        <div class="mb-5 flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3">
+                <Avatar Name="@Employee.Name" Seed="@Employee.Id.ToString()" Size="40" />
+                <h3 class="truncate text-lg font-bold text-[var(--ui-ink)]">Edit @Employee.Name</h3>
+            </div>
+            <button type="button" @onclick="OnClose" class="@Ui.ButtonClass(ButtonKind.Quiet, ButtonSize.Sm)">Close</button>
+        </div>
+
+        @if (!IsJsa)
+        {
+            <div class="mb-4">
+                <p class="mb-1.5 text-sm font-semibold text-[var(--ui-ink)]">Contract</p>
+                <div class="flex flex-wrap items-end gap-3">
+                    <label class="text-sm text-[var(--ui-ink)]">
+                        <span class="@Ui.FieldLabelClass">Contract h/fortnight</span>
+                        <input type="number" inputmode="decimal" min="0" step="0.5" @bind="_contract" @bind:event="oninput" class="@($"w-24 {Ui.FieldClass}")" />
+                    </label>
+                    <label class="text-sm text-[var(--ui-ink)]">
+                        <span class="@Ui.FieldLabelClass">Notional h/day</span>
+                        <input type="number" inputmode="decimal" min="0" step="0.25" placeholder="@DefaultNotional" @bind="_notional" @bind:event="oninput"
+                               class="@($"w-24 {Ui.FieldClass}")" />
+                    </label>
+                    <label class="text-sm text-[var(--ui-ink)]">
+                        <span class="@Ui.FieldLabelClass">Start date</span>
+                        <input type="date" value="@_startDate" @oninput="e => _startDate = e.Value?.ToString() ?? string.Empty" class="@Ui.FieldClass" />
+                    </label>
+                    <button @onclick="SaveContractAsync" disabled="@_contractSaving" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                        @(_contractSaving ? "Saving…" : "Save contract")
+                    </button>
+                </div>
+                <p class="mt-1.5 text-xs text-[var(--ui-muted)]">
+                    Notional = the value of one day toward contract (full-day leave, public holidays not
+                    worked). Leave empty for the default of contract ÷ 5 (@(DefaultNotional)h). Start date
+                    drives the Load Planner&apos;s probation allowance - leave it blank for anyone already
+                    up to speed, since a blank date means &ldquo;experienced&rdquo;, not &ldquo;new&rdquo;.
+                </p>
+                @if (FixedPaid > Js.Number(_contract).Or(0) + 0.01)
+                {
+                    <p class="mt-1.5 text-xs font-medium text-[var(--ui-amber-ink)]">
+                        ⚠ This person&apos;s fixed roster pays @Js.ToFixed(FixedPaid, 1)h/fortnight - more than the
+                        contract. The locked hours are rostered in full, so they will read over contract
+                        until the contract is raised or the fixed roster trimmed.
+                    </p>
+                }
+                @if (_contractErr is not null)
+                {
+                    <p class="mt-1 text-sm text-[var(--ui-bad)]">@_contractErr</p>
+                }
+            </div>
+        }
+
+        @* Position: one control for a promotion or a pay-year step. The role, tenure
+           band and (for sized positions) the contract all move with it, so the pay
+           rate and the engine behaviour can't fall out of step. *@
+        <div class="mb-4">
+            <p class="mb-1.5 text-sm font-semibold text-[var(--ui-ink)]">Position</p>
+            <div class="flex flex-wrap items-center gap-2">
+                <PositionSelect Positions="Positions" Value="@_pendingPosition" OnChange="code => _pendingPosition = code" Class="@Ui.FieldClass" />
+                <button @onclick="SavePositionAsync" disabled="@(_posSaving || _pendingPosition == (Employee.PositionCode ?? ""))"
+                        class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                    @(_posSaving ? "Saving…" : "Change position")
+                </button>
+            </div>
+            @if (PendingPositionHint is { } hint)
+            {
+                <p class="mt-1.5 text-xs text-[var(--ui-muted)]">@hint</p>
+            }
+            @if (_posErr is not null)
+            {
+                <p class="mt-1 text-sm text-[var(--ui-bad)]">@_posErr</p>
+            }
+        </div>
+
+        <div class="mb-4">
+            <p class="mb-1.5 text-sm font-semibold text-[var(--ui-ink)]">Weekly availability</p>
+            <p class="mb-2 text-xs text-[var(--ui-muted)]">
+                All day = any time within trading hours · Window = only between the given times · Off =
+                can&apos;t work that day.
+            </p>
+            <div class="space-y-1.5">
+                @for (var i = 0; i < 7; i++)
+                {
+                    var day = i;
+                    var row = _avail[day];
+                    <div @key="day" class="flex items-center gap-2">
+                        <span class="w-10 text-sm font-semibold text-[var(--ui-ink)]">@Period.DayLabels[day]</span>
+                        <div class="flex gap-1">
+                            @foreach (var m in Modes)
+                            {
+                                var on = row.Mode == m;
+                                <button type="button" @onclick="() => _avail[day].Mode = m" aria-pressed="@(on ? "true" : "false")"
+                                        class="@($"rounded-lg px-2.5 py-1 text-xs font-semibold {Ui.FocusRing} {(on ? (m == AvailabilityMode.Off ? "bg-[var(--ui-bad)] text-white" : "bg-[var(--ui-ink)] text-white") : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)]")}")">
+                                    @ModeLabel(m)
+                                </button>
+                            }
+                        </div>
+                        @if (row.Mode == AvailabilityMode.Window)
+                        {
+                            <div class="flex items-center gap-1">
+                                <input type="time" value="@row.From" @oninput="e => _avail[day].From = e.Value?.ToString() ?? string.Empty" class="@($"{Ui.FieldClass} !px-2 !py-1")" />
+                                <span class="text-[var(--ui-muted)]">–</span>
+                                <input type="time" value="@row.To" @oninput="e => _avail[day].To = e.Value?.ToString() ?? string.Empty" class="@($"{Ui.FieldClass} !px-2 !py-1")" />
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            @if (_availErr is not null)
+            {
+                <p class="mt-1 text-sm text-[var(--ui-bad)]">@_availErr</p>
+            }
+            <button @onclick="SaveAvailabilityAsync" disabled="@_availSaving" class="@($"mt-2 {Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)}")">
+                @(_availSaving ? "Saving…" : "Save availability")
+            </button>
+        </div>
+
+        <p class="mb-1.5 text-sm font-semibold text-[var(--ui-ink)]">Restricted tasks (hard)</p>
+        <div class="mb-3 flex flex-wrap gap-2">
+            @foreach (var g in TeamRules.Restrictable)
+            {
+                var on = _sel.Contains(g);
+                <button type="button" @onclick="() => ToggleRestricted(g)" aria-pressed="@(on ? "true" : "false")"
+                        class="@($"rounded-full px-3 py-1 text-xs font-semibold {Ui.FocusRing} {(on ? "bg-[var(--ui-bad)] text-white" : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)]")}")">
+                    @LabourGroups.ByKey[g].Label
+                </button>
+            }
+        </div>
+        <button @onclick="SaveRestrictionsAsync" class="@($"mb-5 {Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)}")">Save restrictions</button>
+
+        <p class="mb-1.5 text-sm font-semibold text-[var(--ui-ink)]">Add leave</p>
+        <div class="flex flex-wrap items-center gap-2">
+            <select @bind="_leaveType" class="@($"{Ui.FieldClass} !px-2 !py-1")">
+                @foreach (var t in TeamRules.LeaveTypes)
+                {
+                    <option value="@t.Code">@t.Label</option>
+                }
+            </select>
+            <input type="date" value="@_leaveStart" @oninput="e => _leaveStart = e.Value?.ToString() ?? string.Empty" class="@($"{Ui.FieldClass} !px-2 !py-1")" />
+            <span class="text-[var(--ui-muted)]">→</span>
+            <input type="date" value="@_leaveEnd" @oninput="e => _leaveEnd = e.Value?.ToString() ?? string.Empty" class="@($"{Ui.FieldClass} !px-2 !py-1")" />
+            <input type="number" inputmode="decimal" min="0" step="0.25"
+                   placeholder="@($"Full day ({(Js.Trim(_notional) == "" ? DefaultNotional : _notional)}h)")"
+                   title="Hours credited per leave weekday - leave empty for a full contract day (the notional)"
+                   @bind="_leaveDayHours" @bind:event="oninput" class="@($"w-36 {Ui.FieldClass} !px-2 !py-1")" />
+            <span class="text-xs text-[var(--ui-muted)]">h/day</span>
+            <button @onclick="AddLeaveAsync" disabled="@_leaveSaving" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                @(_leaveSaving ? "Adding…" : "Add")
+            </button>
+        </div>
+        <p class="mt-1.5 text-xs text-[var(--ui-muted)]">
+            Leave the hours box empty to credit a full contract day per weekday. Unpaid (UNP) leave
+            blocks the days and reduces the roster target but adds nothing to paid hours.
+        </p>
+        @if (_leaveErr is not null)
+        {
+            <p class="mt-1 text-sm text-[var(--ui-bad)]">@_leaveErr</p>
+        }
+
+        <div class="mt-5 border-t border-[var(--ui-line)] pt-4">
+            <button @onclick="RemoveAsync" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">Remove team member</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed class DayEdit
+    {
+        public AvailabilityMode Mode { get; set; }
+        public string From { get; set; } = "";
+        public string To { get; set; } = "";
+    }
+
+    private static readonly AvailabilityMode[] Modes = [AvailabilityMode.All, AvailabilityMode.Window, AvailabilityMode.Off];
+
+    private List<string> _sel = [];
+    private string _pendingPosition = "";
+    private bool _posSaving;
+    private string? _posErr;
+
+    private string _leaveStart = "";
+    private string _leaveEnd = "";
+    private string _leaveType = "ANN";
+    // "" = full contract day (the notional); a number = explicit hours per day.
+    private string _leaveDayHours = "";
+    private bool _leaveSaving;
+    private string? _leaveErr;
+
+    private string _contract = "";
+    private string _notional = "";
+    private string _startDate = "";
+    private bool _contractSaving;
+    private string? _contractErr;
+
+    private DayEdit[] _avail = [];
+    private bool _availSaving;
+    private string? _availErr;
+
+    [Parameter, EditorRequired] public TeamMember Employee { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<PositionOption> Positions { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> Restricted { get; set; } = [];
+    [Parameter] public IReadOnlyList<AvailabilityRow> Availability { get; set; } = [];
+    [Parameter] public double FixedPaid { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnDone { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _sel = [.. Restricted];
+        _pendingPosition = Employee.PositionCode ?? "";
+        _contract = Js.NumberToString(Employee.ContractHours);
+        _notional = Employee.NotionalHours is { } n ? Js.NumberToString(n) : "";
+        _startDate = Employee.StartDate?.ToIso() ?? "";
+        // Availability: each day defaults to "all" (any time within trading hours) unless a
+        // stored row narrows it to a window or marks it unavailable.
+        _avail = Enumerable.Range(0, 7).Select(i =>
+        {
+            var row = Availability.FirstOrDefault(a => a.DayOfWeek == i);
+            if (row is not null && !row.Available) return new DayEdit { Mode = AvailabilityMode.Off };
+            if (row is { FromTime: { } f, ToTime: { } t })
+                return new DayEdit { Mode = AvailabilityMode.Window, From = TeamRules.Hm(f), To = TeamRules.Hm(t) };
+            return new DayEdit { Mode = AvailabilityMode.All };
+        }).ToArray();
+    }
+
+    private bool IsJsa => Employee.Role == "JSA";
+
+    private string DefaultNotional => Js.ToFixed(Js.Number(_contract).Or(0) / 10, 1);
+
+    private static string ModeLabel(AvailabilityMode m) => m switch
+    {
+        AvailabilityMode.All => "All day",
+        AvailabilityMode.Window => "Window",
+        _ => "Off",
+    };
+
+    private string? PendingPositionHint
+    {
+        get
+        {
+            var p = Positions.FirstOrDefault(x => x.Code == _pendingPosition);
+            var implied = global::Roster.Engine.Core.Positions.FortnightHoursFor(p?.WeeklyHours);
+            if (implied is null || _pendingPosition == (Employee.PositionCode ?? "")) return null;
+            return $"Sets the contract to {Js.NumberToString(implied.Value)}h per fortnight ({Js.NumberToString(p!.WeeklyHours!.Value)}h per week) - editable above afterwards.";
+        }
+    }
+
+    private async Task SavePositionAsync()
+    {
+        _posErr = null;
+        _posSaving = true;
+        var p = Positions.FirstOrDefault(x => x.Code == _pendingPosition);
+        var res = await Team.SetPositionAsync(Employee.Id, _pendingPosition, global::Roster.Engine.Core.Positions.FortnightHoursFor(p?.WeeklyHours));
+        _posSaving = false;
+        if (!res.Ok)
+        {
+            _posErr = res.Error ?? "Save failed.";
+            return;
+        }
+        await OnDone.InvokeAsync();
+    }
+
+    private async Task SaveContractAsync()
+    {
+        var ch = Js.Number(_contract);
+        if (!double.IsFinite(ch) || ch < 0)
+        {
+            _contractErr = "Enter valid contract hours.";
+            return;
+        }
+        double? nh = Js.Trim(_notional) == "" ? null : Js.Number(_notional);
+        if (nh is { } n && (!double.IsFinite(n) || n < 0 || n > 24))
+        {
+            _contractErr = "Notional hours must be between 0 and 24.";
+            return;
+        }
+        DateOnly? start = null;
+        if (_startDate != "")
+        {
+            if (!IsIsoDate(_startDate))
+            {
+                _contractErr = "Start date must be a valid date";
+                return;
+            }
+            start = IsoDate(_startDate);
+        }
+        _contractErr = null;
+        _contractSaving = true;
+        var res = await Team.SetContractAndNotionalAsync(Employee.Id, ch, nh, start);
+        _contractSaving = false;
+        if (!res.Ok)
+        {
+            _contractErr = res.Error ?? "Save failed.";
+            return;
+        }
+        await OnDone.InvokeAsync();
+    }
+
+    private async Task SaveAvailabilityAsync()
+    {
+        for (var i = 0; i < 7; i++)
+        {
+            var d = _avail[i];
+            if (d.Mode != AvailabilityMode.Window) continue;
+            if (d.From == "" || d.To == "")
+            {
+                _availErr = $"{Period.DayLabels[i]}: enter both window times.";
+                return;
+            }
+            if (string.CompareOrdinal(d.From, d.To) >= 0)
+            {
+                _availErr = $"{Period.DayLabels[i]}: start must be before end.";
+                return;
+            }
+        }
+        _availErr = null;
+        _availSaving = true;
+        var days = _avail.Select((d, i) => new AvailabilityDay(i, d.Mode != AvailabilityMode.Off,
+            d.Mode == AvailabilityMode.Window ? TimeOnly.Parse(d.From, CultureInfo.InvariantCulture) : null,
+            d.Mode == AvailabilityMode.Window ? TimeOnly.Parse(d.To, CultureInfo.InvariantCulture) : null)).ToList();
+        await Team.SetAvailabilityAsync(Employee.Id, days);
+        _availSaving = false;
+        await OnDone.InvokeAsync();
+    }
+
+    private void ToggleRestricted(string g)
+    {
+        if (!_sel.Remove(g)) _sel.Add(g);
+    }
+
+    private async Task SaveRestrictionsAsync()
+    {
+        await Team.SetRestrictedTasksAsync(Employee.Id, [.. _sel]);
+        await OnDone.InvokeAsync();
+    }
+
+    private async Task AddLeaveAsync()
+    {
+        if (!IsIsoDate(_leaveStart) || !IsIsoDate(_leaveEnd))
+        {
+            _leaveErr = "Enter both a start and an end date.";
+            return;
+        }
+        if (string.CompareOrdinal(_leaveEnd, _leaveStart) < 0)
+        {
+            _leaveErr = "The end date is before the start date.";
+            return;
+        }
+        double? dh = Js.Trim(_leaveDayHours) == "" ? null : Js.Number(_leaveDayHours);
+        if (dh is { } h && (!double.IsFinite(h) || h <= 0 || h > 24))
+        {
+            _leaveErr = "Hours per day must be between 0 and 24.";
+            return;
+        }
+        _leaveErr = null;
+        _leaveSaving = true;
+        var res = await Team.AddLeaveAsync(Employee.Id, IsoDate(_leaveStart), IsoDate(_leaveEnd), _leaveType, dh);
+        _leaveSaving = false;
+        if (!res.Ok)
+        {
+            _leaveErr = res.Error ?? "Save failed.";
+            return;
+        }
+        await OnDone.InvokeAsync();
+    }
+
+    // A date input's value: "2026-11-25", or "" when empty or not a whole date.
+    private static bool IsIsoDate(string s) =>
+        DateOnly.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+
+    private static DateOnly IsoDate(string s) => DateOnly.ParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private async Task RemoveAsync()
+    {
+        if (!await Browser.ConfirmAsync($"Remove {Employee.Name}?")) return;
+        await Team.DeleteEmployeeAsync(Employee.Id);
+        await OnDone.InvokeAsync();
+    }
+}

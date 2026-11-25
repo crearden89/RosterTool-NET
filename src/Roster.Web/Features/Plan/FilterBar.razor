@@ -1,0 +1,219 @@
+@* Port of src/app/(app)/plan/generate/FilterBar.tsx. *@
+@implements IDisposable
+@inject IPlanService Plan
+@inject TimeProvider Clock
+@* The top of the Plan and Roster pages: the page's header (title, status,
+   facts, store picker, fortnight arrows) and Generate. On the Plan page
+   Generate sits in a bar that says what plan is held; on the Roster page it
+   is the header's own action. Generate's behaviour is the fault-F8 fix
+   (GenerateRun) and is the same on both. *@
+<PageHeader Title="@Title" Badge="Badge" Subtitle="Subtitle">
+    <Actions>
+        <StorePicker Stores="Stores" Value="SelectedStore" Disabled="_genPending" HrefFor="StoreHref" />
+        <FortnightArrows Start="PeriodStart" Disabled="_genPending" HrefFor="PeriodHref" />
+        @if (IsPastPeriod)
+        {
+            <Pill Tone="PillTone.Soft">Past fortnight — view only</Pill>
+        }
+        @HeaderAction
+        @if (IsRoster)
+        {
+            @GenerateButton
+        }
+    </Actions>
+</PageHeader>
+@Notices
+@if (IsRoster)
+{
+    <p aria-live="polite" class="@(Said is not null ? $"-mt-3 mb-4 text-right text-sm font-medium {SaidTone}" : "sr-only")">@Said</p>
+}
+else
+{
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-2xl border border-[var(--ui-line)] bg-white px-5 py-3.5">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 text-sm text-[var(--ui-muted)]">@Held</div>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            @* First from lg up, as on the Roster's floor bar. Below that the
+               group wraps under the facts and starts at the left, so the
+               control goes last there and Regenerate keeps its place. *@
+            @if (BarAction is not null)
+            {
+                <span class="order-last flex lg:order-first">@BarAction</span>
+            }
+            <span aria-live="polite" class="@(Said is not null ? $"text-sm font-medium {SaidTone}" : "sr-only")">@Said</span>
+            @if (!CanGenerate && LockedNote is not null)
+            {
+                <span class="text-xs text-[var(--ui-muted)]">@LockedNote</span>
+            }
+            @GenerateButton
+        </div>
+    </div>
+}
+
+@code {
+    // Generate runs on plain state: the button ends when the server answers. One
+    // build at a time.
+    private bool _genPending;
+    private readonly SingleFlight _startOnce = new();
+    // A press still running when the page is left must not act on its answer.
+    private bool _mounted = true;
+    private string? _message;
+    // What a Generate in progress is doing ("Planning days 5–6 of 14…").
+    private string? _progress;
+
+    [Parameter, EditorRequired] public IReadOnlyList<StoreOption> Stores { get; set; } = [];
+
+    [Parameter] public Guid? SelectedStore { get; set; }
+
+    [Parameter] public DateOnly SelectedDate { get; set; }
+
+    [Parameter, EditorRequired] public DateOnly PeriodStart { get; set; }
+
+    /// <summary>The page this bar navigates within: /plan/generate or /plan/roster.</summary>
+    [Parameter, EditorRequired] public string BasePath { get; set; } = "";
+
+    /// <summary>The page has a day of its own (Roster): switching store keeps it.</summary>
+    [Parameter] public bool ShowDate { get; set; }
+
+    [Parameter] public bool HasSnapshot { get; set; }
+
+    /// <summary>When the held plan (Plan page) or roster (Roster page) was generated.</summary>
+    [Parameter] public DateTimeOffset? GeneratedAt { get; set; }
+
+    [Parameter] public bool CanGenerate { get; set; }
+
+    /// <summary>
+    /// Viewing a finished fortnight: the page renders it read-only and this bar labels it so
+    /// the greyed-out actions read as deliberate, not broken.
+    /// </summary>
+    [Parameter] public bool IsPastPeriod { get; set; }
+
+    /// <summary>
+    /// What Generate builds: the plan (Plan page), or the roster from the approved plan
+    /// (Roster page) - Plan -> Review -> Roster.
+    /// </summary>
+    [Parameter] public PlanOrRoster Generates { get; set; } = PlanOrRoster.Plan;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Status chips beside the title.</summary>
+    [Parameter] public RenderFragment? Badge { get; set; }
+
+    /// <summary>The line of facts under the title.</summary>
+    [Parameter] public RenderFragment? Subtitle { get; set; }
+
+    /// <summary>The way into the Review (ask to unlock, open it), beside the arrows.</summary>
+    [Parameter] public RenderFragment? HeaderAction { get; set; }
+
+    /// <summary>Banners under the header (an overdue fortnight, another store's plan).</summary>
+    [Parameter] public RenderFragment? Notices { get; set; }
+
+    /// <summary>Plan page: what is held, for the generate bar.</summary>
+    [Parameter] public RenderFragment? Held { get; set; }
+
+    /// <summary>
+    /// Plan page: a control in the generate bar's right-hand group (Show sub-tasks, where the
+    /// Roster page has it on its floor bar).
+    /// </summary>
+    [Parameter] public RenderFragment? BarAction { get; set; }
+
+    /// <summary>
+    /// Why Generate is greyed out although the viewer may generate (the plan is approved and
+    /// locked). Set, the button shows disabled with this beside it.
+    /// </summary>
+    [Parameter] public string? LockedNote { get; set; }
+
+    /// <summary>
+    /// Called when a press ends, so the page reads afresh (the TypeScript action's answer
+    /// carried the page re-rendered, or the page was fetched again).
+    /// </summary>
+    [Parameter] public EventCallback OnGenerated { get; set; }
+
+    /// <summary>The safety net's timings (tests shorten them).</summary>
+    [Parameter] public RosterWait? Wait { get; set; }
+
+    private bool IsRoster => Generates == PlanOrRoster.Roster;
+
+    private string StoreHref(Guid store) =>
+        ShellPaths.Href(ShowDate ? $"{BasePath}?store={store}&date={SelectedDate.ToIso()}" : $"{BasePath}?store={store}");
+
+    // Fortnight navigation: every period stays reachable after time moves on -
+    // approved history opens read-only rather than vanishing.
+    private string PeriodHref(DateOnly p) => ShellPaths.Href($"{BasePath}?store={SelectedStore}&period={p.ToIso()}");
+
+    // What a Generate in progress is doing, then how it ended. One live region,
+    // there from the start, so each change is read out.
+    private string? Said => _genPending ? _progress : _message;
+
+    private string SaidTone =>
+        _genPending ? "text-[var(--ui-ink)]" : _message?.StartsWith('✓') == true ? "text-[var(--ui-good)]" : "text-[var(--ui-bad)]";
+
+    // Generate/Regenerate is the ONLY thing that recomputes the plan (or builds
+    // the roster) - viewing the page just reads the held snapshot.
+    private void Regenerate() => _startOnce.Start(RunAsync);
+
+    private async Task RunAsync()
+    {
+        if (SelectedStore is not { } store) return;
+        _genPending = true;
+        _message = null;
+        _progress = null;
+        StateHasChanged();
+        RunOutcome? outcome;
+        try
+        {
+            if (IsRoster)
+            {
+                // A failed or lost answer is a message, never the error page or an
+                // endless "Generating…" (the safety net).
+                outcome = await GenerateRun.RunRosterGenerateAsync(
+                    new RosterGenerateDeps
+                    {
+                        Generate = () => Plan.GenerateRosterAsync(store, PeriodStart),
+                        HeldAt = () => Plan.HeldRosterAtAsync(store, PeriodStart),
+                        Before = GeneratedAt,
+                        OnWaiting = Progress,
+                        Cancelled = () => !_mounted,
+                    },
+                    Wait,
+                    Clock);
+            }
+            else
+            {
+                // The plan is generated a few days per request (RunPlanGeneration).
+                var res = await RunPlanGeneration.RunAsync(Plan, store, PeriodStart, Progress, time: Clock);
+                outcome = new RunOutcome(res.Ok, res.Ok ? "✓ Plan regenerated and held" : res.Error ?? "Generation failed", false);
+            }
+        }
+        catch
+        {
+            outcome = new RunOutcome(false, "Generation failed. Reload the page to see what was saved.", false);
+        }
+        if (!_mounted) return;
+        _progress = null;
+        _genPending = false;
+        if (outcome is null) return;
+        _message = outcome.Message;
+        StateHasChanged();
+        await OnGenerated.InvokeAsync();
+    }
+
+    private void Progress(string text)
+    {
+        _progress = text;
+        if (_mounted) StateHasChanged();
+    }
+
+    private RenderFragment? GenerateButton => CanGenerate || LockedNote is not null ? GenerateButtonFragment : null;
+
+    private RenderFragment GenerateButtonFragment => __builder =>
+    {
+        <button type="button" @onclick="Regenerate" disabled="@(_genPending || !CanGenerate)"
+                title="@(!CanGenerate && LockedNote is not null ? LockedNote : IsRoster ? "Build the roster from the approved plan and hold it" : HasSnapshot ? "Re-solve the fortnight and replace the held plan" : "Solve the fortnight and hold the result")"
+                class="@Ui.ButtonClass(IsRoster ? ButtonKind.Secondary : ButtonKind.Primary)">
+            <Icon Name="IconName.RefreshCw" Class="@(_genPending ? "h-4 w-4 animate-spin" : "h-4 w-4")" />
+            @(_genPending ? "Generating…" : IsRoster ? HasSnapshot ? "Regenerate Roster" : "Generate Roster" : HasSnapshot ? "Regenerate" : "Generate Plan")
+        </button>
+    };
+
+    public void Dispose() => _mounted = false;
+}

@@ -53,6 +53,7 @@ public class SqlServerDatabaseFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         if (!IsAvailable) return;
+        await DropStaleDatabasesOnceAsync();
         await CreateDatabaseAsync();
         _options = new DbContextOptionsBuilder<RosterDbContext>()
             .UseRosterSqlServer(ConnectionString)
@@ -91,6 +92,33 @@ public class SqlServerDatabaseFixture : IAsyncLifetime
         await master.OpenAsync();
         await using var cmd = new SqlCommand($"CREATE DATABASE [{DatabaseName}];", master) { CommandTimeout = 120 };
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static Task? _staleSweep;
+    private static readonly object SweepLock = new();
+
+    /// <summary>Once per test run: drop this ID's databases left behind by runs that crashed (older than six hours).</summary>
+    private static Task DropStaleDatabasesOnceAsync()
+    {
+        lock (SweepLock) return _staleSweep ??= DropStaleDatabasesAsync(TimeSpan.FromHours(6));
+    }
+
+    /// <summary>Drop this ID's test databases created more than <paramref name="olderThan"/> ago.</summary>
+    public static async Task<IReadOnlyList<string>> DropStaleDatabasesAsync(TimeSpan olderThan)
+    {
+        var stale = new List<string>();
+        await using (var master = new SqlConnection(SqlServerTestSettings.ConnectionStringFor(SqlServerTestSettings.RequireServer(), null)))
+        {
+            await master.OpenAsync();
+            await using var cmd = new SqlCommand(
+                "SELECT name FROM sys.databases WHERE name LIKE @prefix ESCAPE '\\' AND create_date < DATEADD(SECOND, -@age, GETDATE());", master);
+            cmd.Parameters.AddWithValue("@prefix", SqlServerTestSettings.DatabasePrefix.Replace("_", "\\_") + "%");
+            cmd.Parameters.AddWithValue("@age", (int)olderThan.TotalSeconds);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) stale.Add(reader.GetString(0));
+        }
+        foreach (var name in stale) await DropDatabaseAsync(name);
+        return stale;
     }
 
     /// <summary>Drop one test database, closing the connections still open on it.</summary>

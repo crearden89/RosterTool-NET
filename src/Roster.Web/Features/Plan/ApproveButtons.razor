@@ -1,0 +1,135 @@
+@* Port of src/app/(app)/plan/generate/ApproveButtons.tsx. *@
+@inject IPlanService Plan
+@* Drawn on the Roster page's navy "on the floor" bar: the one action that
+   applies - Approve while the roster is not on the floor, Withdraw once it is
+   - in gold or outlined white, with a white focus ring that shows on navy. *@
+<div class="flex flex-col items-start gap-2 sm:items-end">
+    @if (NeedsComment)
+    {
+        @if (CommentReason is not null)
+        {
+            <p class="max-w-md text-xs text-white/85 sm:text-right">@(CommentReason).</p>
+        }
+        <input type="text" @bind="_comment" @bind:event="oninput" aria-label="Note on cover"
+               placeholder="How you tried to cover them (required)"
+               class="w-80 max-w-full rounded-xl border border-white/40 bg-white px-3 py-1.5 text-sm text-[var(--ui-ink)] placeholder:text-[var(--ui-faint)]" />
+    }
+    <div class="flex flex-wrap items-center gap-2">
+        @if (!Approved)
+        {
+            <button type="button" @onclick="ApproveAsync" disabled="@(_busy is not null || Approved)"
+                    class="@($"{Btn} bg-[var(--ui-gold)] text-[var(--ui-ink)] hover:brightness-95")">
+                <Icon Name="IconName.Check" Class="h-4 w-4" StrokeWidth="2.5" />
+                @(_busy == Busy.Approve ? "Saving…" : $"Approve {Label}")
+            </button>
+        }
+        @if (Approved)
+        {
+            <button type="button" @onclick="WithdrawAsync" disabled="@(_busy is not null || !Approved)"
+                    class="@($"{Btn} border border-white/40 text-white hover:bg-white/10")">
+                <Icon Name="IconName.Undo2" Class="h-4 w-4" />
+                @(_busy == Busy.Withdraw ? "Withdrawing…" : "Withdraw")
+            </button>
+        }
+    </div>
+    @if (_msg is not null)
+    {
+        <span class="@($"rounded-lg px-2.5 py-1 text-xs font-medium {(_msg.StartsWith("Error", StringComparison.Ordinal) ? "bg-white text-[var(--ui-bad)]" : "bg-white/10 text-white")}")">@_msg</span>
+    }
+</div>
+
+@code {
+    private const string Btn =
+        "inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+
+    private enum Busy { Approve, Withdraw }
+
+    private Busy? _busy;
+    private string? _msg;
+    private string _comment = "";
+
+    [Parameter, EditorRequired] public Guid StoreId { get; set; }
+
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+
+    /// <summary>The fortnight's days (a roster is approved for all of them at once).</summary>
+    [Parameter] public IReadOnlyList<DateOnly>? PeriodDates { get; set; }
+
+    [Parameter, EditorRequired] public PlanOrRoster Kind { get; set; }
+
+    [Parameter] public bool Approved { get; set; }
+
+    [Parameter] public bool RequiresComment { get; set; }
+
+    /// <summary>
+    /// Why the note is asked for, in plain words: the days with an open shift or a cover gap
+    /// (lib/roster/dayStatus coverNoteReason).
+    /// </summary>
+    [Parameter] public string? CommentReason { get; set; }
+
+    /// <summary>Called after an approval or a withdrawal is saved, so the page reads afresh (router.refresh()).</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string Label => Kind == PlanOrRoster.Plan ? "Plan" : "Roster";
+
+    private IReadOnlyList<DateOnly> Dates => PeriodDates ?? [Date];
+
+    // A roster day with an open shift or a cover gap (an error, not a warning):
+    // publishing is allowed, with a note on the attempts to cover it first
+    // (spec §6.4).
+    private bool NeedsComment => Kind == PlanOrRoster.Roster && RequiresComment && !Approved;
+
+    private async Task ApproveAsync()
+    {
+        var comment = Js.Trim(_comment);
+        if (NeedsComment && comment.Length == 0)
+        {
+            _msg = $"Error: {CommentReason ?? "A day has an open shift or a cover gap"}. Add a note on how you tried to cover them, then approve.";
+            return;
+        }
+        _busy = Busy.Approve;
+        _msg = null;
+        // try/finally: an action that throws must never leave the button stuck on
+        // "Saving…" - busy always resets and the failure shows.
+        try
+        {
+            var res = Kind == PlanOrRoster.Plan
+                ? await Plan.ApprovePlanAsync(StoreId, Date)
+                : await Plan.ApproveRosterAsync(StoreId, Dates, comment.Length > 0 ? comment : null);
+            _msg = res.Ok ? $"{Label} approved & saved." : $"Error: {res.Error}";
+            if (res.Ok)
+            {
+                _comment = "";
+                await OnSaved.InvokeAsync();
+            }
+        }
+        catch (Exception e)
+        {
+            _msg = $"Error: {(string.IsNullOrEmpty(e.Message) ? "the save did not complete - try again" : e.Message)}";
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
+
+    private async Task WithdrawAsync()
+    {
+        _busy = Busy.Withdraw;
+        _msg = null;
+        try
+        {
+            var res = Kind == PlanOrRoster.Plan ? await Plan.WithdrawPlanAsync(StoreId, Date) : await Plan.WithdrawRosterAsync(StoreId, Dates);
+            _msg = res.Ok ? $"{Label} approval withdrawn." : $"Error: {res.Error}";
+            if (res.Ok) await OnSaved.InvokeAsync();
+        }
+        catch (Exception e)
+        {
+            _msg = $"Error: {(string.IsNullOrEmpty(e.Message) ? "the withdrawal did not complete - try again" : e.Message)}";
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
+}
