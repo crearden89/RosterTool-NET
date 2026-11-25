@@ -161,9 +161,13 @@ public class FeedToken
 {
     public Guid Id { get; set; }
     public string Label { get; set; } = "";
-    public string Token { get; set; } = "";
+    /// <summary>64 random hex characters by default (two md5 digests in Postgres). Unique.</summary>
+    public string Token { get; set; } = NewToken();
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? LastUsedAt { get; set; }
+
+    /// <summary>64 random lower-case hex characters.</summary>
+    public static string NewToken() => Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
 }
 
 /// <summary>Heartbeat for scheduled jobs (0043): when each last completed and what it returned.</summary>
