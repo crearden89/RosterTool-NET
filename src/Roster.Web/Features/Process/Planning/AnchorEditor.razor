@@ -1,0 +1,41 @@
+@* Port of AnchorEditor in src/app/(app)/admin/process/planning/PlacementClient.tsx.
+   Anchor: a fixed clock time, or an offset against the store's own trading
+   open/close so "two hours before close" travels with each store instead of
+   pinning every store to the same wall-clock time. *@
+@using Roster.Engine.Planning.Plan
+
+<label class="@($"{PlacementEditor.Lbl} {PlacementEditor.Cell}")">
+    Anchor
+    <select value="@Rule.AnchorKind" @onchange="e => Change(r => r with { AnchorKind = e.Value?.ToString() ?? r.AnchorKind })" class="@PlacementEditor.Sel">
+        <option value="none">End of the staffed day</option>
+        <option value="clock">Fixed time</option>
+        <option value="open">Trading open ±</option>
+        <option value="close">Trading close ±</option>
+    </select>
+</label>
+@if (Rule.AnchorKind == "clock")
+{
+    <label class="@($"{PlacementEditor.Lbl} {PlacementEditor.Cell}")">
+        Time
+        <input type="time" step="900" value="@Grid.MinToTime(Rule.AnchorTime ?? 10 * 60)"
+               @oninput="e => Change(r => r with { AnchorTime = Grid.TimeToMin(e.Value?.ToString() ?? string.Empty) })" class="@PlacementEditor.Sel" />
+    </label>
+}
+@if (Rule.AnchorKind is "open" or "close")
+{
+    <label class="@($"{PlacementEditor.Lbl} {PlacementEditor.Cell}")">
+        Offset (minutes)
+        <input type="number" step="15" value="@Js.NumberToString(Rule.AnchorOffsetMin)"
+               @oninput="e => Change(r => r with { AnchorOffsetMin = Js.Number(e.Value?.ToString() ?? string.Empty) })"
+               class="@PlacementEditor.Sel" title="−120 = two hours before" />
+    </label>
+}
+
+@code {
+    [Parameter, EditorRequired] public PlacementRule Rule { get; set; } = new();
+
+    /// <summary>The change to the rule, applied by the editor that owns the list.</summary>
+    [Parameter] public EventCallback<Func<PlacementRule, PlacementRule>> OnChange { get; set; }
+
+    private Task Change(Func<PlacementRule, PlacementRule> patch) => OnChange.InvokeAsync(patch);
+}

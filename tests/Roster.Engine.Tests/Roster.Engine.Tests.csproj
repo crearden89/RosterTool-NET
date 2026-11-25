@@ -22,6 +22,8 @@
   <ItemGroup>
     <!-- Test vectors produced by V8: node Core/js-vectors.mjs Core/js-vectors.json -->
     <None Include="Core\js-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Planning vectors produced by the TypeScript app: node Planning/planning-vectors.mjs Planning/planning-vectors.json -->
+    <None Include="Planning\planning-vectors.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

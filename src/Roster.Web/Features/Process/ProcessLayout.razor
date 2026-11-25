@@ -1,0 +1,13 @@
+@* Port of src/app/(app)/admin/process/layout.tsx.
+   Planning Order and Roster Order are the two halves of one question - the
+   ORDER the engine works in. Planning Order decides when each labour group's
+   hours land in the day (Stage 1); Roster Order decides which phases the
+   fortnight solve runs, and in what sequence (Stage 2). *@
+@inherits LayoutComponentBase
+@layout AppLayout
+<div>
+    <SettingsHeader Area="Process" Title="Process" Tabs="NavConfig.ProcessTabs">
+        <Subtitle>The order the engine works in: when each group's hours land in the day, and the phases of the fortnight's roster · applies to every store</Subtitle>
+    </SettingsHeader>
+    @Body
+</div>

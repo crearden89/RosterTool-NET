@@ -1,0 +1,203 @@
+@* Port of src/app/(app)/setup/staff/RequestsCard.tsx: day-off requests on Team
+   Members. Everything the Requests page's Day-Off tab did, moved here: add a
+   request, set each one pending, granted or declined, grant all pending at once,
+   remove one, and the history - with the same actions (a granted weekend day still
+   flips its weekend-off switch). Oldest first: first in, first served. *@
+@inject ITeamService Team
+
+@* scroll-mt clears the phone's fixed top bar when a link jumps here. *@
+<section id="requests" aria-labelledby="requests-title" class="scroll-mt-20 lg:scroll-mt-6">
+    <Card Padded="false" Class="@($"transition-opacity {(_pending ? "opacity-70" : "")}")">
+        <div class="flex flex-wrap items-start justify-between gap-x-3 px-4 pt-5 sm:px-6">
+            <SectionHeader Id="requests-title">
+                <Title>Requests</Title>
+                <Aside>Day off · first in, first served</Aside>
+            </SectionHeader>
+            @if (!ReadOnly)
+            {
+                <div class="mb-3 flex flex-wrap gap-2">
+                    @* Shown, as on the Requests page, once there is more than one. *@
+                    @if (PendingCount > 1)
+                    {
+                        <button type="button" disabled="@_pending" @onclick="() => RunAsync(() => Team.GrantAllPendingAsync(StoreId ?? Guid.Empty))"
+                                class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                            Grant all pending (@PendingCount)
+                        </button>
+                    }
+                    <button type="button" @onclick="() => _adding = !_adding" aria-expanded="@(_adding ? "true" : "false")" aria-controls="add-request"
+                            class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">
+                        <Icon Name="IconName.Plus" Class="h-3.5 w-3.5" /> Add request
+                    </button>
+                </div>
+            }
+        </div>
+
+        @if (!ReadOnly && _adding)
+        {
+            <div id="add-request" class="mx-4 mb-3 flex flex-wrap items-end gap-3 rounded-xl bg-[var(--ui-canvas)] p-3 sm:mx-6">
+                <label>
+                    <span class="@Ui.FieldLabelClass">Team member</span>
+                    <select @bind="_formEmp" class="@Ui.FieldClass">
+                        @foreach (var e in Employees)
+                        {
+                            <option @key="e.Id" value="@e.Id.ToString()">@e.Name</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span class="@Ui.FieldLabelClass">Day off</span>
+                    <input type="date" value="@_formDate" @oninput="e => _formDate = e.Value?.ToString() ?? string.Empty" class="@Ui.FieldClass" />
+                </label>
+                <label class="min-w-[10rem] flex-1">
+                    <span class="@Ui.FieldLabelClass">Notes</span>
+                    <input placeholder="Notes" @bind="_formNotes" @bind:event="oninput" class="@($"w-full {Ui.FieldClass}")" />
+                </label>
+                <button type="button" disabled="@(_pending || _formEmp == "" || !IsDate(_formDate))" @onclick="AddAsync" class="@Ui.ButtonClass(ButtonKind.Accent)">
+                    Add request
+                </button>
+            </div>
+        }
+
+        <div class="px-4 pb-3 sm:px-6">
+            <FilterChips TKey="string" Label="Show requests" Value="@_filter" OnChange="f => _filter = f"
+                         Options="@([new("pending", "Pending", PendingCount), new("granted", "Granted", Count("granted")), new("declined", "Declined", Count("declined")), new("all", "All", Requests.Count)])" />
+        </div>
+
+        @if (_err is not null)
+        {
+            <p class="px-4 pb-3 text-sm text-[var(--ui-bad)] sm:px-6" role="alert">@_err</p>
+        }
+
+        @if (Shown.Count == 0)
+        {
+            <p class="border-t border-[var(--ui-line)] px-4 py-5 text-sm text-[var(--ui-muted)] sm:px-6">
+                @(_filter == "all" ? "No requests." : $"No {_filter} requests.")
+            </p>
+        }
+        else
+        {
+            <ul class="divide-y divide-[var(--ui-line)] border-t border-[var(--ui-line)]">
+                @foreach (var r in Shown)
+                {
+                    var who = NameOf(r.EmployeeId);
+                    var when = Dates.AuDayLabel(r.Date);
+                    <li @key="r.Id" class="flex items-start gap-3 px-4 py-3 sm:gap-4 sm:px-6">
+                        <span aria-hidden="true" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--ui-lavender)] text-[var(--ui-ink)]">
+                            <Icon Name="IconName.CalendarDays" Class="h-4 w-4" />
+                        </span>
+                        @* On a phone the buttons wrap under the words, lined up with them. *@
+                        <div class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <div class="min-w-[12rem] flex-1">
+                                <p class="text-sm font-semibold text-[var(--ui-ink)]">Day off · @when</p>
+                                <p class="text-xs text-[var(--ui-muted)]">
+                                    @who · submitted @Dates.AuStamp(r.SubmittedAt)@(string.IsNullOrEmpty(r.Notes) ? "" : $" · {r.Notes}")
+                                </p>
+                            </div>
+                            @if (ReadOnly)
+                            {
+                                <span class="@($"rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize {StatusClass(r.Status, true)}")">@r.Status</span>
+                            }
+                            else
+                            {
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <div class="flex gap-1" role="group" aria-label="@($"Status of {who}'s request for {when}")">
+                                        @foreach (var st in Statuses)
+                                        {
+                                            var on = r.Status == st;
+                                            <button type="button" disabled="@(_pending || on)" aria-pressed="@(on ? "true" : "false")"
+                                                    @onclick="() => RunAsync(() => Team.SetRequestStatusAsync(r.Id, st))"
+                                                    class="@($"rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize disabled:cursor-default {Ui.FocusRing} {StatusClass(st, on)}")">
+                                                @(st == "granted" && !on ? "Grant" : st == "declined" && !on ? "Decline" : st)
+                                            </button>
+                                        }
+                                    </div>
+                                    <button type="button" disabled="@_pending" @onclick="() => RunAsync(() => Team.DeleteRequestAsync(r.Id))"
+                                            class="@($"rounded-md px-1 text-xs text-[var(--ui-muted)] hover:text-[var(--ui-bad)] {Ui.FocusRing}")"
+                                            aria-label="@($"Remove {who}'s request for {when}")">
+                                        ✕ Remove
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </Card>
+</section>
+
+@code {
+    private static readonly string[] Statuses = ["pending", "granted", "declined"];
+
+    private string _filter = "pending";
+    private bool _adding;
+    private string _formEmp = "";
+    private string _formDate = "";
+    private string _formNotes = "";
+    private string? _err;
+    private bool _pending;
+
+    /// <summary>The store whose team "Grant all pending" grants.</summary>
+    [Parameter] public Guid? StoreId { get; set; }
+
+    /// <summary>The team's requests, every status, oldest first.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<DayOffRequestRow> Requests { get; set; } = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<TeamMember> Employees { get; set; } = [];
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>After each action: the page reads the store's rows again.</summary>
+    [Parameter] public EventCallback OnDone { get; set; }
+
+    protected override void OnInitialized() => _formEmp = Employees.Count > 0 ? Employees[0].Id.ToString() : "";
+
+    private static bool IsDate(string s) =>
+        DateOnly.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _);
+
+    private int Count(string status) => Requests.Count(r => r.Status == status);
+
+    private int PendingCount => Count("pending");
+
+    private List<DayOffRequestRow> Shown => _filter == "all" ? [.. Requests] : Requests.Where(r => r.Status == _filter).ToList();
+
+    private string NameOf(Guid id) => Employees.FirstOrDefault(e => e.Id == id)?.Name ?? "-";
+
+    private static string StatusClass(string status, bool on)
+    {
+        if (!on) return "bg-[var(--ui-lavender)] text-[var(--ui-muted)] hover:bg-[var(--ui-lavender-strong)] hover:text-[var(--ui-ink)]";
+        return status == "granted"
+            ? "bg-green-100 text-green-800"
+            : status == "declined"
+                ? "bg-[var(--brand-red-tint)] text-[var(--ui-bad)]"
+                : "bg-[var(--ui-ink)] text-white";
+    }
+
+    // Each action as the Requests page ran it, then a refresh; a refusal is shown
+    // instead of being lost.
+    private async Task RunAsync(Func<Task<SaveResult>> action)
+    {
+        _pending = true;
+        try
+        {
+            _err = null;
+            var res = await action();
+            if (!res.Ok) _err = res.Error ?? "That didn't save.";
+            await OnDone.InvokeAsync();
+        }
+        finally
+        {
+            _pending = false;
+        }
+    }
+
+    private Task AddAsync() => RunAsync(async () =>
+    {
+        var res = await Team.AddDayOffAsync(Guid.Parse(_formEmp), DateOnlyExtensions.ParseIso(_formDate), null, _formNotes);
+        if (res.Ok)
+        {
+            _formDate = "";
+            _formNotes = "";
+        }
+        return res;
+    });
+}

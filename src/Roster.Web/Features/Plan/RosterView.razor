@@ -1,0 +1,59 @@
+@* Port of src/app/(app)/plan/generate/RosterView.tsx. *@
+@using global::Roster.Engine.SubTasks
+@using global::Roster.Web.Features.RosterPage.Grid
+@* The roster's shifts on the shared tile grid, with names, the day's cost line
+   and the legend (the Roster page). *@
+<RosterGrid Rows="Rows" ShowName="true" CostByKey="CostByKey" EmptyLabel="No shifts generated." RowEdit="RowEdit" BreakAsHours="true"
+            Subtasks="@(Subtasks ? SubtasksOpen : null)" />
+
+@if (DayCost is { } cost)
+{
+    var delta = cost.Actual - cost.Ideal;
+    <div class="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-[var(--brand-border)] bg-white px-5 py-3 text-sm">
+        <span class="font-semibold text-[var(--brand-navy)]">Cost — this day</span>
+        <span class="text-[var(--brand-navy)]/70">
+            Ideal floor <b class="text-[var(--brand-navy)]">@Money(cost.Ideal)</b>
+        </span>
+        <span class="text-[var(--brand-navy)]/70">
+            Actual <b class="text-[var(--brand-navy)]">@Money(cost.Actual)</b>
+        </span>
+        <span class="@($"font-semibold {(delta > 0.005 ? "text-[var(--brand-red)]" : "text-green-700")}")"
+              title="Actual minus the theoretical floor: demand at adult (Store Assistant) rates plus the two compulsory manager shifts. Junior coverage lands below the floor as a bonus.">
+            Δ @(delta > 0 ? "+" : "")@Money(delta)
+        </span>
+    </div>
+}
+
+<RosterLegend />
+@if (Subtasks)
+{
+    @SubtaskLegend
+}
+
+@code {
+    private static readonly GridSubtasks SubtasksOpen = new(new HashSet<string>(Catalogue.SubtaskGroups));
+
+    [Parameter, EditorRequired] public IReadOnlyList<RosterGridRow> Rows { get; set; } = [];
+
+    [Parameter] public IReadOnlyDictionary<string, double>? CostByKey { get; set; }
+
+    /// <summary>The selected day's cost against its ideal floor (§6.5).</summary>
+    [Parameter] public (double Ideal, double Actual)? DayCost { get; set; }
+
+    /// <summary>
+    /// Present on the Roster page: makes each row's person and times editable in place.
+    /// Never passed by the read-only surfaces.
+    /// </summary>
+    [Parameter] public RowEditApi? RowEdit { get; set; }
+
+    /// <summary>
+    /// "Show sub-tasks" on (Roster page): the four groups' tiles show their sub-task's code
+    /// and the hover text names both. Off, the grid is as ever.
+    /// </summary>
+    [Parameter] public bool Subtasks { get; set; }
+
+    /// <summary>The legend of sub-task codes, shown under the tile legend while on.</summary>
+    [Parameter] public RenderFragment? SubtaskLegend { get; set; }
+
+    private static string Money(double n) => "$" + Js.ToLocaleString(n, 2, 2);
+}

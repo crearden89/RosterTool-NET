@@ -1,5 +1,4 @@
-// Port of src/lib/subtasks/label.test.ts. (Its "edits" case needs
-// lib/stage1/planEdit's reshapePlanShift, not yet ported.)
+// Port of src/lib/subtasks/label.test.ts.
 
 using Roster.Engine.Core;
 using Roster.Engine.SubTasks;
@@ -241,5 +240,24 @@ public class LabelTests
             byDow[0].Minutes.ToDictionary(kv => kv.Key, kv => kv.Value));
         Assert.Equal(new Dictionary<string, double> { ["ambient"] = 5, ["produce"] = 3 }, byDow[0].Priority.ToDictionary(kv => kv.Key, kv => kv.Value));
         Assert.Equal(0, byDow[1].Minutes.Size);
+    }
+
+    [Fact]
+    public void Stretching_or_trimming_a_shift_keeps_the_labels_of_the_tiles_that_remain()
+    {
+        var prev = new Roster.Engine.Planning.Stage1.PlanShift
+        {
+            SlotId = "sa-1",
+            PlanRole = "SA",
+            Start = 9 * H,
+            End = 13 * H,
+            BreakMinutes = 0,
+            UnpaidBreakMinutes = 0,
+            Blocks = Label.LabelBlocks([Tiles(("cleaning", 9 * H, 16))], Ctx())[0],
+        };
+        var grown = Roster.Engine.Planning.Stage1.PlanEdit.ReshapePlanShift(prev, "sa-1", "SA", 8 * H, 13 * H);
+        foreach (var b in grown.Blocks)
+            if (b.Group == "cleaning") Assert.Equal(prev.Blocks.First(x => x.Time == b.Time).Sub, b.Sub);
+            else Assert.Null(b.Sub);
     }
 }

@@ -1,0 +1,181 @@
+@* Port of src/components/plan/TradeCurveCard.tsx. *@
+@using global::Roster.Engine.Planning.Plan
+@if (_hours.Count == 0 || _curve.Count == 0)
+{
+    <div class="rounded-xl border border-[var(--brand-border)] bg-white p-3">
+        <h3 class="text-sm font-semibold text-[var(--brand-navy)]">Trade curve</h3>
+        <p class="mt-1 text-sm text-[var(--brand-navy)]/50">
+            No POS quarter-hour statistics loaded for this store yet, so the trade pattern can&apos;t be
+            shown.
+        </p>
+    </div>
+}
+else
+{
+    var hovered = _hoverHour is { } hh ? _pts.FirstOrDefault(p => p.H == hh) : null;
+    <div class="rounded-xl border border-[var(--brand-border)] bg-white p-3">
+        <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 class="text-sm font-semibold text-[var(--brand-navy)]">
+                Trade curve — @(TradeCurve.DowFull[Dow])s
+            </h3>
+            @if (_peak is { } peak)
+            {
+                <p class="text-xs text-[var(--brand-navy)]/60">
+                    Busiest hour <span class="font-semibold">@HourLabel(peak)</span>
+                </p>
+            }
+        </div>
+        @* Said plainly, because it is the single easiest thing to misread here:
+           this is the standing weekly pattern, not one date's takings. *@
+        <p class="mb-2 text-[11px] leading-snug text-[var(--brand-navy)]/45">
+            The store&apos;s typical @TradeCurve.DowFull[Dow] shape, derived from the POS quarter-hour statistics — not a
+            specific date&apos;s sales.
+            @if (_span is { } span)
+            {
+                @($" Shaded = the busy period ({HourLabel(span.First)}–{HourLabel(span.Last + 1)}), every hour trading within {N(PeakThresholdPct)}% of the peak.")
+            }
+        </p>
+
+        <div class="overflow-x-auto">
+            <svg viewBox="@($"0 0 {W} {Ht}")" preserveAspectRatio="xMidYMid meet" class="w-full min-w-[460px]" role="img"
+                 aria-label="@($"Hourly trade share for {TradeCurve.DowFull[Dow]}s, busiest hour {(_peak is { } pk ? HourLabel(pk) : "unknown")}")"
+                 @onmouseleave="() => _hoverHour = null">
+                @* Busy period as ONE continuous band. Shading each qualifying hour
+                   separately striped the plateau and implied 13:00 was a lull when
+                   it sits a single point under 12:00. *@
+                @if (_span is { } sp)
+                {
+                    <rect x="@N(X(sp.First) - _band / 2)" y="@N(PadTop)" width="@N(X(sp.Last) - X(sp.First) + _band)" height="@N(PlotH)"
+                          fill="@TradeCurve.CurveHue" opacity="0.045" />
+                }
+
+                @* Recessive gridlines: hairline, solid, one step off the surface. *@
+                @for (var i = 0; i < _ticks.Count; i++)
+                {
+                    var v = _ticks[i];
+                    <g @key="@($"g-{i}")">
+                        <line x1="@N(PadLeft)" x2="@N(W - PadRight)" y1="@N(Y(v))" y2="@N(Y(v))" stroke="var(--brand-border)" stroke-width="1" />
+                        <text x="@N(PadLeft - 6)" y="@N(Y(v) + 3)" text-anchor="end" class="fill-[var(--brand-navy)]/35" font-size="10">@($"{Js.ToFixed(v * 100, 2)}%")</text>
+                    </g>
+                }
+
+                <path d="@_areaPath" fill="@TradeCurve.CurveHue" opacity="0.06" />
+                <path d="@_linePath" fill="none" stroke="@TradeCurve.CurveHue" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+
+                @* Only the peak is direct-labelled - a value on every point is noise. *@
+                @if (_peak is { } p0)
+                {
+                    <circle cx="@N(X(p0))" cy="@N(Y(_byHour.GetValueOrDefault(p0)))" r="3" fill="@TradeCurve.CurveHue" stroke="#ffffff" stroke-width="2" />
+                }
+
+                @* Hour ticks, thinned so labels never collide at narrow widths. *@
+                @for (var i = 0; i < _pts.Count; i++)
+                {
+                    var p = _pts[i];
+                    var tick = _hours.Count > 10 && i % 2 == 1 ? "" : HourLabel(p.H);
+                    <g @key="@($"t-{N(p.H)}")">
+                        <text x="@N(X(p.H))" y="@N(Ht - 8)" text-anchor="middle" font-size="10"
+                              class="@(InSpan(p.H) ? "fill-[var(--brand-navy)]/60 font-semibold" : "fill-[var(--brand-navy)]/35")">@tick</text>
+                    </g>
+                }
+
+                @* Crosshair + hit targets, wider than the marks they select. *@
+                @if (hovered is not null)
+                {
+                    <g pointer-events="none">
+                        <line x1="@N(X(hovered.H))" x2="@N(X(hovered.H))" y1="@N(PadTop)" y2="@N(PadTop + PlotH)" stroke="var(--brand-navy)" stroke-opacity="0.18" stroke-width="1" />
+                        <circle cx="@N(X(hovered.H))" cy="@N(Y(hovered.Share))" r="3" fill="@TradeCurve.CurveHue" stroke="#ffffff" stroke-width="2" />
+                    </g>
+                }
+                @foreach (var p in _pts)
+                {
+                    <rect @key="@($"hit-{N(p.H)}")" x="@N(X(p.H) - _band / 2)" y="@N(PadTop)" width="@N(_band)" height="@N(PlotH)" fill="transparent"
+                          @onmouseenter="() => _hoverHour = p.H" />
+                }
+            </svg>
+        </div>
+
+        @* The hover text lives outside the SVG so it can't be clipped by the viewBox. *@
+        <p class="mt-0.5 min-h-[1rem] text-[11px] text-[var(--brand-navy)]/60">
+            @if (hovered is not null)
+            {
+                <span class="font-semibold">@HourLabel(hovered.H)</span>@(" · ")@Pct(hovered.Share)@(" of the day's trade")@(InSpan(hovered.H) ? " · within the busy period" : "")
+            }
+            else
+            {
+                <span class="text-[var(--brand-navy)]/40">Hover the chart for an hour&apos;s share.</span>
+            }
+        </p>
+    </div>
+}
+
+@code {
+    // Plot geometry. Drawn at roughly the size it is DISPLAYED at: at 1500 wide the
+    // scale factor sits at or just under 1 across the widths this page renders at,
+    // so a hairline stays a hairline. The plot spans the full card width.
+    private const double W = 1500;
+    private const double Ht = 170;
+    // left fits a two-decimal tick label ("15.00%").
+    private const double PadTop = 12, PadRight = 8, PadBottom = 28, PadLeft = 52;
+    private const double PlotW = W - PadLeft - PadRight;
+    private const double PlotH = Ht - PadTop - PadBottom;
+
+    private sealed record Pt(double H, double Share);
+
+    private double? _hoverHour;
+    private IReadOnlyList<CurvePoint> _curve = [];
+    private List<double> _hours = [];
+    private double? _peak;
+    private (double First, double Last)? _span;
+    private List<double> _ticks = [];
+    private double _yMax;
+    private Dictionary<double, double> _byHour = new();
+    private List<Pt> _pts = [];
+    private string _linePath = "";
+    private string _areaPath = "";
+    private double _band;
+
+    /// <summary>Seven hourly curves, index 0 = Monday, built from the store's derived trade curve.</summary>
+    [Parameter, EditorRequired] public TradeCurveWeek Week { get; set; } = new([]);
+
+    /// <summary>Monday = 0 - the weekday of the day being planned.</summary>
+    [Parameter, EditorRequired] public int Dow { get; set; }
+
+    [Parameter] public double PeakThresholdPct { get; set; } = 85;
+
+    protected override void OnParametersSet()
+    {
+        _curve = Dow >= 0 && Dow < Week.ByDow.Count ? Week.ByDow[Dow] : [];
+        // One shared hour axis across the week, so a quiet day doesn't silently
+        // shift its own axis as the date pills move.
+        var set = new HashSet<double>();
+        foreach (var day in Week.ByDow) foreach (var p in day) set.Add(p.Hour);
+        _hours = Js.Sort(set.ToList(), (a, b) => a - b);
+        _peak = TradeCurve.PeakHour(_curve);
+        _span = TradeCurve.BusySpan(_curve, PeakThresholdPct);
+        if (_hours.Count == 0 || _curve.Count == 0) return;
+
+        // Y scale runs to the top clean tick, so gridlines land on round numbers.
+        _ticks = TradeCurve.NiceTicks(Js.Max(_curve.Select(p => p.Share)), 4);
+        _yMax = Math.Max(0.01, _ticks[^1]);
+        _byHour = new Dictionary<double, double>();
+        foreach (var p in _curve) _byHour[p.Hour] = p.Share;
+        _pts = _hours.Select(h => new Pt(h, _byHour.GetValueOrDefault(h))).ToList();
+        _linePath = string.Join(" ", _pts.Select((p, i) => $"{(i == 0 ? "M" : "L")}{N(X(p.H))} {N(Y(p.Share))}"));
+        _areaPath = $"{_linePath} L{N(X(_pts[^1].H))} {N(PadTop + PlotH)} L{N(X(_pts[0].H))} {N(PadTop + PlotH)} Z";
+        // One hour's width on the x axis - the band unit for hit targets.
+        _band = PlotW / Math.Max(1, _hours.Count - 1);
+    }
+
+    private double X(double h) => PadLeft + (h - _hours[0]) / Math.Max(1, _hours.Count - 1) * PlotW;
+
+    private double Y(double share) => PadTop + PlotH - share / _yMax * PlotH;
+
+    private bool InSpan(double h) => _span is { } s && h >= s.First && h <= s.Last;
+
+    private static string HourLabel(double h) => $"{Js.PadStart(Js.NumberToString(h), 2, '0')}:00";
+
+    private static string Pct(double n) => $"{Js.ToFixed(n * 100, 2)}%";
+
+    private static string N(double n) => Js.NumberToString(n);
+}

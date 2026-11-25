@@ -12,6 +12,7 @@ using Roster.Data.Services.Pay;
 using Roster.Data.Services.Planning;
 using Roster.Data.Services.RefData;
 using Roster.Data.Services.Review;
+using Roster.Data.Services.SubTasks;
 
 namespace Roster.Data.Services;
 
@@ -30,12 +31,14 @@ public sealed class ServicesModule : IDataModule
         services.TryAddScoped<IFreshRosterShifts, PendingFreshRosterShifts>();
 
         services.TryAddScoped<IStoreDayLoader, StoreDayLoader>();
-        services.TryAddScoped<ITradeCurveSource, PendingTradeCurveSource>();
+        services.TryAddScoped<ITradeCurveSource>(sp => (ITradeCurveSource)sp.GetRequiredService<IRefData>());
         services.TryAddScoped<ITillLoader, TillLoader>();
         services.TryAddScoped<IStage1Loader, Stage1Loader>();
         services.TryAddScoped<IDayCheckOptionsLoader, DayCheckOptionsLoader>();
         services.TryAddScoped<IDaySlotsLoader, DaySlotsLoader>();
-        services.TryAddScoped<IPlanShiftsLoader, PendingPlanShiftsLoader>();
+        services.TryAddScoped<IPlanShiftsLoader, PlanShiftsLoader>();
+        services.TryAddScoped<ISubtaskLabels, SubtaskLabels>();
+        services.TryAddScoped<IPublishedSubtasks, PublishedSubtasks>();
         services.TryAddScoped<IPlanPeriods, PlanPeriods>();
         services.TryAddScoped<IHeldPlans, HeldPlans>();
 

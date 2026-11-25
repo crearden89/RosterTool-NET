@@ -1,0 +1,211 @@
+@page "/setup/weekends"
+@* Port of src/app/(app)/setup/weekends/page.tsx and WeekendsClient.tsx: the
+   weekend-off switches for the fortnight being built. The two weekends of the
+   selected fortnight are editable; the two before them show for context. Edits
+   stay on the page until Save, which writes them all at once. *@
+@inject IWeekendsService Weekends
+@inject NavigationManager Navigation
+
+<PageHeader Title="Weekends">
+    <Subtitle>@(_data?.Employees.Count ?? 0) team members · weekend-off switches for @(_data is null ? "" : Period.PeriodLabel(_data.PeriodStart))</Subtitle>
+</PageHeader>
+<Card Class="mb-4">
+    <div class="flex gap-3">
+        @* Scales to the height of the panel so it stays attached to the text as that
+           rewraps. aria-hidden: it marks the tone of the block, it does not add
+           anything a reader would otherwise miss. *@
+        <svg viewBox="0 0 10 40" preserveAspectRatio="xMidYMid meet" aria-hidden="true" class="w-4 shrink-0 self-stretch fill-[var(--ui-violet)]">
+            <circle cx="5" cy="4.4" r="2.4" />
+            <rect x="3.4" y="11" width="3.2" height="27" rx="1.6" />
+        </svg>
+        <p class="text-sm text-[var(--ui-muted)]">
+            The two weekends of the selected fortnight are editable; the two before them are shown
+            for context. The X/4 column counts full weekends off across the window (green ≥ 1, red =
+            0). Use the period nav to move between fortnights, mark everyone&apos;s weekends, then
+            hit Save.
+        </p>
+    </div>
+</Card>
+
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    <div @key="_loadKey">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            @if (_data.Stores.Count > 0)
+            {
+                <StorePicker Stores="_data.Stores" Value="_data.StoreId" Disabled="_pending"
+                             HrefFor="@(id => $"/setup/weekends?store={id}&start={_data.PeriodStart.ToIso()}")" />
+            }
+            <button type="button" @onclick="() => GoToPeriod(-1)" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Secondary)">← Previous</button>
+            <span class="min-w-[9rem] text-center text-sm font-semibold text-[var(--ui-ink)]">@Period.PeriodLabel(_data.PeriodStart)</span>
+            <button type="button" @onclick="() => GoToPeriod(1)" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Secondary)">Next →</button>
+
+            @if (!_data.ReadOnly)
+            {
+                <div class="ml-auto flex items-center gap-3">
+                    @if (_dirty.Count > 0)
+                    {
+                        <span class="text-sm font-medium text-[var(--ui-amber-ink)]">@_dirty.Count unsaved change@(_dirty.Count > 1 ? "s" : "")</span>
+                    }
+                    @if (_msg is not null)
+                    {
+                        <span class="@($"text-sm {(_msg.StartsWith("Error", StringComparison.Ordinal) ? "text-[var(--ui-bad)]" : "text-[var(--ui-good)]")}")">@_msg</span>
+                    }
+                    <button type="button" @onclick="SaveAsync" disabled="@(_dirty.Count == 0 || _pending)" class="@Ui.ButtonClass(ButtonKind.Accent)">
+                        @(_pending ? "Saving…" : "Save")
+                    </button>
+                </div>
+            }
+        </div>
+        <div class="@($"overflow-x-auto rounded-2xl border border-[var(--ui-line)] bg-white transition-opacity {(_pending ? "opacity-80" : "")}")">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="ui-thead">
+                        <th class="sticky left-0 z-10 bg-[#f1f1f8] px-3 py-2 text-left font-medium">Team member</th>
+                        <th class="px-3 py-2 text-left font-medium">Role</th>
+                        <th class="px-3 py-2 text-right font-medium">Contract / fortnight</th>
+                        @foreach (var wk in _data.Weekends)
+                        {
+                            <th class="border-l border-[var(--ui-line)] px-3 py-2 text-center font-medium">
+                                <div class="text-[10px] font-medium text-[var(--ui-faint)]">Sat</div>
+                                @Dates.AuShort(wk)
+                            </th>
+                            <th class="px-3 py-2 text-center font-medium">
+                                <div class="text-[10px] font-medium text-[var(--ui-faint)]">Sun</div>
+                                @Dates.AuShort(wk.AddDays(1))
+                            </th>
+                        }
+                        <th class="border-l border-[var(--ui-line)] px-3 py-2 text-center font-medium">X/4</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in _data.Employees)
+                    {
+                        var count = WeekendsRules.FullOffCount(_data.Weekends, wk => Get(e.Id, wk));
+                        <tr @key="e.Id" class="border-t border-[var(--ui-line)]">
+                            <td class="sticky left-0 z-10 bg-white px-3 py-2 font-semibold text-[var(--ui-ink)]">
+                                <span class="flex items-center gap-2.5 whitespace-nowrap">
+                                    <Avatar Name="@e.Name" Seed="@e.Id.ToString()" Size="28" />
+                                    @e.Name
+                                </span>
+                            </td>
+                            <td class="px-3 py-2"><RolePill Role="@e.Role" /></td>
+                            <td class="px-3 py-2 text-right text-[var(--ui-ink)]">@(e.Role == "JSA" ? "Casual" : $"{Js.NumberToString(e.ContractHours)}h")</td>
+                            @for (var i = 0; i < _data.Weekends.Count; i++)
+                            {
+                                var wk = _data.Weekends[i];
+                                var g = Get(e.Id, wk);
+                                var editable = !_data.ReadOnly && i >= _editableFrom;
+                                var context = i < _editableFrom ? "bg-[var(--ui-canvas)]" : "";
+                                var id = e.Id;
+                                <td class="@($"border-l border-[var(--ui-line)] px-2 py-2 text-center {context}")">
+                                    <Switch Checked="g.Sat" Label="@($"{e.Name} off Saturday {Dates.AuShort(wk)}")" ShowLabel="false"
+                                            Disabled="@(!editable || _pending)" OnChange="_ => Toggle(id, wk, sat: true)" />
+                                </td>
+                                <td class="@($"px-2 py-2 text-center {context}")">
+                                    <Switch Checked="g.Sun" Label="@($"{e.Name} off Sunday {Dates.AuShort(wk.AddDays(1))}")" ShowLabel="false"
+                                            Disabled="@(!editable || _pending)" OnChange="_ => Toggle(id, wk, sat: false)" />
+                                </td>
+                            }
+                            <td class="@($"border-l border-[var(--ui-line)] px-3 py-2 text-center font-semibold {(count >= 1 ? "text-[var(--ui-good)]" : "text-[var(--ui-bad)]")}")">
+                                @count/4
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private WeekendsPageData? _data;
+    private (string? Store, string? Start)? _loaded;
+    private int _loadKey;
+    // The page's own copy of every switch, by "{employee}:{saturday}"; nothing reaches
+    // the database until Save.
+    private Dictionary<string, (bool Sat, bool Sun)> _local = [];
+    // The edited weekends, in the order they were first changed.
+    private List<string> _dirty = [];
+    private readonly Dictionary<string, (Guid EmployeeId, DateOnly WeekendStart)> _keys = [];
+    private bool _pending;
+    private string? _msg;
+    private int _editableFrom;
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public string? Start { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == (Store, Start)) return;
+        _loaded = (Store, Start);
+        Guid? store = Guid.TryParse(Store, out var g) ? g : null;
+        DateOnly? start = DateOnly.TryParseExact(Start, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var d) ? d : null;
+        await LoadAsync(store, start);
+        // Another fortnight or store: the edits start afresh.
+        _loadKey++;
+        _dirty = [];
+        _msg = null;
+        _local = _data!.Markers.ToDictionary(m => WeekendsRules.Key(m.EmployeeId, m.WeekendStart), m => (m.SatOff, m.SunOff));
+    }
+
+    private async Task LoadAsync(Guid? store, DateOnly? start)
+    {
+        _data = await Weekends.LoadAsync(store, start);
+        _editableFrom = WeekendsRules.EditableFrom(_data.Weekends.Count);
+    }
+
+    private (bool Sat, bool Sun) Get(Guid employeeId, DateOnly weekendStart) =>
+        _local.GetValueOrDefault(WeekendsRules.Key(employeeId, weekendStart));
+
+    // Local-only edit: mark the cell dirty; nothing hits the database until Save.
+    private void Toggle(Guid employeeId, DateOnly weekendStart, bool sat)
+    {
+        var key = WeekendsRules.Key(employeeId, weekendStart);
+        var cur = Get(employeeId, weekendStart);
+        _local[key] = sat ? (!cur.Sat, cur.Sun) : (cur.Sat, !cur.Sun);
+        _keys[key] = (employeeId, weekendStart);
+        if (!_dirty.Contains(key)) _dirty.Add(key);
+        _msg = null;
+    }
+
+    // Navigate by whole fortnights on the canonical period grid, so the window always
+    // matches a real rostering period. Past periods are reachable too.
+    private void GoToPeriod(int delta) =>
+        Navigation.NavigateTo($"/setup/weekends?store={_data!.StoreId}&start={Period.AddPeriods(_data.PeriodStart, delta).ToIso()}");
+
+    private async Task SaveAsync()
+    {
+        if (_dirty.Count == 0) return;
+        var payload = _dirty.Select(key =>
+        {
+            var (employeeId, weekendStart) = _keys[key];
+            var g = _local.GetValueOrDefault(key);
+            return new WeekendMarkerInput(employeeId, weekendStart, g.Sat, g.Sun);
+        }).ToList();
+        _pending = true;
+        try
+        {
+            var res = await Weekends.SaveWeekendMarkersAsync(payload);
+            if (res.Ok)
+            {
+                _dirty = [];
+                _msg = "Saved.";
+                await LoadAsync(_data!.StoreId, _data.PeriodStart);
+            }
+            else
+            {
+                _msg = $"Error: {res.Error}";
+            }
+        }
+        finally
+        {
+            _pending = false;
+        }
+    }
+}

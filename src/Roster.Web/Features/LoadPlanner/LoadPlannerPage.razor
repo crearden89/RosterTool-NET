@@ -1,0 +1,320 @@
+@* Port of src/app/load/[token]/page.tsx and LoadPlanner.tsx.
+   The public, no-login Load Planner for the store's kiosk, reached by the
+   store's secret link. The page reads the day once; this keeps the screen's
+   state: counting the truck, pinning people to jobs, and the load marked
+   complete. Plans are worked out here by the same allocator the server uses,
+   so the chart redraws as the counts and pins change, and the three actions
+   save them. Drawn in the Floor Display's kiosk design, which opens it
+   (?from=floor) in a tab of its own; under 1024 px wide, the phone layout. *@
+@page "/load/{Token}"
+@using KioskResult = global::Roster.Web.Features.Floor.KioskResult
+@attribute [AllowAnonymous]
+@layout KioskLayout
+@implements IAsyncDisposable
+@implements ILoadActions
+@inject IKioskLinkCheck KioskLinks
+@inject ILoadPlannerService Loads
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject TimeProvider Clock
+
+@if (d is not null)
+{
+    var v = BuildView();
+    <div class="hidden lg:block">
+        <LoadKiosk V="v" A="this" />
+    </div>
+    <div class="lg:hidden">
+        <LoadPhone V="v" A="this" />
+    </div>
+}
+
+@code {
+    private const string Offline = "Could not reach the server. Check the connection and try again.";
+
+    /// <summary>How often the store's clock moves on, so the time in the header and the line at the time now keep up.</summary>
+    public static readonly TimeSpan ClockEvery = TimeSpan.FromSeconds(15);
+
+    [Parameter] public string Token { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "from")] public string? From { get; set; }
+
+    private LoadPageData? d;
+    private double now;
+    private string mode = "plan"; // plan, count or assign
+    private Dictionary<string, double> qty = new();
+    private Dictionary<string, string> pins = new();
+    private string? chooserFor;
+    private string? lastTapped;
+    private double? doneAt;
+    private LoadMessage? message;
+    private bool pending;
+    private LoadView? shown; // the view last drawn, for the back link
+    private Timer? clock;
+    private IJSObjectReference? module;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var before = d?.Day;
+        if (!await ReadAsync()) return;
+        // A new day starts the screen afresh (the TypeScript remounts on key={day}).
+        if (before != d!.Day) ResetState();
+        if (RendererInfo.IsInteractive && clock is null)
+            clock = new Timer(_ => InvokeAsync(TickAsync), null, ClockEvery, ClockEvery);
+    }
+
+    private async Task<bool> ReadAsync()
+    {
+        var link = await KioskLinks.CheckAsync(Token);
+        if (link.Status == KioskLinkStatus.NotFound)
+        {
+            d = null;
+            Navigation.NotFound();
+            return false;
+        }
+        if (link.Status == KioskLinkStatus.SignInRequired)
+        {
+            Navigation.NavigateTo(KioskLinks.SignInUrl(Navigation), forceLoad: true);
+            return false;
+        }
+        d = await Loads.LoadAsync(Token, link, From == "floor");
+        return true;
+    }
+
+    private void ResetState()
+    {
+        now = d!.Now;
+        mode = "plan";
+        qty = CountsOf(d.Types);
+        pins = new Dictionary<string, string>(d.Pins);
+        chooserFor = null;
+        lastTapped = null;
+        doneAt = null;
+        message = null;
+    }
+
+    // The TypeScript's router.refresh(): the page read again, the screen kept
+    // (unless the day has moved on).
+    private async Task RefreshAsync()
+    {
+        var day = d?.Day;
+        if (await ReadAsync() && d!.Day != day) ResetState();
+    }
+
+    // The store's clock, moved on every 15 seconds so the time in the header and
+    // the line at the time now keep up on a screen nobody reloads. A new day
+    // fetches the page again: today's truck and roster.
+    private async Task TickAsync()
+    {
+        if (d is null) return;
+        var t = StoreTime.StoreNow(d.State, Clock.GetUtcNow());
+        try
+        {
+            if (t.Date != d.Day) await RefreshAsync();
+            else now = t.Minutes;
+        }
+        catch (Exception)
+        {
+            // The database briefly away: the next tick tries again.
+        }
+        StateHasChanged();
+    }
+
+    private static Dictionary<string, double> CountsOf(IEnumerable<LoadTypeOption> types) => types.ToDictionary(t => t.Id, t => t.Qty);
+
+    private LoadView BuildView()
+    {
+        var savedTotal = d!.Types.Sum(t => t.Qty);
+        // No load yet (or one of all zeros): the truck is still to be counted.
+        var firstCount = !d.HasEntry || savedTotal == 0;
+        var screen = d.Crew.Count == 0 ? LoadScreen.NoCrew : firstCount || mode == "count" ? LoadScreen.Count : LoadScreen.Plan;
+        var assigning = screen == LoadScreen.Plan && mode == "assign";
+
+        var savedPlan = d.Crew.Count > 0 && !firstCount ? LoadModel.PlanFor(d.Inputs, d.Pins) : null;
+        var plan = screen == LoadScreen.Count ? LoadModel.PlanFor(d.Inputs, d.Pins, qty)
+            : assigning ? LoadModel.PlanFor(d.Inputs, pins)
+            : savedPlan;
+
+        var changed = assigning
+            ? d.Crew.Select(c => c.Key).Where(k => pins.GetValueOrDefault(k) != d.Pins.GetValueOrDefault(k)).ToList()
+            : new List<string>();
+        var total = qty.Values.Sum();
+        var countsChanged = d.Types.Any(t => qty.GetValueOrDefault(t.Id, 0) != t.Qty);
+
+        var status = screen == LoadScreen.NoCrew
+            ? new LoadStatus(LoadTone.Wait, d.RosterApproved ? "No one on Load Running" : "Waiting for the roster", "Waiting")
+            : screen == LoadScreen.Count
+                ? firstCount
+                    ? new LoadStatus(LoadTone.Wait, "Waiting for the load", "Waiting")
+                    : new LoadStatus(LoadTone.Edit, "Editing the load", "Editing")
+                : assigning
+                    ? new LoadStatus(LoadTone.Edit, "Assigning", "Assigning")
+                    : doneAt is { } done
+                        ? new LoadStatus(LoadTone.Go, $"Complete {Grid.MinToTime(done)}", "Complete")
+                        : new LoadStatus(LoadTone.Go, d.EnteredAt is { } at ? $"Load entered {Grid.MinToTime(at)}" : "Plan ready", "Plan ready");
+
+        shown = new LoadView(d, now, screen, firstCount, assigning, doneAt, plan, savedPlan,
+            assigning ? pins : d.Pins, changed, qty, total, lastTapped, chooserFor, pending, message, status,
+            $"/floor/{Uri.EscapeDataString(d.Token)}")
+        {
+            Unsaved = (screen == LoadScreen.Count && countsChanged) || changed.Count > 0,
+        };
+        return shown;
+    }
+
+    // A kiosk on shaky wifi: an action that throws reads as a failed save, not a
+    // stuck screen.
+    private static async Task<T> Attempt<T>(Func<Task<T>> fn, Func<string, T> failed)
+    {
+        try { return await fn(); }
+        catch (Exception) { return failed(Offline); }
+    }
+
+    public void StartCount()
+    {
+        message = null;
+        qty = CountsOf(d!.Types);
+        lastTapped = null;
+        mode = "count";
+        StateHasChanged();
+    }
+
+    public void CancelCount()
+    {
+        message = null;
+        lastTapped = null;
+        mode = "plan";
+        StateHasChanged();
+    }
+
+    public void Bump(string id, int by)
+    {
+        lastTapped = id;
+        qty = new Dictionary<string, double>(qty) { [id] = Math.Max(0, Math.Min(99, qty.GetValueOrDefault(id, 0) + by)) };
+        StateHasChanged();
+    }
+
+    public async Task SaveCountAsync()
+    {
+        message = null;
+        pending = true;
+        StateHasChanged();
+        var entries = d!.Types.Select(t => (t.Id, qty.GetValueOrDefault(t.Id, 0))).ToList();
+        var res = await Attempt(() => Loads.SaveDailyLoadAsync(d.Token, entries), KioskResult.Fail);
+        if (!res.Ok)
+        {
+            message = new LoadMessage(false, res.Error ?? "Could not save the load.");
+        }
+        else
+        {
+            // The plan view comes back with the saved counts, not a flash of the old ones.
+            mode = "plan";
+            lastTapped = null;
+            await Attempt(async () => { await RefreshAsync(); return true; }, _ => false);
+        }
+        pending = false;
+        StateHasChanged();
+    }
+
+    public void StartAssign()
+    {
+        message = null;
+        pins = new Dictionary<string, string>(d!.Pins);
+        chooserFor = null;
+        mode = "assign";
+        StateHasChanged();
+    }
+
+    public void CancelAssign()
+    {
+        message = null;
+        pins = new Dictionary<string, string>(d!.Pins);
+        chooserFor = null;
+        mode = "plan";
+        StateHasChanged();
+    }
+
+    public void OpenChooser(string? key)
+    {
+        chooserFor = key;
+        StateHasChanged();
+    }
+
+    public void Choose(string key, string? type)
+    {
+        var next = new Dictionary<string, string>(pins);
+        if (!string.IsNullOrEmpty(type)) next[key] = type;
+        else next.Remove(key);
+        pins = next;
+        chooserFor = null;
+        StateHasChanged();
+    }
+
+    public async Task SaveAssignAsync()
+    {
+        message = null;
+        chooserFor = null;
+        pending = true;
+        StateHasChanged();
+        // Only the people whose pin changed, as before: a pin is set, moved, or
+        // cleared back to Auto.
+        foreach (var key in pins.Keys.Concat(d!.Pins.Keys).Distinct().ToList())
+        {
+            if (pins.GetValueOrDefault(key) == d.Pins.GetValueOrDefault(key)) continue;
+            var person = d.Crew.FirstOrDefault(c => c.Key == key);
+            if (person is null) continue;
+            var res = await Attempt(() => Loads.SetLoadAssignmentAsync(d.Token, key, person.Name, pins.GetValueOrDefault(key)), KioskResult.Fail);
+            if (!res.Ok)
+            {
+                message = new LoadMessage(false, res.Error ?? "Could not save the assignments.");
+                pending = false;
+                StateHasChanged();
+                return;
+            }
+        }
+        mode = "plan";
+        message = new LoadMessage(true, "Assignments saved.");
+        await Attempt(async () => { await RefreshAsync(); return true; }, _ => false);
+        pending = false;
+        StateHasChanged();
+    }
+
+    public async Task MarkCompleteAsync()
+    {
+        message = null;
+        pending = true;
+        StateHasChanged();
+        var res = await Attempt(() => Loads.MarkLoadCompleteAsync(d!.Token), e => new LoadCompleteResult(false, e));
+        if (!res.Ok) message = new LoadMessage(false, res.Error ?? "Could not mark the load complete.");
+        else doneAt = StoreTime.StoreNow(d!.State, res.At ?? Clock.GetUtcNow()).Minutes;
+        pending = false;
+        StateHasChanged();
+    }
+
+    public async Task BackAsync()
+    {
+        if (shown is null || d is null) return;
+        // Nothing to ask and nothing to close: the link opens the Floor Display here.
+        if (!shown.Unsaved && !d.FromFloor) return;
+        if (shown.Unsaved && !await JS.InvokeAsync<bool>("confirm", "Leave without saving your changes?")) return;
+        if (!d.FromFloor)
+        {
+            Navigation.NavigateTo(shown.FloorHref);
+            return;
+        }
+        // Opened from the Floor Display's strip in a tab of its own: closing it
+        // shows the wall screen behind, rather than stacking up another copy of
+        // it. A browser that will not let the page close its tab goes there.
+        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Features/LoadPlanner/LoadPlannerPage.razor.js");
+        await module.InvokeVoidAsync("closeTab", shown.FloorHref);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        clock?.Dispose();
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}
