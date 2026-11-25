@@ -1,3 +1,5 @@
+// Port of src/components/ui/primitives.tsx, src/components/ui/PageChips.tsx and src/components/ui/CheckList.tsx (the tone tables).
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>

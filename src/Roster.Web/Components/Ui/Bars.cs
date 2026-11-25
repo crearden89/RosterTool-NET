@@ -1,3 +1,5 @@
+// Port of src/components/ui/Bars.tsx.
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>Which half of a <see cref="CentredBar"/> a difference is drawn in.</summary>

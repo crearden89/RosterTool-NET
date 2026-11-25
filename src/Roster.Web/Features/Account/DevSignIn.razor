@@ -1,0 +1,61 @@
+@* New: the development sign-in - pick a tier and a store - in place of the TypeScript
+   app's username and password form (src/app/login/LoginForm.tsx). It exists only
+   when Auth:Mode is Development, which startup allows only in the Development
+   environment; anywhere else this address is not found. *@
+@page "/dev/sign-in"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout BareLayout
+@inject IOptions<AuthOptions> Auth
+@inject IWebHostEnvironment Environment
+@inject NavigationManager Navigation
+@inject IServiceProvider Services
+
+<SignInFrame Title="Development sign-in">
+    <form method="post" action="dev/sign-in" class="space-y-4">
+        <AntiforgeryToken />
+        <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+        <p class="text-sm text-[var(--ui-muted)]">Development only: choose who to be. The real app signs in with your company account.</p>
+        <div>
+            <label for="dev-name" class="@Ui.FieldLabelClass">Name</label>
+            <input id="dev-name" name="Name" type="text" autocomplete="off" placeholder="Dev user" class="@($"w-full {Ui.FieldClass}")" />
+        </div>
+        <div>
+            <label for="dev-tier" class="@Ui.FieldLabelClass">Tier</label>
+            <select id="dev-tier" name="Tier" class="@($"w-full {Ui.FieldClass}")">
+                @foreach (var tier in TierKeys.All)
+                {
+                    <option value="@tier">@TierKeys.Label(tier)</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label for="dev-store" class="@Ui.FieldLabelClass">Store</label>
+            <select id="dev-store" name="Store" class="@($"w-full {Ui.FieldClass}")">
+                <option value="">No store (Super User, PA, DSO)</option>
+                @foreach (var s in _stores)
+                {
+                    <option value="@s.Id">@($"{s.Code} - {s.Name}")</option>
+                }
+            </select>
+            <p class="mt-1 text-xs text-[var(--ui-muted)]">A Store user manages this store; an EMSO gets its area.</p>
+        </div>
+        <button type="submit" class="@($"w-full !py-2.5 {Ui.ButtonClass(ButtonKind.Primary)}")">Sign In</button>
+    </form>
+</SignInFrame>
+
+@code {
+    private IReadOnlyList<DirectoryStore> _stores = [];
+
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Environment.IsDevelopment() || Auth.Value.Mode != AuthMode.Development)
+        {
+            Navigation.NotFound();
+            return;
+        }
+        _stores = await Services.GetRequiredService<IStoreDirectory>().ListAsync();
+    }
+}

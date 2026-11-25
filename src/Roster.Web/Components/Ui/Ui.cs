@@ -1,3 +1,5 @@
+// Port of src/components/ui/primitives.tsx (buttonClass, fieldClass, fieldLabelClass, linkClass, focusRing, table) and compactField in src/components/ui/SettingsShell.tsx.
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>The kinds of button (<see cref="Ui.ButtonClass"/>).</summary>

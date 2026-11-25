@@ -1,3 +1,7 @@
+// New: plain text as render fragments, for records whose TypeScript parts are ReactNode.
+
+using Microsoft.AspNetCore.Components;
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>Plain text as a render fragment, for the data records whose parts the TypeScript app types as ReactNode.</summary>

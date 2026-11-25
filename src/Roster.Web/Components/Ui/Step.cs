@@ -1,3 +1,5 @@
+// Port of src/components/ui/StepTrack.tsx.
+
 namespace Roster.Web.Components.Ui;
 
 public enum StepState { Done, Current, Attention, Todo }

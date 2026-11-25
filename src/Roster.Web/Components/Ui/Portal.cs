@@ -1,3 +1,7 @@
+// New: createPortal, which NameCombobox uses to escape clipping containers.
+
+using Microsoft.AspNetCore.Components;
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>

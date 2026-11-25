@@ -1,3 +1,7 @@
+// New: app-relative addresses, so the app also runs under a virtual directory.
+
+using Microsoft.AspNetCore.Components;
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>

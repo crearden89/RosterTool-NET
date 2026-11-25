@@ -1,16 +1,20 @@
+// New: the authorization policies, one per tier (the TypeScript app's requireUser and
+// requireTier, src/lib/auth.ts), and what a refused page request does.
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Components.Endpoints;
 using Microsoft.Extensions.Options;
+using Roster.Engine.Core;
 using Roster.Web.Kiosk;
 
 namespace Roster.Web.Auth;
 
 /// <summary>
 /// The authorization policies. A page with a plain <c>[Authorize]</c> (every
-/// page under Components/Pages, through its _Imports.razor) needs someone with
-/// access to the app; a Super User page adds <c>[Authorize(Policy = Policies.SuperUser)]</c>.
-/// Store scope is not a policy: a page asks <see cref="StoreScope"/>.
+/// page through Features/_Imports.razor) needs someone with access to the app;
+/// a Super User page adds <c>[Authorize(Policy = Policies.SuperUser)]</c>. Store
+/// scope is not a policy: a page asks the data layer's store scope.
 /// </summary>
 public static class Policies
 {
@@ -28,17 +32,20 @@ public static class Policies
     /// <summary>The DSO tier (stored as "director").</summary>
     public const string Director = "Roster.Director";
 
-    /// <summary>The kiosk pages: anyone with the link, or a signed-in device when <c>Kiosk:RequireDeviceSignIn</c> is on.</summary>
+    /// <summary>
+    /// Kiosk HTTP endpoints: anyone, or a signed-in device when <c>Kiosk:RequireDeviceSignIn</c>
+    /// is on. (Kiosk pages are [AllowAnonymous] and use IKioskLinkCheck, which applies the same rule.)
+    /// </summary>
     public const string Kiosk = "Roster.Kiosk";
 
-    /// <summary>The policy name for one tier.</summary>
-    public static string For(Tier tier) => tier switch
+    /// <summary>The policy name for a tier key ("super_user" gives <see cref="SuperUser"/>).</summary>
+    public static string For(string tier) => tier switch
     {
-        Tier.SuperUser => SuperUser,
-        Tier.Store => Store,
-        Tier.Emso => Emso,
-        Tier.Pa => Pa,
-        Tier.Director => Director,
+        Tiers.SuperUser => SuperUser,
+        Tiers.Store => Store,
+        Tiers.Emso => Emso,
+        Tiers.Pa => Pa,
+        Tiers.Director => Director,
         _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, null),
     };
 
@@ -50,9 +57,9 @@ public static class Policies
             .Build();
         options.DefaultPolicy = signedIn;
         options.AddPolicy(SignedIn, signedIn);
-        options.AddPolicy(Writer, p => p.Combine(signedIn).RequireAssertion(c => AppUser.FromPrincipal(c.User) is { IsReadOnly: false }));
-        foreach (var tier in Tiers.All)
-            options.AddPolicy(For(tier), p => p.Combine(signedIn).RequireClaim(RosterClaims.Tier, tier.Key()));
+        options.AddPolicy(Writer, p => p.Combine(signedIn).RequireAssertion(c => SignedInUser.FromPrincipal(c.User) is { IsReadOnly: false }));
+        foreach (var tier in TierKeys.All)
+            options.AddPolicy(For(tier), p => p.Combine(signedIn).RequireClaim(RosterClaims.Tier, tier));
         options.AddPolicy(Kiosk, p => p.AddRequirements(new KioskAccessRequirement()));
     }
 }
@@ -60,7 +67,7 @@ public static class Policies
 /// <summary>The kiosk pages' rule, read from <see cref="KioskOptions"/> on every request.</summary>
 public sealed class KioskAccessRequirement : IAuthorizationRequirement;
 
-internal sealed class KioskAccessHandler(IOptionsMonitor<KioskOptions> kiosk, IOptions<AuthOptions> auth) : AuthorizationHandler<KioskAccessRequirement>
+internal sealed class KioskAccessHandler(IOptionsMonitor<KioskOptions> kiosk) : AuthorizationHandler<KioskAccessRequirement>
 {
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, KioskAccessRequirement requirement)
     {
@@ -70,12 +77,16 @@ internal sealed class KioskAccessHandler(IOptionsMonitor<KioskOptions> kiosk, IO
             context.Succeed(requirement);
             return Task.CompletedTask;
         }
-        if (context.User.Identity?.IsAuthenticated != true) return Task.CompletedTask;
-
-        var groups = options.DeviceGroups.Where(g => !string.IsNullOrWhiteSpace(g)).ToArray();
-        if (groups.Length == 0 || groups.Any(g => context.User.HasClaim(RosterClaims.DeviceGroup, g)))
-            context.Succeed(requirement);
+        if (IsKioskDevice(context.User, options)) context.Succeed(requirement);
         return Task.CompletedTask;
+    }
+
+    /// <summary>Signed in, and in one of <c>Kiosk:DeviceGroups</c> when any are set.</summary>
+    internal static bool IsKioskDevice(System.Security.Claims.ClaimsPrincipal user, KioskOptions options)
+    {
+        if (user.Identity?.IsAuthenticated != true) return false;
+        var groups = options.DeviceGroups.Where(g => !string.IsNullOrWhiteSpace(g)).ToArray();
+        return groups.Length == 0 || groups.Any(g => user.HasClaim(RosterClaims.DeviceGroup, g));
     }
 }
 

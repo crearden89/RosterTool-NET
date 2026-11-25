@@ -1,3 +1,4 @@
+@* Port of src/components/nav/Sidebar.tsx. *@
 @implements IAsyncDisposable
 @inject NavigationManager Navigation
 @inject IOptions<BrandingOptions> Branding
@@ -48,7 +49,7 @@
                 }
             </a>
         </div>
-        @foreach (var s in NavConfig.ForTier(User.Tier))
+        @foreach (var s in NavConfig.ForTier(Tier))
         {
             <div @key="s.Section" class="mb-5">
                 <p class="px-3 pb-1.5 text-[10.5px] font-semibold tracking-[0.1em] text-[var(--ui-faint)] uppercase">@s.Section</p>
@@ -64,8 +65,8 @@
     </nav>
 
     <div class="border-t border-[var(--ui-line)] px-5 py-4">
-        <p class="truncate text-sm font-semibold text-[var(--ui-ink)]">@User.Name</p>
-        <p class="mb-2.5 text-xs text-[var(--ui-muted)]">@User.Tier.Label()</p>
+        <p class="truncate text-sm font-semibold text-[var(--ui-ink)]">@Name</p>
+        <p class="mb-2.5 text-xs text-[var(--ui-muted)]">@TierKeys.Label(Tier)</p>
         <SignOutButton />
     </div>
 </aside>
@@ -76,7 +77,11 @@
     private DotNetObjectReference<Sidebar>? _self;
     private IJSObjectReference? _escape;
 
-    [Parameter, EditorRequired] public AppUser User { get; set; } = default!;
+    /// <summary>The signed-in person's name.</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>Their tier key ("super_user", "store", "pa", "director", "emso"): which sections they see.</summary>
+    [Parameter, EditorRequired] public string Tier { get; set; } = "";
     [Parameter] public int UnreadCount { get; set; }
 
     // A menu item: plain text, and the page you are on as a soft lavender pill in bold.

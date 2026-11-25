@@ -1,3 +1,5 @@
+// Port of src/components/ui/SaveBar.tsx (useFormDraft, countChanged).
+
 using System.Text.Json;
 
 namespace Roster.Web.Components.Ui;

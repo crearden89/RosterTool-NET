@@ -1,3 +1,5 @@
+// Port of src/components/ui/primitives.tsx.
+
 using System.Text.RegularExpressions;
 
 namespace Roster.Web.Components.Ui;

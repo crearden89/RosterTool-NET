@@ -1,11 +1,13 @@
-using Roster.Web.Auth;
+// Port of src/components/nav/navConfig.ts.
 
-namespace Roster.Web.Navigation;
+using Roster.Engine.Core;
+
+namespace Roster.Web.Components.Layout;
 
 public sealed record NavItem(string Label, string Href);
 
-/// <param name="Tiers">The tiers that see the section; null for every signed-in tier.</param>
-public sealed record NavSection(string Section, IReadOnlyList<NavItem> Items, IReadOnlyList<Tier>? Tiers = null);
+/// <param name="Tiers">The tier keys that see the section ("super_user"); null for every signed-in tier.</param>
+public sealed record NavSection(string Section, IReadOnlyList<NavItem> Items, IReadOnlyList<string>? Tiers = null);
 
 /// <summary>
 /// The menu (spec Section 10), as the TypeScript app's
@@ -65,7 +67,7 @@ public static class NavConfig
             new("EMSO Managers", "/admin/emso"),
             new("Kiosk Links", "/admin/kiosk-links"),
             new("Views", "/admin/views"),
-        ], [Tier.SuperUser]),
+        ], [Tiers.SuperUser]),
     ];
 
     /// <summary>The tabs inside Rules.</summary>
@@ -83,8 +85,28 @@ public static class NavConfig
         new("Roster Order", "/admin/process/roster"),
     ];
 
-    /// <summary>The sections a tier sees.</summary>
-    public static IReadOnlyList<NavSection> ForTier(Tier tier) =>
+    /// <summary>The Notifications item at the top of the menu (above the sections).</summary>
+    public static NavItem Notifications { get; } = new("Notifications", "/notifications");
+
+    /// <summary>
+    /// The menu item (or Rules / Process tab, or Notifications) at an address, with
+    /// its section; null when the address is not in the menu.
+    /// </summary>
+    public static (NavSection Section, NavItem Item)? Find(string path)
+    {
+        static bool Same(string a, string b) => string.Equals(a.TrimEnd('/'), b.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        foreach (var s in Nav)
+            foreach (var i in s.Items)
+                if (Same(i.Href, path)) return (s, i);
+        var superUser = Nav.First(s => s.Tiers is not null);
+        foreach (var t in RulesTabs.Concat(ProcessTabs))
+            if (Same(t.Href, path)) return (superUser, t);
+        if (Same(Notifications.Href, path)) return (new NavSection("Notifications", [Notifications]), Notifications);
+        return null;
+    }
+
+    /// <summary>The sections a tier sees (navForTier), by tier key.</summary>
+    public static IReadOnlyList<NavSection> ForTier(string tier) =>
         Nav.Where(s => s.Tiers is null || s.Tiers.Contains(tier)).ToList();
 
     /// <summary>Every navigable tab, for the Views (visibility) matrix; the key is the href.</summary>

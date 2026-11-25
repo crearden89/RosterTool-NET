@@ -1,8 +1,10 @@
-@* Read-only tiers see no write controls. Wrap a page's write controls in it:
-   <WriteGate Page="_page"><button ...>Save</button></WriteGate>. With Page (a
-   StoreScope result) the write must also be in the person's scope for that
-   store; without it, only the tier counts (PA and DSO never write). ReadOnly
-   is shown instead, when given. *@
+@* New: read-only tiers see no write controls (the TypeScript pages pass readOnly to
+   their client components and hide the controls). Wrap a page's write controls in
+   it: <WriteGate CanWrite="_access == StoreAccess.Write"><button ...>Save</button></WriteGate>.
+   CanWrite is the page's own answer for its store (from the data layer's store
+   scope); without it only the tier counts (PA and DSO never write). ReadOnly is
+   shown instead, when given. *@
+@using Roster.Web.Auth
 @if (_canWrite)
 {
     @ChildContent
@@ -17,8 +19,8 @@ else
 
     [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
 
-    /// <summary>The page's store and access, from <see cref="StoreScope.ResolveAsync"/>.</summary>
-    [Parameter] public StorePage? Page { get; set; }
+    /// <summary>Whether the person may write the page's store; null when the page has no store.</summary>
+    [Parameter] public bool? CanWrite { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
@@ -27,7 +29,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        var user = AuthenticationState is null ? null : AppUser.FromPrincipal((await AuthenticationState).User);
-        _canWrite = user is { IsReadOnly: false } && (Page is null || Page.CanWrite);
+        var user = AuthenticationState is null ? null : SignedInUser.FromPrincipal((await AuthenticationState).User);
+        _canWrite = user is { IsReadOnly: false } && CanWrite != false;
     }
 }

@@ -45,7 +45,7 @@
 
   <Target Name="TailwindBuild" BeforeTargets="BeforeBuild" Condition="Exists('$(TailwindCli)')"
           Inputs="@(TailwindSource)" Outputs="$(TailwindOutput)">
-    <Exec Command="&quot;$(TailwindCli)&quot; --input &quot;$(TailwindInput)&quot; --output &quot;$(TailwindOutput)&quot; --minify"
+    <Exec Command="&quot;$(TailwindCli)&quot; --input &quot;$(TailwindInput)&quot; --output &quot;$(TailwindOutput)&quot; --optimize"
           WorkingDirectory="$(MSBuildProjectDirectory)" StandardOutputImportance="low" />
     <Touch Files="$(TailwindOutput)" />
   </Target>

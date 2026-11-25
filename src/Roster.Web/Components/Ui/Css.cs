@@ -1,3 +1,5 @@
+// Port of src/components/ui/Bars.tsx (clamp01).
+
 using System.Globalization;
 
 namespace Roster.Web.Components.Ui;

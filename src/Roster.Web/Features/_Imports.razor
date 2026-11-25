@@ -1,0 +1,22 @@
+@* Every page under Features/ needs someone signed in with access to the app,
+   unless it says otherwise: a Super User page adds
+   @attribute [Authorize(Policy = Policies.SuperUser)]; a kiosk page and the
+   sign-in pages are @attribute [AllowAnonymous]. *@
+@using System.Net.Http
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.Extensions.Options
+@using Microsoft.JSInterop
+@using Roster.Engine.Core
+@using Roster.Web
+@using Roster.Web.Auth
+@using Roster.Web.Components
+@using Roster.Web.Components.Layout
+@using Roster.Web.Components.Ui
+@using Roster.Web.Kiosk
+@attribute [Authorize]

@@ -1,6 +1,26 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+@* New: the router. Pages need sign-in unless they say otherwise (Features/_Imports.razor);
+   a page someone may not open sends them where the TypeScript app's requireUser and
+   requireTier did (RedirectOnDenied). *@
+@inject StoreSelection Selection
+@inject IOptions<BrandingOptions> Branding
+<PageTitle>@Branding.Value.AppName</PageTitle>
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Features.Account.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.AppLayout)">
+            <NotAuthorized>
+                <RedirectOnDenied />
+            </NotAuthorized>
+            <Authorizing>
+                <Loading />
+            </Authorizing>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    /// <summary>The roster_store_id cookie, read by App.razor on the page load.</summary>
+    [Parameter] public string? RememberedStore { get; set; }
+
+    protected override void OnInitialized() => Selection.Load(RememberedStore);
+}

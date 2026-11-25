@@ -1,3 +1,5 @@
+// Port of src/components/ui/DayChips.tsx.
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>A day chip's dot: green, red, or grey (another store's plan, a closed day).</summary>

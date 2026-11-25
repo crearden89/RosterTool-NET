@@ -1,4 +1,6 @@
-namespace Roster.Web.Branding;
+// New: the app's name and logo as settings, so the code carries no company name or logo.
+
+namespace Roster.Web.Components.Layout;
 
 /// <summary>
 /// The <c>Branding</c> section of appsettings: the app's name and logo. The code

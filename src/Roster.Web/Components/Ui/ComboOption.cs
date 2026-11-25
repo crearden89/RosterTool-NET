@@ -1,3 +1,5 @@
+// Port of src/components/ui/NameCombobox.tsx.
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>One name in a <see cref="NameCombobox"/>.</summary>

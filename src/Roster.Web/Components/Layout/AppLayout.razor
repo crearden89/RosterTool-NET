@@ -1,6 +1,7 @@
+@* Port of src/app/(app)/layout.tsx. *@
 @inherits LayoutComponentBase
 @implements IDisposable
-@inject INotificationService Notifications
+@inject IUnreadNotifications Notifications
 @inject ShellEvents Events
 @inject NavigationManager Navigation
 @inject RosterJs Js
@@ -13,7 +14,7 @@
 else
 {
     <div class="flex min-h-dvh">
-        <Sidebar User="_user" UnreadCount="_unread" />
+        <Sidebar Name="@_user.Name" Tier="@_user.Tier" UnreadCount="_unread" />
         @* pt-14 clears the fixed phone bar the Sidebar draws below lg, where it
            sits out of flow so the content can use the full width. *@
         <div class="flex-1 overflow-x-hidden pt-14 lg:pt-0">
@@ -37,7 +38,7 @@ else
 <PortalOutlet />
 
 @code {
-    private AppUser? _user;
+    private SignedInUser? _user;
     private int _unread;
     private ErrorBoundary? _errors;
 
@@ -45,7 +46,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        _user = AuthenticationState is null ? null : AppUser.FromPrincipal((await AuthenticationState).User);
+        _user = AuthenticationState is null ? null : SignedInUser.FromPrincipal((await AuthenticationState).User);
         await LoadUnreadAsync();
     }
 
@@ -61,7 +62,7 @@ else
         if (firstRender) await Js.ReadyAsync();
     }
 
-    private async Task LoadUnreadAsync() => _unread = _user is null ? 0 : await Notifications.UnreadCountAsync(_user);
+    private async Task LoadUnreadAsync() => _unread = _user is null ? 0 : await Notifications.CountAsync(_user);
 
     // Every page is a fresh look: the count is read again, and a page that
     // failed gets another chance once you go somewhere else.

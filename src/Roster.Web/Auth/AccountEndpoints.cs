@@ -1,3 +1,7 @@
+// New: the sign-in and sign-out addresses for every Auth:Mode, and the development
+// sign-in's form post. The TypeScript app signed in with a username and password
+// (src/app/login/LoginForm.tsx) and out with SignOutButton.tsx.
+
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -8,7 +12,6 @@ using Microsoft.Extensions.Options;
 
 namespace Roster.Web.Auth;
 
-/// <summary>The sign-in and sign-out addresses, for every <see cref="AuthMode"/>.</summary>
 public static class AccountEndpoints
 {
     public static IEndpointRouteBuilder MapAccountEndpoints(this IEndpointRouteBuilder app)
@@ -68,31 +71,33 @@ public static class AccountEndpoints
     /// </summary>
     public static IEndpointRouteBuilder MapDevSignIn(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/dev/sign-in", async (HttpContext http, [FromForm] DevSignInForm form, IStoreDirectory stores) =>
+        app.MapPost("/dev/sign-in", async (HttpContext http, [FromForm] DevSignInForm form) =>
         {
-            if (!Tiers.TryParse(form.Tier, out var tier)) return Results.BadRequest("Pick a tier.");
-            var all = await stores.ListAsync(http.RequestAborted);
-            var store = Guid.TryParse(form.Store, out var storeId) ? all.FirstOrDefault(s => s.Id == storeId) : null;
-            if ((tier is Tier.Store or Tier.Emso) && store is null) return Results.BadRequest("Pick a store for a Store or EMSO sign-in.");
+            if (!TierKeys.TryNormalize(form.Tier, out var tier)) return Results.BadRequest("Pick a tier.");
+            var stores = await http.RequestServices.GetRequiredService<IStoreDirectory>().ListAsync(http.RequestAborted);
+            var store = Guid.TryParse(form.Store, out var storeId) ? stores.FirstOrDefault(s => s.Id == storeId) : null;
+            var needsStore = tier is Roster.Engine.Core.Tiers.Store or Roster.Engine.Core.Tiers.Emso;
+            if (needsStore && store is null) return Results.BadRequest("Pick a store for a Store or EMSO sign-in.");
 
-            var name = string.IsNullOrWhiteSpace(form.Name) ? $"Dev {tier.Label()}" : form.Name.Trim();
+            var name = string.IsNullOrWhiteSpace(form.Name) ? $"Dev {TierKeys.Label(tier)}" : form.Name.Trim();
             var username = new string(name.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
-            var user = new AppUser
+            if (username.Length == 0) username = "dev";
+            var user = new SignedInUser
             {
                 Id = ConfigurationDirectory.StableId("dev-user", $"{username}|{tier}|{store?.Code}"),
-                Username = username.Length > 0 ? username : "dev",
+                Username = username,
                 DisplayName = name,
                 Tier = tier,
                 // As the TypeScript app's rows: a store user has a store, an EMSO an
-                // area, the network tiers neither (the store just opens first).
-                StoreId = tier is Tier.Store ? store?.Id : null,
-                AreaId = tier is Tier.Emso ? store?.AreaId : null,
+                // area, the network tiers neither (the chosen store just opens first).
+                StoreId = tier == Roster.Engine.Core.Tiers.Store ? store?.Id : null,
+                AreaId = tier == Roster.Engine.Core.Tiers.Emso ? store?.AreaId : null,
                 RegionId = store?.RegionId,
             };
-            var identity = new SignInIdentity { Method = "development", Username = user.Username, DisplayName = name };
+            var identity = new SignInIdentity { Method = "development", Username = username, DisplayName = name };
             await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AppUserResolver.CookiePrincipal(identity, user));
             if (store is not null)
-                http.Response.Cookies.Append(StoreSelection.CookieName, store.Id.ToString(),
+                http.Response.Cookies.Append(Components.Ui.StoreSelection.CookieName, store.Id.ToString(),
                     new CookieOptions { Path = "/", MaxAge = TimeSpan.FromDays(365), SameSite = SameSiteMode.Lax, IsEssential = true });
             var back = AuthSetup.LocalReturnUrl(http, form.ReturnUrl);
             return Results.LocalRedirect(back == $"{http.Request.PathBase}/" ? $"{http.Request.PathBase}/overview" : back);

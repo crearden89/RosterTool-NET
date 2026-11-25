@@ -1,3 +1,5 @@
+// Port of src/components/ui/DayBarsChart.tsx.
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>One day of a <see cref="DayBarsChart"/>.</summary>

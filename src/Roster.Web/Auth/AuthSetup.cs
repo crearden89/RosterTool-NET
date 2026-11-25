@@ -1,3 +1,7 @@
+// New: sign-in by Auth:Mode - Entra ID single sign-on, Windows Authentication, or the
+// development sign-in - replacing the TypeScript app's Supabase username/password
+// login (src/app/login, src/lib/auth.ts).
+
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -99,6 +103,11 @@ public static class AuthSetup
         services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, PageAuthorizationResultHandler>();
         services.AddCascadingAuthenticationState();
         services.TryAddScoped<AppUserResolver>();
+        services.TryAddSingleton<ConfigurationDirectory>();
+        services.TryAddSingleton<IUserDirectory>(sp => sp.GetRequiredService<ConfigurationDirectory>());
+        services.TryAddSingleton<IStoreDirectory>(sp => sp.GetRequiredService<ConfigurationDirectory>());
+        services.Configure<DirectoryOptions>(configuration.GetSection(DirectoryOptions.Section));
+        services.TryAddScoped<IKioskLinkCheck, KioskLinkCheck>();
         return builder;
     }
 

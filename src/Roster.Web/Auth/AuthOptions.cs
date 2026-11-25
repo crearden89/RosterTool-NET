@@ -1,3 +1,6 @@
+// New: the sign-in settings (Auth in appsettings.json): the mode and the AD groups
+// that give each tier.
+
 using System.Security.Claims;
 
 namespace Roster.Web.Auth;
@@ -41,10 +44,11 @@ public sealed class AuthOptions
     public bool GroupsDecideTier => TierGroups.Values.Any(g => g is { Length: > 0 });
 
     // The order a person in several tier groups is placed by: the widest reach first.
-    private static readonly Tier[] GroupPriority = [Tier.SuperUser, Tier.Emso, Tier.Director, Tier.Pa, Tier.Store];
+    private static readonly string[] GroupPriority =
+        [Roster.Engine.Core.Tiers.SuperUser, Roster.Engine.Core.Tiers.Emso, Roster.Engine.Core.Tiers.Director, Roster.Engine.Core.Tiers.Pa, Roster.Engine.Core.Tiers.Store];
 
-    /// <summary>The tier the principal's groups give, or null when none of them is mapped.</summary>
-    public Tier? TierFromGroups(ClaimsPrincipal principal)
+    /// <summary>The tier key the principal's groups give, or null when none of them is mapped.</summary>
+    public string? TierFromGroups(ClaimsPrincipal principal)
     {
         foreach (var tier in GroupPriority)
         {
@@ -58,12 +62,15 @@ public sealed class AuthOptions
         return null;
     }
 
-    private bool TryGroupsFor(Tier tier, out string[] groups)
+    // The groups configured for a tier, whichever way the key is written
+    // ("SuperUser", "super_user", "DSO" for Director).
+    private bool TryGroupsFor(string tier, out string[] groups)
     {
-        if (TierGroups.TryGetValue(tier.ToString(), out groups!) && groups is { Length: > 0 }) return true;
-        if (TierGroups.TryGetValue(tier.Key(), out groups!) && groups is { Length: > 0 }) return true;
-        groups = [];
-        return false;
+        groups = TierGroups
+            .Where(kv => TierKeys.TryNormalize(kv.Key, out var key) && key == tier)
+            .SelectMany(kv => kv.Value ?? [])
+            .ToArray();
+        return groups.Length > 0;
     }
 }
 

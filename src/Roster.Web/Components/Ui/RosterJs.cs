@@ -1,3 +1,5 @@
+// New: the browser helpers the components need (wwwroot/js/roster.js).
+
 using Microsoft.JSInterop;
 
 namespace Roster.Web.Components.Ui;

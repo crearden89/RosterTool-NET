@@ -1,3 +1,4 @@
+@* Port of the store pickers in src/app/(app)/plan/generate/FilterBar.tsx and plan/review/StorePicker.tsx. *@
 @inject NavigationManager Navigation
 @inject StoreSelection Selection
 @inject RosterJs Js
@@ -24,7 +25,7 @@
 
     [CascadingParameter] public SaveScope? SaveScope { get; set; }
 
-    [Parameter, EditorRequired] public IReadOnlyList<StoreInfo> Stores { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<StoreOption> Stores { get; set; } = [];
 
     /// <summary>The store the page is on.</summary>
     [Parameter] public Guid? Value { get; set; }

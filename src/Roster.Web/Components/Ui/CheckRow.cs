@@ -1,3 +1,7 @@
+// Port of src/components/ui/CheckList.tsx.
+
+using Microsoft.AspNetCore.Components;
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>One check in a <see cref="CheckList"/>: its severity, the check in words and any explanation under it.</summary>

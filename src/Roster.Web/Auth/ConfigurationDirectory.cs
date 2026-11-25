@@ -1,3 +1,6 @@
+// New: a stand-in user and store directory read from configuration, so the shell
+// and its sign-in run before the data layer's (Roster.Data, owner D) is wired in.
+
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -6,7 +9,8 @@ namespace Roster.Web.Auth;
 
 /// <summary>
 /// The <c>Directory</c> section of appsettings: a short list of stores and users
-/// for the stand-in directory, until the data layer's directory is registered.
+/// for the stand-in directory. Areas and regions are named here and turned into
+/// stable ids.
 /// </summary>
 public sealed class DirectoryOptions
 {
@@ -35,7 +39,7 @@ public sealed class DirectoryOptions
         public string Username { get; set; } = "";
         public string? DisplayName { get; set; }
 
-        /// <summary>The tier, when groups do not decide it ("SuperUser", "Store", "Pa", "Director", "Emso").</summary>
+        /// <summary>The tier when groups do not decide it ("SuperUser", "Store", "Pa", "Director" or "DSO", "Emso").</summary>
         public string? Tier { get; set; }
 
         /// <summary>The store a Store-tier user manages, by code.</summary>
@@ -46,59 +50,45 @@ public sealed class DirectoryOptions
     }
 }
 
-/// <summary>
-/// A stand-in <see cref="IUserDirectory"/> and <see cref="IStoreDirectory"/>
-/// over configuration, so the shell runs before the data layer is wired in. It
-/// is registered only when nothing else provides those services. Areas and
-/// regions are named in configuration and turned into stable ids.
-/// </summary>
-public sealed class ConfigurationDirectory(IOptionsMonitor<DirectoryOptions> options) : IUserDirectory, IStoreDirectory, Kiosk.IKioskDirectory
+internal sealed class ConfigurationDirectory(IOptionsMonitor<DirectoryOptions> options) : IUserDirectory, IStoreDirectory
 {
-    public Task<IReadOnlyList<StoreInfo>> ListAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<StoreInfo>>(Stores().Select(s => s.Info).OrderBy(s => s.Code, StringComparer.Ordinal).ToList());
+    public Task<IReadOnlyList<DirectoryStore>> ListAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<DirectoryStore>>(Stores().Select(s => s.Store).OrderBy(s => s.Code, StringComparer.Ordinal).ToList());
 
-    public Task<AppUser?> FindAsync(SignInIdentity identity, CancellationToken cancellationToken = default)
+    public Task<DirectoryStore?> FindByKioskTokenAsync(string token, CancellationToken cancellationToken = default) =>
+        Task.FromResult<DirectoryStore?>(Stores().FirstOrDefault(s => s.Token is not null && FixedTimeEquals(s.Token, token)).Store);
+
+    public Task<SignedInUser?> FindAsync(SignInIdentity identity, CancellationToken cancellationToken = default)
     {
         var entry = options.CurrentValue.Users.FirstOrDefault(u => Matches(u.Username, identity));
-        if (entry is null) return Task.FromResult<AppUser?>(null);
+        if (entry is null) return Task.FromResult<SignedInUser?>(null);
 
-        // The tier from configuration; the resolver replaces it when groups
-        // decide. No tier from either, no access.
-        Tier tier;
-        if (Tiers.TryParse(entry.Tier, out var configured)) tier = configured;
+        // The tier from configuration; the resolver replaces it when groups decide.
+        // No tier from either: no access.
+        string tier;
+        if (TierKeys.TryNormalize(entry.Tier, out var configured)) tier = configured;
         else if (identity.GroupTier is { } fromGroups) tier = fromGroups;
-        else return Task.FromResult<AppUser?>(null);
+        else return Task.FromResult<SignedInUser?>(null);
 
-        var store = entry.Store is null ? null : Stores().FirstOrDefault(s => string.Equals(s.Info.Code, entry.Store, StringComparison.OrdinalIgnoreCase));
-        var areaId = entry.Area is not null ? StableId("area", entry.Area) : store?.Info.AreaId;
-        return Task.FromResult<AppUser?>(new AppUser
+        var store = entry.Store is null ? null : Stores().Select(s => s.Store).FirstOrDefault(s => string.Equals(s.Code, entry.Store, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult<SignedInUser?>(new SignedInUser
         {
             Id = StableId("user", entry.Username),
             Username = entry.Username,
             DisplayName = entry.DisplayName ?? identity.DisplayName ?? "",
             Tier = tier,
-            StoreId = store?.Info.Id,
-            AreaId = areaId,
-            RegionId = store?.Info.RegionId,
+            StoreId = store?.Id,
+            AreaId = entry.Area is not null ? StableId("area", entry.Area) : store?.AreaId,
+            RegionId = store?.RegionId,
         });
     }
 
-    public Task<Kiosk.KioskStore?> FindByTokenAsync(string token, CancellationToken cancellationToken = default)
-    {
-        var match = Stores().FirstOrDefault(s => s.Token is not null && FixedTimeEquals(s.Token, token));
-        return Task.FromResult(match is null ? null : new Kiosk.KioskStore(match.Info));
-    }
-
-    private IEnumerable<(StoreInfo Info, string? Token)> Stores() =>
-        options.CurrentValue.Stores.Select(s => (new StoreInfo
-        {
-            Id = s.Id ?? StableId("store", s.Code),
-            Code = s.Code,
-            Name = s.Name,
-            AreaId = s.Area is null ? null : StableId("area", s.Area),
-            RegionId = s.Region is null ? null : StableId("region", s.Region),
-            State = s.State,
-        }, s.KioskToken));
+    private IEnumerable<(DirectoryStore Store, string? Token)> Stores() =>
+        options.CurrentValue.Stores.Select(s => (new DirectoryStore(
+            s.Id ?? StableId("store", s.Code), s.Code, s.Name,
+            s.Area is null ? null : StableId("area", s.Area),
+            s.Region is null ? null : StableId("region", s.Region),
+            s.State), s.KioskToken));
 
     private static bool Matches(string username, SignInIdentity identity) =>
         !string.IsNullOrWhiteSpace(username) &&
