@@ -1,5 +1,7 @@
 // Port of the database work in src/app/api/cron/keep-alive/route.ts (the HTTP and
 // schedule parts are in src/Roster.Web/Features/Jobs).
+using Microsoft.EntityFrameworkCore;
+
 namespace Roster.Data.Jobs;
 
 // Daily keep-alive. Supabase paused a free-tier project after 7 days with no
@@ -30,8 +32,19 @@ public interface IKeepAlive
     Task<KeepAliveResult> TouchAsync(CancellationToken cancellationToken = default);
 }
 
-internal sealed class KeepAlive : IKeepAlive
+internal sealed class KeepAlive(IRosterDbContextFactory contexts) : IKeepAlive
 {
-    public Task<KeepAliveResult> TouchAsync(CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public async Task<KeepAliveResult> TouchAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var db = contexts.CreateSystem("keep-alive: touch the database");
+            var count = await db.Stores.CountAsync(cancellationToken);
+            return KeepAliveResult.Success(count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return KeepAliveResult.Failure(ex.Message);
+        }
+    }
 }

@@ -7,6 +7,7 @@
 
 using System.Text.Json.Serialization;
 using Roster.Engine.Core;
+using Roster.Engine.Rostering.Fortnight;
 using Roster.Engine.SubTasks;
 
 namespace Roster.Engine.RosterOps;
@@ -55,6 +56,10 @@ public static class Approval
     }
 
     /// <inheritdoc cref="CoverNoteError(Func{DateOnly, RosterDay?}, IReadOnlyList{DateOnly}, string?)"/>
+    public static string? CoverNoteError(JsMap<DateOnly, RosterComputation> fortnight, IReadOnlyList<DateOnly> dates, string? comment) =>
+        CoverNoteError(d => RosterDay.OrNull(fortnight.Get(d)), dates, comment);
+
+    /// <inheritdoc cref="CoverNoteError(Func{DateOnly, RosterDay?}, IReadOnlyList{DateOnly}, string?)"/>
     public static string? CoverNoteError(Func<string, RosterDay?> dayOf, IReadOnlyList<string> dates, string? comment)
     {
         var needNote = DayStatus.DaysNeedingCoverNote(dayOf, dates);
@@ -74,6 +79,9 @@ public static class Approval
         if (roster is null || !roster.HasData) return PublishStep.Skip;
         return PublishStep.Approve;
     }
+
+    /// <inheritdoc cref="StepFor(RosterDay?)"/>
+    public static PublishStep StepFor(RosterComputation? roster) => StepFor(RosterDay.OrNull(roster));
 
     /// <summary>
     /// The day's shifts as approve_roster_day takes them: the held roster's named

@@ -1,0 +1,223 @@
+@* Port of src/app/(app)/overview/DayTable.tsx.
+   The month, day by day: the Dashboard's table under its cards. Its store and
+   month controls sit in the page's header. *@
+@inject NavigationManager Navigation
+@inject IJSRuntime JsRuntime
+
+<div>
+    @* Heading and columns *@
+    <div class="mb-4 flex flex-wrap items-center gap-2">
+        <h2 class="text-base font-semibold text-[var(--ui-ink)]">
+            @MonthLabel, day by day
+            @if (_pending)
+            {
+                <span class="ml-2 text-sm font-normal text-[var(--ui-muted)]">Loading…</span>
+            }
+        </h2>
+
+        @* Column cog *@
+        <div class="relative ml-auto">
+            <button type="button" @onclick="() => _cogOpen = !_cogOpen" aria-expanded="@(_cogOpen ? "true" : "false")" class="@Ui.ButtonClass(ButtonKind.Secondary)" title="Columns">⚙︎ Columns</button>
+            @if (_cogOpen)
+            {
+                <div class="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-[var(--ui-line)] bg-white p-2 shadow-lg">
+                    @foreach (var c in ExtraCols)
+                    {
+                        <label @key="c.Key" class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)]">
+                            <input type="checkbox" checked="@_extras[c.Key]" @onchange="e => _extras[c.Key] = e.Value is true" />
+                            @c.Label
+                        </label>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="@($"overflow-x-auto rounded-2xl border border-[var(--ui-line)] bg-white transition-opacity {(_pending ? "opacity-50" : "")}")">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="ui-thead">
+                    <th class="px-3 py-2 font-medium">Day</th>
+                    <th class="px-3 py-2 font-medium">Date</th>
+                    <th class="px-3 py-2 text-right font-medium">Forecast</th>
+                    <th class="px-3 py-2 text-right font-medium">Actual</th>
+                    <th class="px-3 py-2 text-right font-medium">Benchmark Hrs</th>
+                    <th class="px-3 py-2 text-right font-medium">Non-Op</th>
+                    <th class="px-3 py-2 text-right font-medium">Target Hrs</th>
+                    <th class="px-3 py-2 text-right font-medium">Actual Hrs</th>
+                    <th class="px-3 py-2 text-right font-medium">OE</th>
+                    <th class="px-3 py-2 text-right font-medium">IPLH</th>
+                    @foreach (var c in ShownExtras)
+                    {
+                        <th @key="c.Key" class="px-3 py-2 text-right font-medium">@c.Label</th>
+                    }
+                    <th class="px-3 py-2 text-center font-medium">Roster</th>
+                    <th class="px-3 py-2 text-center font-medium">Data</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var w in Data.Weeks)
+                {
+                    var isCollapsed = _collapsed.GetValueOrDefault(w.Key);
+                    @* Week header *@
+                    <tr @key="w.Key" class="border-t border-[var(--ui-line)] bg-[var(--ui-canvas)]">
+                        <td colspan="@ColCount" class="px-3 py-1.5">
+                            <div class="flex items-center gap-3">
+                                <button type="button" @onclick="() => _collapsed[w.Key] = !isCollapsed" class="@($"rounded px-1 text-[var(--ui-ink)] {Ui.FocusRing}")"
+                                        title="@(isCollapsed ? "Expand" : "Collapse")" aria-label="@($"{(isCollapsed ? "Expand" : "Collapse")} week {w.Label}")"
+                                        aria-expanded="@(isCollapsed ? "false" : "true")">
+                                    @(isCollapsed ? "▸" : "▾")
+                                </button>
+                                <Eyebrow>Week @w.Label</Eyebrow>
+                                <button type="button" @onclick="() => PlanWeekAsync(w)"
+                                        class="@($"rounded-lg px-2.5 py-0.5 text-xs font-semibold {Ui.FocusRing} {(w.PlanAllowed ? "bg-[var(--brand-orange)] text-white" : "border border-[var(--ui-line)] text-[var(--ui-muted)]")}")">
+                                    Plan week →
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+
+                    @* Day rows *@
+                    @if (!isCollapsed)
+                    {
+                        foreach (var r in w.Days)
+                        {
+                            <tr @key="r.Date" class="@($"border-t border-[var(--brand-border)] {(r.IsToday ? "bg-[var(--brand-blue-tint)] font-medium" : r.IsWeekend ? "bg-[var(--brand-surface)]/60" : "")}")">
+                                <td class="@($"px-3 py-1.5 {(r.IsToday ? "border-l-4 border-l-[var(--brand-light-blue)]" : "")}")">@r.Dow</td>
+                                <td class="px-3 py-1.5">@r.Date.Day.ToString("00")@if (r.IsToday)
+                                    {<span class="ml-1 rounded-full bg-[var(--ui-violet)] px-1.5 py-0.5 text-[10px] font-semibold text-white">TODAY</span>}</td>
+                                @MetricCells(r)
+                                <td class="px-3 py-1.5 text-center">@Dot(r.RosterStatus)</td>
+                                <td class="px-3 py-1.5 text-center">@Dot(r.DataStatus)</td>
+                            </tr>
+                            @if (Data.Mtd is { } mtd && r.Date == mtd.AfterDate)
+                            {
+                                @SummaryRow("MTD", mtd.Summary, "bg-[var(--brand-blue-mid)]")
+                            }
+                        }
+                    }
+
+                    @* WTD summary *@
+                    @SummaryRow("WTD", w.Wtd, "bg-[var(--brand-navy-tint)]")
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <p class="mt-3 text-xs text-[var(--ui-muted)]">
+        Two status lights per day - <span class="font-medium">Roster</span> (green approved ·
+        amber generated, not approved · red not generated) and
+        <span class="font-medium">Data</span> (green actuals within threshold of benchmarks ·
+        amber a metric missing or outside threshold · red benchmarks but no actuals). A hollow ring
+        means no benchmarks are loaded for that day. The threshold lives on the Daily Variance
+        Report page.
+    </p>
+</div>
+
+@code {
+    // Optional columns behind the cog (spec 11.2). Actual Hours @ 100% is the ACTUALS
+    // file's hours - the OE numerator, so switching it on reconciles against the OE
+    // column. Customers is the ACTUAL count from the actuals file - the same figure the
+    // Average Spend cards divide by.
+    private static readonly (string Key, string Label)[] ExtraCols =
+    [
+        ("actualHours100", "Actual Hours @ 100%"),
+        ("actualCustomers", "Customer Count"),
+        ("avgSpend", "Avg Spend"),
+        ("hoursToTarget", "Hours to OE Target"),
+    ];
+
+    private readonly Dictionary<string, bool> _collapsed = [];
+    private readonly Dictionary<string, bool> _extras = new()
+    {
+        ["actualHours100"] = false, ["actualCustomers"] = false, ["avgSpend"] = false, ["hoursToTarget"] = false,
+    };
+    private bool _cogOpen;
+    private bool _pending;
+
+    [Parameter, EditorRequired] public OverviewData Data { get; set; } = null!;
+    [Parameter] public Guid? SelectedStore { get; set; }
+    [Parameter] public string MonthLabel { get; set; } = "";
+
+    private IEnumerable<(string Key, string Label)> ShownExtras => ExtraCols.Where(c => _extras[c.Key]);
+
+    // day + date + metrics + 2 status
+    private int ColCount => 10 + ShownExtras.Count() + 2;
+
+    protected override void OnParametersSet() => _pending = false;
+
+    private async Task PlanWeekAsync(WeekGroup w)
+    {
+        if (!w.PlanAllowed)
+        {
+            await JsRuntime.InvokeVoidAsync("alert",
+                "Forecasts have not been loaded for this fortnight - planning is only available for past weeks and the next fortnight.");
+            return;
+        }
+        _pending = true;
+        Navigation.NavigateTo($"/plan/generate?store={SelectedStore?.ToString() ?? ""}&date={w.MondayDate.ToIso()}");
+    }
+
+    // Numeric metric cells shared by day rows and summary rows.
+    private RenderFragment MetricCells(Summary s) => __builder =>
+    {
+        <td class="px-3 py-1.5 text-right">@DashboardText.Money0OrDash(s.ForecastSales)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Money0OrDash(s.ActualSales)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Hrs(s.BenchmarkHours)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Hrs(s.NonOpHours)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Hrs(s.TargetHours)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Hrs(s.KronosHours)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Oe(s.OeResult)</td>
+        <td class="px-3 py-1.5 text-right">@DashboardText.Iplh(s.Iplh)</td>
+        @foreach (var c in ShownExtras)
+        {
+            @ExtraCell(s, c.Key)
+        }
+    };
+
+    /// <summary>One optional cell (Hours to OE Target signed: positive red, negative green).</summary>
+    private static RenderFragment ExtraCell(Summary s, string key) => __builder =>
+    {
+        switch (key)
+        {
+            case "actualCustomers":
+                <td class="px-3 py-1.5 text-right">@DashboardText.Customers(s.ActualCustomers)</td>
+                break;
+            case "avgSpend":
+                <td class="px-3 py-1.5 text-right">@DashboardText.AvgSpend(s.AvgSpend)</td>
+                break;
+            case "hoursToTarget":
+                var (text, tone) = DashboardText.HoursToTarget(s.HoursToTarget);
+                <td class="@($"px-3 py-1.5 text-right {tone}")">@text</td>
+                break;
+            default:
+                <td class="px-3 py-1.5 text-right">@DashboardText.Hrs(s.ActualHours100)</td>
+                break;
+        }
+    };
+
+    // "None" = no benchmarks loaded: the day is not in play, so no light at all (a
+    // hollow ring, so the column doesn't look broken).
+    private static RenderFragment Dot(Light light) => __builder =>
+    {
+        if (light == Light.None)
+        {
+            <span class="inline-block h-3 w-3 rounded-full border border-[var(--brand-border)]"></span>
+        }
+        else
+        {
+            <span class="@($"inline-block h-3 w-3 rounded-full {(light == Light.Green ? "status-green" : light == Light.Amber ? "status-amber" : "status-red")}")"></span>
+        }
+    };
+
+    private RenderFragment SummaryRow(string label, Summary s, string bg) => __builder =>
+    {
+        <tr class="@($"border-t border-[var(--brand-border)] font-semibold {bg}")">
+            <td class="px-3 py-1.5 text-[var(--brand-navy)]">@label</td>
+            <td class="px-3 py-1.5"></td>
+            @MetricCells(s)
+            <td class="px-3 py-1.5"></td>
+            <td class="px-3 py-1.5"></td>
+        </tr>
+    };
+}
