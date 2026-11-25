@@ -1,0 +1,19 @@
+@* Port of src/components/roster/RosterGrid.tsx (RosterTile). The grid draws the same
+   tile itself (TileView), without a component per quarter-hour. *@
+@namespace Roster.Web.Features.RosterPage.Grid
+
+@if (TileView.For(Group, Error, Sub, ShowSub) is { } t)
+{
+    <div class="@TileView.Class" style="@t.Style" title="@t.Title">@t.Text</div>
+}
+
+@code {
+    [Parameter] public string? Group { get; set; }
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>The tile's sub-task: its hover text names the group and the sub-task ("Reset · Re-runs").</summary>
+    [Parameter] public string? Sub { get; set; }
+
+    /// <summary>Shows the sub-task's code in place of the group's, for a group opened in the Benchmark Hours table.</summary>
+    [Parameter] public bool ShowSub { get; set; }
+}

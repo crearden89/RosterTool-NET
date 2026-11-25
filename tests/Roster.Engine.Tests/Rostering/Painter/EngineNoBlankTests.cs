@@ -171,6 +171,18 @@ public class EngineNoBlankTests
     }
 
     [Fact]
+    public void Names_the_blank_quarter_hours_of_a_shift_as_runs()
+    {
+        // New: blankFlag has no TypeScript test; the fortnight's flags carry it.
+        Assert.Equal(
+            "Rory Nolan 07:00–14:15: 3 quarter-hours with no work (10:00–10:30, 13:00–13:15) that could not be cleared within the rules",
+            TaskPainter.BlankFlag("Rory Nolan", 7 * H, 14.25 * H, [13 * H, 10 * H, 10.25 * H]));
+        Assert.Equal(
+            "Ann Lee 09:00–12:00: 1 quarter-hour with no work (11:45–12:00) that could not be cleared within the rules",
+            TaskPainter.BlankFlag("Ann Lee", 9 * H, 12 * H, [11.75 * H]));
+    }
+
+    [Fact]
     public void Names_an_unmanned_till_as_such()
     {
         Assert.StartsWith("Tills: 0.25h of register time has nobody on it", TaskPainter.LostWorkFlag("checkout", 1));

@@ -1,0 +1,203 @@
+@* Port of src/components/roster/RosterGrid.tsx (RosterGrid). The parameters and the
+   values worked out before drawing are in RosterGrid.razor.cs. *@
+@namespace Roster.Web.Features.RosterPage.Grid
+
+<div class="@($"mb-6 overflow-x-auto rounded-xl border border-[var(--brand-border)] bg-white {(EditMode ? "rg-xhair" : "")}")">
+    @if (EditMode)
+    {
+        @* Written raw: a <style> body is not HTML-escaped, so the selectors arrive intact. *@
+        @((MarkupString)$"<style>{CrosshairCss(Cols)}</style>")
+    }
+    <table class="text-sm">
+        <thead>
+            <tr class="h-11">
+                @if (ShowName)
+                {
+                    <th class="@($"sticky left-0 z-10 {(RowEdit is not null ? "min-w-[230px]" : "min-w-[140px]")} px-4 text-left {LabelHeadCls}")">Name</th>
+                }
+                <th class="@($"min-w-[90px] px-3 text-left {LabelHeadCls} {(ShowName ? "" : "sticky left-0 z-10")}")">@(ShowName ? "Position" : "Role")</th>
+                @* Editable rows carry a time input rather than plain text, which
+                   needs room for the browser's own clock affordance - reserve it
+                   only when editing so the read-only views stay compact. *@
+                <th class="@($"{(RowEdit is not null ? "min-w-[112px]" : "min-w-[70px]")} {LabelHeadCls}")">Start</th>
+                <th class="@($"{(RowEdit is not null ? "min-w-[112px]" : "min-w-[70px]")} {LabelHeadCls}")">Finish</th>
+                <th class="@($"min-w-[60px] {LabelHeadCls}")">Hrs</th>
+                <th class="@($"min-w-[64px] {LabelHeadCls}")">Break</th>
+                @if (CostByKey is not null)
+                {
+                    <th class="@($"min-w-[80px] text-right {LabelHeadCls}")">Cost</th>
+                }
+                @foreach (var m in Cols)
+                {
+                    var isHour = m % 60 == 0;
+                    @* data-now-band: the anchor for the kiosk's centre-on-now scroll
+                       (CenterOnNow) - the first column of the highlight band carries the mark. *@
+                    <th data-c="@C(m)" style="@LrRule(m)" data-now-band="@(HighlightRange is { } hr && m == hr.Start ? "" : null)"
+                        class="@($"min-w-[30px] px-1 py-2 text-center align-middle text-xs {ColBorder} {(InHl(m) ? HlBg : IsCostFlag(m) ? "bg-[var(--brand-red-tint)]" : "bg-white")} {(isHour ? "font-semibold text-[var(--brand-navy)]" : "font-normal text-[var(--brand-navy)]/45")}")">@(isHour ? Js.NumberToString(Math.Floor(m / 60)) : Js.NumberToString(m % 60))</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @if (HeatRow is { } heat)
+            {
+                <tr class="h-7 border-t border-[var(--brand-border)]">
+                    <td title="@heat.Hint" class="@($"sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-1 align-middle text-xs font-semibold text-[var(--brand-navy)] {ColBorder}")">@heat.Label</td>
+                    <td colspan="@(_leadingCols - 1)" class="@($"bg-white {ColBorder}")"></td>
+                    @foreach (var m in Cols)
+                    {
+                        var cell = heat.Cells.TryGetValue(m, out var hc) ? hc : null;
+                        <td data-c="@C(m)" title="@cell?.Title" class="@ColBorder" style="@Style($"background-color:{cell?.Color ?? "var(--brand-surface)"}", LrRule(m))"></td>
+                    }
+                </tr>
+            }
+            @if (TillsByTime is { } tills)
+            {
+                <tr class="h-10 border-t border-[var(--brand-border)]">
+                    @* Only the FIRST label cell is sticky - a sticky colspan cell
+                       would ride over the time-grid numbers when scrolled right. *@
+                    <td class="@($"sticky left-0 z-10 whitespace-nowrap bg-[var(--brand-navy-tint)] px-4 py-1.5 align-middle font-semibold text-[var(--brand-navy)] {ColBorder}")">Front End Team Members</td>
+                    <td colspan="@(_leadingCols - 1)" class="@($"bg-[var(--brand-navy-tint)] {ColBorder}")"></td>
+                    @foreach (var m in Cols)
+                    {
+                        var n = tills.TryGetValue(m, out var need) ? need : 0;
+                        var actual = _checkoutTilesAt.GetOr(m, 0);
+                        var diff = Math.Abs(n - actual);
+                        <td data-c="@C(m)" style="@LrRule(m)"
+                            class="@($"relative px-1 py-1.5 text-center align-middle font-semibold text-[var(--brand-navy)] {ColBorder} {(InHl(m) ? HlBg : IsCostFlag(m) ? "bg-[var(--brand-red-tint)]" : "bg-[var(--brand-navy-tint)]")}")">
+                            @(n > 0 ? C(n) : "")
+                            @if (diff > 0 && (n > 0 || actual > 0))
+                            {
+                                @* Quick-glance reconciliation: the column's Checkout (CO)
+                                   tiles don't match the front-end requirement. Out by
+                                   1 → brand yellow; out by more → red. *@
+                                <span aria-hidden="true" title="@($"{C(actual)} on checkout vs {C(n)} needed on the front end")"
+                                      class="absolute bottom-0 right-0 h-0 w-0"
+                                      style="@($"border-left:10px solid transparent;border-bottom:10px solid {(diff > 1 ? "var(--brand-red)" : "var(--brand-yellow)")}")"></span>
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+
+            @if (Rows.Count == 0)
+            {
+                <tr>
+                    <td colspan="@(_leadingCols + Cols.Count)" class="px-4 py-8 text-center text-[var(--brand-navy)]/40">@EmptyLabel</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var r in Rows)
+                {
+                    var blockMap = BlockMap(r);
+                    var subMap = Subtasks is not null ? SubMap(r) : null;
+                    var editable = RowEdit is not null && RowEdit.EditableKeys.Contains(r.Key);
+                    <tr @key="r.Key" data-row class="h-12 border-t border-[var(--brand-border)]">
+                        @if (ShowName)
+                        {
+                            <td class="@($"sticky left-0 z-10 bg-white px-4 py-1.5 align-middle font-medium text-[var(--brand-navy)] {ColBorder}")">
+                                @if (editable)
+                                {
+                                    <NameCell RowKey="@r.Key" Name="@r.Name" Api="@(RowEdit!)" />
+                                }
+                                else
+                                {
+                                    @r.Name
+                                }
+                            </td>
+                        }
+                        <td class="@($"bg-white px-3 py-1.5 align-middle {ColBorder} {(ShowName ? "" : "sticky left-0 z-10")}")">
+                            <span class="flex items-center gap-1.5">
+                                @if (OnRoleClick.HasDelegate)
+                                {
+                                    <button type="button" @onclick="() => OnRoleClick.InvokeAsync(r.Key)" title="Click to change this shift's role" class="cursor-pointer">
+                                        <Badge Tone="@RoleTone(r.Badge)">@r.Badge</Badge>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <Badge Tone="@RoleTone(r.Badge)">@r.Badge</Badge>
+                                }
+                                @if (OnRemoveRow.HasDelegate)
+                                {
+                                    <button type="button" @onclick="() => OnRemoveRow.InvokeAsync(r.Key)" title="Delete this shift" aria-label="Delete this shift"
+                                            class="rounded px-1 text-xs font-bold leading-none text-[var(--brand-red)] hover:bg-[var(--brand-red-tint)]">✕</button>
+                                }
+                            </span>
+                        </td>
+                        @if (editable)
+                        {
+                            @* Remount on a saved time change so the inputs pick up the new
+                               values without syncing parameters into state. *@
+                            <TimeCells @key="@($"{r.Key}-{C(r.Start)}-{C(r.End)}")" RowKey="@r.Key" Start="@r.Start" End="@r.End" Api="@(RowEdit!)"
+                                       CellClass="@($"px-2 py-1.5 text-center align-middle {ColBorder}")" />
+                        }
+                        else
+                        {
+                            <td class="@($"px-3 py-1.5 text-center align-middle font-medium text-[var(--brand-navy)] {ColBorder}")">@CoreGrid.MinToTime(r.Start)</td>
+                            <td class="@($"px-3 py-1.5 text-center align-middle font-medium text-[var(--brand-navy)] {ColBorder}")">@CoreGrid.MinToTime(r.End)</td>
+                        }
+                        <td class="@($"px-3 py-1.5 text-center align-middle text-[var(--brand-navy)] {ColBorder}")">@GridFormat.PaidLen(r.Start, r.End, r.UnpaidBreakMinutes)</td>
+                        <td class="@($"px-3 py-1.5 text-center align-middle text-[var(--brand-navy)] {ColBorder}")">@(BreakAsHours ? Js.ToFixed(r.BreakMinutes / 60, 2) : $"{C(r.BreakMinutes)}m")</td>
+                        @if (CostByKey is not null)
+                        {
+                            var cost = CostByKey.TryGetValue(r.Key, out var rc) ? rc : 0;
+                            <td class="@($"px-3 py-1.5 text-right align-middle font-medium text-[var(--brand-navy)] {ColBorder}")">
+                                @if (cost > 0)
+                                {
+                                    @GridFormat.Money(cost)
+                                }
+                                else
+                                {
+                                    @* $0 for a real shift means no pay rate matched its
+                                       role/hours - surface it instead of a silent $0.00. *@
+                                    <span title="No pay rate matched this shift's role/hours - check Admin → Pay Rates" class="text-[var(--brand-red)]">—</span>
+                                }
+                            </td>
+                        }
+                        @foreach (var m in Cols)
+                        {
+                            var inSpan = m >= r.Start && m < r.End;
+                            var clickable = EditMode && (inSpan || Extendable);
+                            var group = blockMap.TryGetValue(m, out var g) ? g : null;
+                            var tile = TileView.For(
+                                group,
+                                Misplaced(group, m),
+                                subMap is not null && subMap.TryGetValue(m, out var sub) ? sub : null,
+                                group is not null && Subtasks?.Open.Contains(group) == true);
+                            var rowKey = r.Key;
+                            @if (clickable)
+                            {
+                                <td data-c="@C(m)" style="@LrRule(m)" @onclick="() => OnCellClick.InvokeAsync(new GridCell(rowKey, m))"
+                                    title="@(inSpan ? null : "Outside this shift - painting here extends it")"
+                                    class="@CellClass(m, clickable, inSpan)">@TileMarkup(tile)</td>
+                            }
+                            else
+                            {
+                                <td data-c="@C(m)" style="@LrRule(m)" class="@CellClass(m, clickable, inSpan)">@TileMarkup(tile)</td>
+                            }
+                        }
+                    </tr>
+                }
+            }
+            @if (CostByKey is not null && Rows.Count > 0)
+            {
+                <tr class="h-11 border-t-2 border-[var(--brand-navy)] bg-[var(--brand-navy-tint)] font-semibold">
+                    <td colspan="@(_leadingCols - 1)" class="@($"sticky left-0 z-10 bg-[var(--brand-navy-tint)] px-4 py-1.5 align-middle text-[var(--brand-navy)] {ColBorder}")">Day total</td>
+                    <td class="@($"px-3 py-1.5 text-right align-middle text-[var(--brand-navy)] {ColBorder}")">@GridFormat.Money(_dayTotal)</td>
+                    <td colspan="@Cols.Count"></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private static RenderFragment TileMarkup(TileView? tile) => __builder =>
+    {
+        if (tile is { } t)
+        {
+            <div class="@TileView.Class" style="@t.Style" title="@t.Title">@t.Text</div>
+        }
+    };
+}
