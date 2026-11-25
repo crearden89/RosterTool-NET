@@ -32,6 +32,7 @@ public static class ShellSetup
         services.AddScoped<PortalService>();
         services.AddScoped<ShellEvents>();
         services.AddScoped<StoreSelection>();
+        services.AddScoped<IRememberedStore>(sp => sp.GetRequiredService<StoreSelection>());
         services.TryAddScoped<IUnreadNotifications, PlaceholderUnreadNotifications>();
 
         // Every page area registers its own services (Features/<Area>/<Area>Module.cs).

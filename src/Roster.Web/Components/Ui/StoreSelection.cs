@@ -3,18 +3,24 @@
 // (the roster_store_id cookie). Which stores a person may see is the data layer's
 // store scope; this only remembers the choice.
 
+using Roster.Data.Scope;
+
 namespace Roster.Web.Components.Ui;
 
 /// <summary>
 /// The remembered store choice, one per connection. App.razor reads the cookie on
-/// each full page load; <see cref="StorePicker"/> writes it.
+/// each full page load; <see cref="StorePicker"/> writes it. Pages read it as the
+/// data layer's <see cref="IRememberedStore"/> and pass it to
+/// <c>StoreScope.ResolveStoreId(requested, scopeStores, remembered)</c>.
 /// </summary>
-public sealed class StoreSelection
+public sealed class StoreSelection : IRememberedStore
 {
     public const string CookieName = "roster_store_id";
 
     /// <summary>The store last chosen, if any (it may no longer be in the person's scope).</summary>
     public Guid? Remembered { get; private set; }
+
+    Guid? IRememberedStore.StoreId => Remembered;
 
     /// <summary>Takes the cookie's value at the start of a page load or a connection.</summary>
     public void Load(string? cookieValue)
