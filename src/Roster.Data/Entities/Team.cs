@@ -28,8 +28,8 @@ public class Position
     public string Label { get; set; } = "";
     public string BaseRole { get; set; } = "";
     /// <summary>Contract size the position implies, WEEKLY. Null = set per person.</summary>
-    public decimal? WeeklyHours { get; set; }
-    public short? YearBand { get; set; }
+    public double? WeeklyHours { get; set; }
+    public int? YearBand { get; set; }
     /// <summary>False only for RSM (paid the SA rate plus the sole-manager allowance).</summary>
     public bool HasRate { get; set; } = true;
     public int SortOrder { get; set; }
@@ -44,14 +44,14 @@ public class Employee
     public string Name { get; set; } = "";
     public string Role { get; set; } = Roles.Sa;
     /// <summary>Hours per FORTNIGHT (0033).</summary>
-    public decimal ContractHours { get; set; }
+    public double ContractHours { get; set; }
     /// <summary>Tenure band for SM (1/2/3/4/7) and ASM (1/2).</summary>
-    public short? SmYearBand { get; set; }
+    public int? SmYearBand { get; set; }
     public string? Notes { get; set; }
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     /// <summary>Value of one leave / public-holiday day; null = fortnight contract / 10 (0009).</summary>
-    public decimal? NotionalHours { get; set; }
+    public double? NotionalHours { get; set; }
     public string? PositionCode { get; set; }
     /// <summary>Hire date; null = experienced (no probation allowance) (0030).</summary>
     public DateOnly? StartDate { get; set; }
@@ -66,7 +66,7 @@ public class Employee
 public class EmployeeAvailability
 {
     public Guid EmployeeId { get; set; }
-    public short DayOfWeek { get; set; }
+    public int DayOfWeek { get; set; }
     public bool Available { get; set; } = true;
     public TimeOnly? FromTime { get; set; }
     public TimeOnly? ToTime { get; set; }
@@ -81,7 +81,7 @@ public class EmployeeLeave
     public DateOnly EndDate { get; set; }
     public string LeaveType { get; set; } = LeaveTypes.Annual;
     /// <summary>Hours credited per leave weekday; null = a full contract day.</summary>
-    public decimal? DayHours { get; set; }
+    public double? DayHours { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Employee? Employee { get; set; }
 }
@@ -126,10 +126,10 @@ public class FixedRoster
 {
     public Guid Id { get; set; }
     public Guid EmployeeId { get; set; }
-    public short DayOfWeek { get; set; }
+    public int DayOfWeek { get; set; }
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
-    public short WeekIndex { get; set; }
+    public int WeekIndex { get; set; }
     public Employee? Employee { get; set; }
 }
 
@@ -137,7 +137,7 @@ public class FixedRoster
 public class FixedRosterCycle
 {
     public Guid EmployeeId { get; set; }
-    public short CycleWeeks { get; set; } = 1;
+    public int CycleWeeks { get; set; } = 1;
     public DateOnly StartDate { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public Employee? Employee { get; set; }

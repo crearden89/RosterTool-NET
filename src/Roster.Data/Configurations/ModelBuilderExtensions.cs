@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.ValueGeneration;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 internal static class ModelBuilderExtensions
 {

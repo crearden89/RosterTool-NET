@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Roster.Data;
-using Roster.Data.Access;
+using Roster.Data.Scope;
 
 namespace Roster.Data.Tests.Support;
 
@@ -35,7 +35,7 @@ public sealed class TestDatabase : IDisposable
 
     public RosterDbContext As(AccessContext access) => new(_options, access, Clock);
 
-    public RosterDbContext As(Roster.Data.Access.ScopedUser user) => As(AccessContext.ForUser(user));
+    public RosterDbContext As(Roster.Data.Scope.ScopedUser user) => As(AccessContext.ForUser(user));
 
     public RosterDbContext System() => As(AccessContext.System("test setup"));
 

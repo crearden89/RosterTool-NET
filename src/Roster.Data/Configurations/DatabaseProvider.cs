@@ -1,4 +1,4 @@
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 /// <summary>
 /// The database the model is being built for. SQL Server is the product; SQLite only
@@ -82,7 +82,6 @@ internal sealed class SqlDialect(DatabaseProvider provider)
     public string In(string column, params string[] values) =>
         $"[{column}] IN ({string.Join(", ", values.Select(Text))})";
 
-    /// <summary>The ÷0.9 planning transform as a stored computed column.</summary>
-    public string Over90(string column) =>
-        IsSqlServer ? $"CONVERT(decimal(32,16), [{column}]) / 0.9" : $"[{column}] / 0.9";
+    /// <summary>The ÷0.9 planning transform as a stored computed column (IEEE double division).</summary>
+    public string Over90(string column) => $"[{column}] / 0.9";
 }

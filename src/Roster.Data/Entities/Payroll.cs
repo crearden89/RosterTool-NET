@@ -12,27 +12,27 @@ public static class PayDayTypes
 public class PayRate
 {
     public string DayType { get; set; } = PayDayTypes.Weekday;
-    public short Hour { get; set; }
+    public int Hour { get; set; }
     /// <summary>A position code (pay_rates_role_fkey → positions.code).</summary>
     public string Role { get; set; } = "";
-    public decimal Rate { get; set; }
+    public double Rate { get; set; }
 }
 
 /// <summary>Global pay multipliers (single row).</summary>
 public class PaySettings
 {
     public bool Id { get; set; } = true;
-    public decimal RsmAllowance { get; set; } = 9m;
-    public decimal SuperRate { get; set; } = 0.12m;
-    public decimal Overtime15Multiplier { get; set; } = 1.5m;
-    public decimal Overtime19Multiplier { get; set; } = 1.9m;
-    public decimal DoubleTimeMultiplier { get; set; } = 2.0m;
-    public decimal SundayOtFromHour { get; set; }
-    public decimal SundayOtToHour { get; set; } = 9m;
+    public double RsmAllowance { get; set; } = 9.0;
+    public double SuperRate { get; set; } = 0.12;
+    public double Overtime15Multiplier { get; set; } = 1.5;
+    public double Overtime19Multiplier { get; set; } = 1.9;
+    public double DoubleTimeMultiplier { get; set; } = 2.0;
+    public double SundayOtFromHour { get; set; }
+    public double SundayOtToHour { get; set; } = 9.0;
 }
 
 public class PayrollTaxRate
 {
     public string State { get; set; } = "";
-    public decimal Rate { get; set; }
+    public double Rate { get; set; }
 }

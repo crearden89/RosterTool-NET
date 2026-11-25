@@ -10,7 +10,7 @@ namespace Roster.Data.Entities;
 public class RosteringRule
 {
     public string Key { get; set; } = "";
-    public decimal Value { get; set; }
+    public double Value { get; set; }
     public string? Note { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -42,19 +42,19 @@ public static class BreakTypes
 public class BreakRule
 {
     public string Role { get; set; } = "";
-    public decimal MinShiftHours { get; set; }
+    public double MinShiftHours { get; set; }
     /// <summary>Caps PAID hours.</summary>
-    public decimal MaxShiftHours { get; set; }
-    public decimal GapHours { get; set; }
+    public double MaxShiftHours { get; set; }
+    public double GapHours { get; set; }
     public string BreakType { get; set; } = BreakTypes.Tiered;
-    public decimal? WeeklyCap { get; set; }
+    public double? WeeklyCap { get; set; }
     public int? ConsecDayCap { get; set; }
-    public decimal? Ot15AfterHours { get; set; }
-    public decimal? Ot19AfterHours { get; set; }
+    public double? Ot15AfterHours { get; set; }
+    public double? Ot19AfterHours { get; set; }
     /// <summary>Overtime after this many paid hours in a fortnight (0012).</summary>
-    public decimal? OtPeriodAfterHours { get; set; }
+    public double? OtPeriodAfterHours { get; set; }
     /// <summary>A break shorter than this puts the next shift on double time (0012).</summary>
-    public decimal? DoubleTimeUnderGapHours { get; set; }
+    public double? DoubleTimeUnderGapHours { get; set; }
 }
 
 /// <summary>A time window a labour group may be placed in, per weekday, with an optional hours quota.</summary>
@@ -62,11 +62,11 @@ public class LabourGroupRule
 {
     public Guid Id { get; set; }
     public string LabourGroup { get; set; } = "";
-    public short DayOfWeek { get; set; }
+    public int DayOfWeek { get; set; }
     public TimeOnly WindowStart { get; set; }
     public TimeOnly WindowEnd { get; set; }
     /// <summary>Target hours for this window (0038); null = no quota.</summary>
-    public decimal? WindowHours { get; set; }
+    public double? WindowHours { get; set; }
 }
 
 /// <summary>Who picks a task up when several groups are live in the same block.</summary>
@@ -89,15 +89,15 @@ public class AdminTask
     public string Name { get; set; } = "";
     /// <summary>daily, weekly, monthly_nth or planning_week.</summary>
     public string ScheduleType { get; set; } = "daily";
-    public short? DayOfWeek { get; set; }
-    public short? NthWeek { get; set; }
+    public int? DayOfWeek { get; set; }
+    public int? NthWeek { get; set; }
     /// <summary>Region-varying weekday keyed by the region's 3-digit prefix, as JSON text, e.g. {"501":0}.</summary>
     public string? RegionDays { get; set; }
     /// <summary>fixed, per_employee, per_register or till_calibration.</summary>
     public string DurationType { get; set; } = "fixed";
-    public decimal? FixedMinutes { get; set; }
-    public decimal? MinutesPerUnit { get; set; }
-    public decimal? MinMinutes { get; set; }
+    public double? FixedMinutes { get; set; }
+    public double? MinutesPerUnit { get; set; }
+    public double? MinMinutes { get; set; }
     public string WindowStartKind { get; set; } = WindowKinds.None;
     public TimeOnly? WindowStartTime { get; set; }
     public int WindowStartOffsetMin { get; set; }
@@ -113,8 +113,8 @@ public class ResetTask
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
-    public decimal? SharePct { get; set; }
-    public decimal? FixedMinutes { get; set; }
+    public double? SharePct { get; set; }
+    public double? FixedMinutes { get; set; }
     public string WindowStartKind { get; set; } = WindowKinds.None;
     public TimeOnly? WindowStartTime { get; set; }
     public int WindowStartOffsetMin { get; set; }
@@ -139,9 +139,9 @@ public class PlanPlacementRule
     public string AnchorKind { get; set; } = WindowKinds.None;
     public TimeOnly? AnchorTime { get; set; }
     public int AnchorOffsetMin { get; set; }
-    public decimal? PrePeakPct { get; set; }
-    public decimal? PostPeakPct { get; set; }
-    public decimal? AvoidStrength { get; set; }
+    public double? PrePeakPct { get; set; }
+    public double? PostPeakPct { get; set; }
+    public double? AvoidStrength { get; set; }
     public string? NightTraderStrategy { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -153,9 +153,9 @@ public class PlanPlacementSettings
     public bool Enabled { get; set; }
     public string PeakBasis { get; set; } = "hourly";
     public int PeakSmoothingBlocks { get; set; } = 3;
-    public decimal PeakThresholdPct { get; set; } = 85m;
+    public double PeakThresholdPct { get; set; } = 85.0;
     public TimeOnly NightTraderFrom { get; set; } = new(17, 0);
-    public decimal NightTraderSharePct { get; set; } = 25m;
+    public double NightTraderSharePct { get; set; } = 25.0;
     public DateTimeOffset UpdatedAt { get; set; }
     /// <summary>Order the window groups are laid on the canvas (0042); a JSON array.</summary>
     public List<string> StepOrder { get; set; } = ["admin", "load_running", "reset", "specials", "cleaning"];
@@ -165,9 +165,9 @@ public class PlanPlacementSettings
 public class VarianceSettings
 {
     public bool Id { get; set; } = true;
-    public decimal DataLightPct { get; set; } = 15m;
-    public decimal MetricPct { get; set; } = 70m;
-    public decimal HoursPct { get; set; } = 20m;
+    public double DataLightPct { get; set; } = 15.0;
+    public double MetricPct { get; set; } = 70.0;
+    public double HoursPct { get; set; } = 20.0;
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
@@ -175,6 +175,6 @@ public class VarianceSettings
 public class ProbationBuffer
 {
     public string LabourGroup { get; set; } = "*";
-    public short MaxDays { get; set; }
-    public decimal UpliftPct { get; set; }
+    public int MaxDays { get; set; }
+    public double UpliftPct { get; set; }
 }

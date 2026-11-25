@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 /// <summary>
 /// The schema, table by table, in its final state after the 49 Postgres migrations plus
@@ -106,12 +106,12 @@ internal static partial class RosterModel
             e.Property(x => x.IsNewScoModel).Default(false);
             e.Property(x => x.McoRegisters).Default(0);
             e.Property(x => x.ScoLanes).Default(0);
-            e.Property(x => x.ScoEfficiency).Default(0.45m);
-            e.Property(x => x.FirstStep).Default(1.2m);
-            e.Property(x => x.ScoShare).Default(0.66m);
-            e.Property(x => x.OeTargetPct).Default(90m);
+            e.Property(x => x.ScoEfficiency).Default(0.45);
+            e.Property(x => x.FirstStep).Default(1.2);
+            e.Property(x => x.ScoShare).Default(0.66);
+            e.Property(x => x.OeTargetPct).Default(90.0);
             e.Property(x => x.UpdatedAt).Now(d, alsoOnUpdate: true);
-            e.Property(x => x.MaxStaffOnLeave).Default((short)3);
+            e.Property(x => x.MaxStaffOnLeave).Default(3);
             e.Property(x => x.NightFill).Default(false);
             // A second path from stores (store_id already cascades): NO ACTION (code cascade).
             e.HasOne<Store>().WithMany().HasForeignKey(x => x.PairStoreId).OnDelete(DeleteBehavior.NoAction);
@@ -138,7 +138,7 @@ internal static partial class RosterModel
             e.ToTable("app_users", t =>
             {
                 t.HasCheckConstraint("app_users_tier_check",
-                    d.In("tier", TierNames.SuperUser, TierNames.Store, TierNames.Pa, TierNames.Director, TierNames.Emso));
+                    d.In("tier", Tiers.SuperUserKey, Tiers.StoreKey, Tiers.PaKey, Tiers.DirectorKey, Tiers.EmsoKey));
                 // 0016's tier_scope: exactly the right scope column is set for each tier.
                 t.HasCheckConstraint("tier_scope",
                     "([tier] = 'super_user' AND [store_id] IS NULL AND [region_id] IS NULL AND [director_group_id] IS NULL)"
@@ -152,7 +152,7 @@ internal static partial class RosterModel
             e.Property(x => x.Username).IsRequired().Text(256);
             e.HasIndex(x => x.Username).IsUnique().HasDatabaseName("app_users_username_key");
             e.Property(x => x.Tier).IsRequired().HasMaxLength(16)
-                .HasConversion(v => TierNames.ToDb(v), v => TierNames.FromDb(v));
+                .HasConversion(v => v.Key(), v => Tiers.FromKey(v));
             e.Property(x => x.CreatedAt).Now(d);
             e.Property(x => x.EntraObjectId).Text(64);
             e.Property(x => x.UserPrincipalName).Text(256);

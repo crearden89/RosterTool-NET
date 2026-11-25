@@ -2,7 +2,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 /// <summary>
 /// Keeps the SQL Server schema in the same snake_case names the Postgres schema used

@@ -2,7 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 
-namespace Roster.Data.Access;
+namespace Roster.Data.Scope;
 
 /// <summary>
 /// The tables' SELECT policies as EF Core global query filters. Each filter reads the
@@ -25,10 +25,10 @@ internal static class ScopeFilters
 {
     public static void Apply(ModelBuilder mb, RosterDbContext ctx)
     {
-        foreach (var et in mb.Model.GetEntityTypes())
+        // Driven by the policy catalogue; a test checks that the finished model has exactly
+        // these tables, so a table without a policy cannot slip in.
+        foreach (var (type, policy) in TablePolicies.ByEntity)
         {
-            var type = et.ClrType;
-            var policy = TablePolicies.For(type); // a table without a policy is a gap: fail the model
             var filter = policy.Read switch
             {
                 ReadRule.VisibleStore when type == typeof(Store) => ctx.StoreRowVisible,

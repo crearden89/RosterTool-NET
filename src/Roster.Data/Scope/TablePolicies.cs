@@ -1,6 +1,6 @@
 using Roster.Data.Entities;
 
-namespace Roster.Data.Access;
+namespace Roster.Data.Scope;
 
 /// <summary>Who may read a table's rows. Each maps to the table's Postgres SELECT policy.</summary>
 public enum ReadRule

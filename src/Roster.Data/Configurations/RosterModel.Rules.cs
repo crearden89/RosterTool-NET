@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 internal static partial class RosterModel
 {
@@ -170,9 +170,9 @@ internal static partial class RosterModel
             e.Property(x => x.Enabled).Default(false);
             e.Property(x => x.PeakBasis).IsRequired().Text(16).Default("hourly");
             e.Property(x => x.PeakSmoothingBlocks).Default(3);
-            e.Property(x => x.PeakThresholdPct).Default(85m);
+            e.Property(x => x.PeakThresholdPct).Default(85.0);
             e.Property(x => x.NightTraderFrom).Time(d).Default(new TimeOnly(17, 0));
-            e.Property(x => x.NightTraderSharePct).Default(25m);
+            e.Property(x => x.NightTraderSharePct).Default(25.0);
             e.Property(x => x.UpdatedAt).Now(d, alsoOnUpdate: true);
             e.Property(x => x.StepOrder).IsRequired().Json(d)
                 .HasDefaultValueSql(d.Text("[\"admin\",\"load_running\",\"reset\",\"specials\",\"cleaning\"]"))
@@ -190,9 +190,9 @@ internal static partial class RosterModel
             });
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).Default(true);
-            e.Property(x => x.DataLightPct).Default(15m);
-            e.Property(x => x.MetricPct).Default(70m);
-            e.Property(x => x.HoursPct).Default(20m);
+            e.Property(x => x.DataLightPct).Default(15.0);
+            e.Property(x => x.MetricPct).Default(70.0);
+            e.Property(x => x.HoursPct).Default(20.0);
             e.Property(x => x.UpdatedAt).Now(d, alsoOnUpdate: true);
         });
 
@@ -205,7 +205,7 @@ internal static partial class RosterModel
             });
             e.HasKey(x => new { x.LabourGroup, x.MaxDays });
             e.Property(x => x.LabourGroup).Text(32).Default("*");
-            e.Property(x => x.UpliftPct).Default(0m);
+            e.Property(x => x.UpliftPct).Default(0.0);
         });
     }
 
@@ -232,13 +232,13 @@ internal static partial class RosterModel
             e.ToTable("pay_settings", t => t.HasCheckConstraint("pay_settings_id_check", "[id] = 1"));
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).Default(true);
-            e.Property(x => x.RsmAllowance).Default(9m);
-            e.Property(x => x.SuperRate).Default(0.12m);
-            e.Property(x => x.Overtime15Multiplier).HasColumnName("overtime_1_5_multiplier").Default(1.5m);
-            e.Property(x => x.Overtime19Multiplier).HasColumnName("overtime_1_9_multiplier").Default(1.9m);
-            e.Property(x => x.DoubleTimeMultiplier).Default(2.0m);
-            e.Property(x => x.SundayOtFromHour).Default(0m);
-            e.Property(x => x.SundayOtToHour).Default(9m);
+            e.Property(x => x.RsmAllowance).Default(9.0);
+            e.Property(x => x.SuperRate).Default(0.12);
+            e.Property(x => x.Overtime15Multiplier).HasColumnName("overtime_1_5_multiplier").Default(1.5);
+            e.Property(x => x.Overtime19Multiplier).HasColumnName("overtime_1_9_multiplier").Default(1.9);
+            e.Property(x => x.DoubleTimeMultiplier).Default(2.0);
+            e.Property(x => x.SundayOtFromHour).Default(0.0);
+            e.Property(x => x.SundayOtToHour).Default(9.0);
         });
 
         mb.Entity<PayrollTaxRate>(e =>
@@ -246,7 +246,7 @@ internal static partial class RosterModel
             e.ToTable("payroll_tax_rates", t => t.HasCheckConstraint("payroll_tax_rates_state_check", d.In("state", AuStates.All.ToArray())));
             e.HasKey(x => x.State);
             e.Property(x => x.State).Text(3);
-            e.Property(x => x.Rate).Default(0m);
+            e.Property(x => x.Rate).Default(0.0);
         });
     }
 
@@ -262,13 +262,13 @@ internal static partial class RosterModel
             e.Property(x => x.EmployeeName).IsRequired().Text(200);
             e.Property(x => x.Job).Text(200);
             e.Property(x => x.RoleClass).IsRequired().Text(8);
-            e.Property(x => x.ContractHours).Default(0m);
-            e.Property(x => x.NotionalHours).Default(0m);
-            e.Property(x => x.SickHours).Default(0m);
-            e.Property(x => x.AnnualHours).Default(0m);
-            e.Property(x => x.LieuHours).Default(0m);
-            e.Property(x => x.BankedHours).Default(0m);
-            e.Property(x => x.Banked2Hours).HasColumnName("banked2_hours").Default(0m);
+            e.Property(x => x.ContractHours).Default(0.0);
+            e.Property(x => x.NotionalHours).Default(0.0);
+            e.Property(x => x.SickHours).Default(0.0);
+            e.Property(x => x.AnnualHours).Default(0.0);
+            e.Property(x => x.LieuHours).Default(0.0);
+            e.Property(x => x.BankedHours).Default(0.0);
+            e.Property(x => x.Banked2Hours).HasColumnName("banked2_hours").Default(0.0);
             e.Property(x => x.CreatedAt).Now(d);
             e.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<UploadBatch>().WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.SetNull);
@@ -309,8 +309,8 @@ internal static partial class RosterModel
             e.ToTable("leave_settings", t => t.HasCheckConstraint("leave_settings_id_check", "[id] = 1"));
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).Default(true);
-            e.Property(x => x.TargetHoursPerFte).Default(76m);
-            e.Property(x => x.FteDivisor).Default(76m);
+            e.Property(x => x.TargetHoursPerFte).Default(76.0);
+            e.Property(x => x.FteDivisor).Default(76.0);
             e.Property(x => x.UpdatedAt).Now(d, alsoOnUpdate: true);
         });
     }

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 internal static partial class RosterModel
 {
@@ -36,7 +36,7 @@ internal static partial class RosterModel
             e.Property(x => x.Id).GuidKey(d);
             e.Property(x => x.Name).IsRequired().Text(200);
             e.Property(x => x.Role).IsRequired().Text(8);
-            e.Property(x => x.ContractHours).Default(0m);
+            e.Property(x => x.ContractHours).Default(0.0);
             e.Property(x => x.Active).Default(true);
             e.Property(x => x.CreatedAt).Now(d);
             e.Property(x => x.PositionCode).Text(32);
@@ -117,7 +117,7 @@ internal static partial class RosterModel
             e.Property(x => x.Id).GuidKey(d);
             e.Property(x => x.StartTime).Time(d);
             e.Property(x => x.EndTime).Time(d);
-            e.Property(x => x.WeekIndex).Default((short)0);
+            e.Property(x => x.WeekIndex).Default(0);
             e.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.EmployeeId, x.WeekIndex, x.DayOfWeek }).IsUnique()
                 .HasDatabaseName("fixed_rosters_employee_week_day_key");
@@ -131,7 +131,7 @@ internal static partial class RosterModel
                 t.HasCheckConstraint("fixed_roster_cycles_start_date_check", d.IsMonday("start_date"));
             });
             e.HasKey(x => x.EmployeeId);
-            e.Property(x => x.CycleWeeks).Default((short)1);
+            e.Property(x => x.CycleWeeks).Default(1);
             e.Property(x => x.UpdatedAt).Now(d, alsoOnUpdate: true);
             e.HasOne(x => x.Employee).WithOne().HasForeignKey<FixedRosterCycle>(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
         });

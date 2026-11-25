@@ -1,6 +1,6 @@
 using Roster.Data.Entities;
 
-namespace Roster.Data.Access;
+namespace Roster.Data.Scope;
 
 /// <summary>Who is acting on the database.</summary>
 public enum AccessKind
@@ -85,7 +85,7 @@ public sealed class AccessContext
 
     public override string ToString() => Kind switch
     {
-        AccessKind.User => $"user {User!.Username} ({TierNames.ToDb(User.Tier)})",
+        AccessKind.User => $"user {User!.Username} ({User.Tier.Key()})",
         AccessKind.Kiosk => $"kiosk for store {KioskStoreId}",
         AccessKind.Feed => $"data feed token {FeedTokenId}",
         AccessKind.System => $"system ({Reason})",

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Roster.Data.Entities;
 
-namespace Roster.Data.Access;
+namespace Roster.Data.Scope;
 
 /// <summary>
 /// The write side of the policies, checked on every SaveChanges before anything is sent:

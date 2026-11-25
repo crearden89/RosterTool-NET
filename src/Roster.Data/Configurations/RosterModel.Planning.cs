@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 internal static partial class RosterModel
 {

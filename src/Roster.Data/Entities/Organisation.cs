@@ -68,7 +68,7 @@ public class Store
 public class StoreTradingHours
 {
     public Guid StoreId { get; set; }
-    public short DayOfWeek { get; set; }
+    public int DayOfWeek { get; set; }
     public TimeOnly? OpenTime { get; set; }
     public TimeOnly? CloseTime { get; set; }
     public bool Closed { get; set; }
@@ -81,14 +81,14 @@ public class StoreAttributes
     public bool IsNewScoModel { get; set; }
     public int McoRegisters { get; set; }
     public int ScoLanes { get; set; }
-    public decimal ScoEfficiency { get; set; } = 0.45m;
-    public decimal FirstStep { get; set; } = 1.2m;
+    public double ScoEfficiency { get; set; } = 0.45;
+    public double FirstStep { get; set; } = 1.2;
     /// <summary>Between 0 and 0.90 (check constraint).</summary>
-    public decimal ScoShare { get; set; } = 0.66m;
-    public decimal OeTargetPct { get; set; } = 90m;
+    public double ScoShare { get; set; } = 0.66;
+    public double OeTargetPct { get; set; } = 90.0;
     public DateTimeOffset UpdatedAt { get; set; }
     /// <summary>Most people on approved leave at once (0028).</summary>
-    public short MaxStaffOnLeave { get; set; } = 3;
+    public int MaxStaffOnLeave { get; set; } = 3;
     /// <summary>Night-fill store: load is worked in the evening (0038).</summary>
     public bool NightFill { get; set; }
     /// <summary>Store opening date (live-database column; the uploads page reads it).</summary>

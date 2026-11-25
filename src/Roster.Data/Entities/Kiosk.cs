@@ -17,12 +17,12 @@ public class LoadType
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     /// <summary>Experienced (over 90 days) minutes per pallet; &gt; 0.</summary>
-    public decimal MinutesPerPallet { get; set; }
+    public double MinutesPerPallet { get; set; }
     public string Color { get; set; } = "#2563eb";
     public int SortOrder { get; set; }
-    public decimal? MinutesPerPalletLt90 { get; set; }
-    public decimal? MinutesPerPalletLt60 { get; set; }
-    public decimal? MinutesPerPalletLt30 { get; set; }
+    public double? MinutesPerPalletLt90 { get; set; }
+    public double? MinutesPerPalletLt60 { get; set; }
+    public double? MinutesPerPalletLt30 { get; set; }
     /// <summary>Allocation order (lower first); 100 = unranked (0038).</summary>
     public int Priority { get; set; } = 100;
     public string? SubTask { get; set; }

@@ -1,9 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Roster.Data.Entities;
-using Roster.Data.Feeds;
 
-namespace Roster.Data.Model;
+namespace Roster.Data.Configurations;
 
 internal static partial class RosterModel
 {
@@ -27,9 +26,9 @@ internal static partial class RosterModel
             // jsonb NOT NULL DEFAULT '[]': a typed list stored as JSON text.
             e.Property(x => x.ErrorReport)
                 .HasConversion(
-                    v => FeedJson.Serialize(v),
-                    v => FeedJson.Deserialize<List<RowError>>(v),
-                    new ValueComparer<List<RowError>>(
+                    v => JsonColumns.Serialize(v),
+                    v => JsonColumns.Deserialize<List<UploadRowError>>(v),
+                    new ValueComparer<List<UploadRowError>>(
                         (a, b) => a!.SequenceEqual(b!),
                         v => v.Aggregate(0, (h, x) => HashCode.Combine(h, x.GetHashCode())),
                         v => v.ToList()))
@@ -50,9 +49,9 @@ internal static partial class RosterModel
             e.ToTable("benchmark_days");
             e.HasKey(x => new { x.StoreId, x.Date });
             e.Property(x => x.IsSco).Default(false);
-            e.Property(x => x.SalesForecast).Default(0m);
-            e.Property(x => x.Items).Default(0m);
-            e.Property(x => x.CustomerCount).Default(0m);
+            e.Property(x => x.SalesForecast).Default(0.0);
+            e.Property(x => x.Items).Default(0.0);
+            e.Property(x => x.CustomerCount).Default(0.0);
             Hours100(e.Property(x => x.LrHours100), "lr_hours_100");
             Hours100(e.Property(x => x.CleaningHours100), "cleaning_hours_100");
             Hours100(e.Property(x => x.SpecialsHours100), "specials_hours_100");
@@ -77,14 +76,11 @@ internal static partial class RosterModel
             e.HasIndex(x => x.RosterPeriodId).HasDatabaseName("benchmark_days_period_idx");
             e.HasIndex(x => x.Date).HasDatabaseName("benchmark_days_date_idx");
 
-            void Hours100(Microsoft.EntityFrameworkCore.Metadata.Builders.PropertyBuilder<decimal> p, string column) =>
-                p.HasColumnName(column).Default(0m);
+            void Hours100(Microsoft.EntityFrameworkCore.Metadata.Builders.PropertyBuilder<double> p, string column) =>
+                p.HasColumnName(column).Default(0.0);
 
-            void Hours90(Microsoft.EntityFrameworkCore.Metadata.Builders.PropertyBuilder<decimal> p, string column, string source)
-            {
+            void Hours90(Microsoft.EntityFrameworkCore.Metadata.Builders.PropertyBuilder<double> p, string column, string source) =>
                 p.HasColumnName(column).HasComputedColumnSql(d.Over90(source), stored: true);
-                if (d.IsSqlServer) p.HasPrecision(35, 18);
-            }
         });
 
         mb.Entity<QuarterHourSegment>(e =>
@@ -96,7 +92,7 @@ internal static partial class RosterModel
             });
             e.HasKey(x => new { x.StoreId, x.Date, x.BlockTime });
             e.Property(x => x.BlockTime).Time(d);
-            e.Property(x => x.Segment).Default(0m);
+            e.Property(x => x.Segment).Default(0.0);
             e.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<RosterPeriod>().WithMany().HasForeignKey(x => x.RosterPeriodId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<UploadBatch>().WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.SetNull);
@@ -108,10 +104,10 @@ internal static partial class RosterModel
         {
             e.ToTable("actuals_days");
             e.HasKey(x => new { x.StoreId, x.Date });
-            e.Property(x => x.ActualSales).Default(0m);
-            e.Property(x => x.ActualItems).Default(0m);
-            e.Property(x => x.ActualHours100).HasColumnName("actual_hours_100").Default(0m);
-            e.Property(x => x.UkgActualHours).Default(0m);
+            e.Property(x => x.ActualSales).Default(0.0);
+            e.Property(x => x.ActualItems).Default(0.0);
+            e.Property(x => x.ActualHours100).HasColumnName("actual_hours_100").Default(0.0);
+            e.Property(x => x.UkgActualHours).Default(0.0);
             e.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<UploadBatch>().WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => x.BatchId).HasDatabaseName("actuals_days_batch_idx");
@@ -139,10 +135,10 @@ internal static partial class RosterModel
             });
             e.HasKey(x => new { x.StoreId, x.Date, x.BlockTime });
             e.Property(x => x.BlockTime).Time(d);
-            e.Property(x => x.McoCustomers).Default(0m);
-            e.Property(x => x.ScoCustomers).Default(0m);
-            e.Property(x => x.McoItems).Default(0m);
-            e.Property(x => x.ScoItems).Default(0m);
+            e.Property(x => x.McoCustomers).Default(0.0);
+            e.Property(x => x.ScoCustomers).Default(0.0);
+            e.Property(x => x.McoItems).Default(0.0);
+            e.Property(x => x.ScoItems).Default(0.0);
             e.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<UploadBatch>().WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => x.BatchId).HasDatabaseName("pis_batch_idx");

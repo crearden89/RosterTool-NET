@@ -1,6 +1,6 @@
 using Roster.Data.Entities;
 
-namespace Roster.Data.Access;
+namespace Roster.Data.Scope;
 
 // ─── The central access matrix (pure) — src/lib/access.ts ────────────────────
 // The single statement of who may WRITE what, and its read-side mirror (the Postgres

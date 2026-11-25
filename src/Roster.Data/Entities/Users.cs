@@ -20,42 +20,68 @@ public enum Tier
     Emso,
 }
 
-public static class TierNames
+/// <summary>The stored tier values and their labels (src/lib/constants.ts Tier, TIER_LABELS).</summary>
+public static class Tiers
 {
-    public const string SuperUser = "super_user", Store = "store", Pa = "pa", Director = "director", Emso = "emso";
+    public const string SuperUserKey = "super_user", StoreKey = "store", PaKey = "pa", DirectorKey = "director", EmsoKey = "emso";
 
-    public static string ToDb(Tier tier) => tier switch
+    /// <summary>Every tier, in the order the TypeScript app lists them.</summary>
+    public static IReadOnlyList<Tier> All { get; } = [Tier.SuperUser, Tier.Store, Tier.Pa, Tier.Director, Tier.Emso];
+
+    /// <summary>The stored value: "super_user", "store", "pa", "director", "emso".</summary>
+    public static string Key(this Tier tier) => tier switch
     {
-        Tier.SuperUser => SuperUser,
-        Tier.Store => Store,
-        Tier.Pa => Pa,
-        Tier.Director => Director,
-        Tier.Emso => Emso,
-        _ => throw new ArgumentOutOfRangeException(nameof(tier)),
+        Tier.SuperUser => SuperUserKey,
+        Tier.Store => StoreKey,
+        Tier.Pa => PaKey,
+        Tier.Director => DirectorKey,
+        Tier.Emso => EmsoKey,
+        _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, null),
     };
 
-    public static Tier FromDb(string value) => value switch
+    /// <summary>The label under the person's name (TIER_LABELS).</summary>
+    public static string Label(this Tier tier) => tier switch
     {
-        SuperUser => Tier.SuperUser,
-        Store => Tier.Store,
-        Pa => Tier.Pa,
-        Director => Tier.Director,
-        Emso => Tier.Emso,
-        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown tier"),
+        Tier.SuperUser => "Super User",
+        Tier.Store => "Store",
+        Tier.Pa => "PA (network read-only)",
+        Tier.Director => "DSO (network read-only)",
+        Tier.Emso => "EMSO (area)",
+        _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, null),
     };
 
+    /// <summary>The tier for a stored value; throws on anything else.</summary>
+    public static Tier FromKey(string key) =>
+        TryParse(key, out var tier) ? tier : throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown tier");
+
+    /// <summary>
+    /// Reads a tier from its stored value ("super_user") or its enum name ("SuperUser"),
+    /// ignoring case. "DSO" is accepted for Director.
+    /// </summary>
     public static bool TryParse(string? value, out Tier tier)
     {
-        switch (value?.Trim().ToLowerInvariant())
+        tier = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var v = value.Trim();
+        foreach (var t in All)
         {
-            case SuperUser or "superuser" or "super user": tier = Tier.SuperUser; return true;
-            case Store: tier = Tier.Store; return true;
-            case Pa: tier = Tier.Pa; return true;
-            case Director or "dso": tier = Tier.Director; return true;
-            case Emso: tier = Tier.Emso; return true;
-            default: tier = default; return false;
+            if (string.Equals(v, t.Key(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, t.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                tier = t;
+                return true;
+            }
         }
+        if (string.Equals(v, "dso", StringComparison.OrdinalIgnoreCase))
+        {
+            tier = Tier.Director;
+            return true;
+        }
+        return false;
     }
+
+    /// <summary>PA and DSO never write (isReadOnlyTier). EMSO is deliberately not one.</summary>
+    public static bool IsReadOnly(this Tier tier) => tier is Tier.Pa or Tier.Director;
 }
 
 /// <summary>

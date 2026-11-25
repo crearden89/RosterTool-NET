@@ -12,7 +12,8 @@
 
   <PropertyGroup>
     <RootNamespace>Roster.Data</RootNamespace>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- User secrets for the dotnet-ef design-time factory only (a developer's connection string). -->
+    <UserSecretsId>roster-data-6f1c2d0e-design-time</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -61,8 +61,8 @@ public class SalesOverride
     public DateOnly Date { get; set; }
     public bool Closed { get; set; }
     public string? Method { get; set; }
-    public decimal? Pct { get; set; }
-    public decimal? Value { get; set; }
+    public double? Pct { get; set; }
+    public double? Value { get; set; }
     public string? Reason { get; set; }
     public string? Notes { get; set; }
 }

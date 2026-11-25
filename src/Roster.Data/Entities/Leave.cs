@@ -20,13 +20,13 @@ public class LeaveLiabilitySnapshot
     public string EmployeeName { get; set; } = "";
     public string? Job { get; set; }
     public string RoleClass { get; set; } = RoleClasses.Sa;
-    public decimal ContractHours { get; set; }
-    public decimal NotionalHours { get; set; }
-    public decimal SickHours { get; set; }
-    public decimal AnnualHours { get; set; }
-    public decimal LieuHours { get; set; }
-    public decimal BankedHours { get; set; }
-    public decimal Banked2Hours { get; set; }
+    public double ContractHours { get; set; }
+    public double NotionalHours { get; set; }
+    public double SickHours { get; set; }
+    public double AnnualHours { get; set; }
+    public double LieuHours { get; set; }
+    public double BankedHours { get; set; }
+    public double Banked2Hours { get; set; }
     public Guid? BatchId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
@@ -50,18 +50,18 @@ public class LeaveRequestUkg
 /// <summary>Accrual bands keyed on (contract hours, role class) — the workbook's Setup sheet.</summary>
 public class LeaveAccrualBand
 {
-    public decimal ContractHours { get; set; }
+    public double ContractHours { get; set; }
     public string RoleClass { get; set; } = RoleClasses.Sa;
-    public decimal LeaveNotionalHours { get; set; }
-    public decimal AccrualWeeks { get; set; }
-    public decimal AnnualAccrualHours { get; set; }
+    public double LeaveNotionalHours { get; set; }
+    public double AccrualWeeks { get; set; }
+    public double AnnualAccrualHours { get; set; }
 }
 
 /// <summary>Single-row leave KPI settings.</summary>
 public class LeaveSettings
 {
     public bool Id { get; set; } = true;
-    public decimal TargetHoursPerFte { get; set; } = 76m;
-    public decimal FteDivisor { get; set; } = 76m;
+    public double TargetHoursPerFte { get; set; } = 76.0;
+    public double FteDivisor { get; set; } = 76.0;
     public DateTimeOffset UpdatedAt { get; set; }
 }

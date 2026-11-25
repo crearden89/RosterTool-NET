@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Roster.Data.Access;
+using Roster.Data.Scope;
 using Roster.Data.Entities;
-using Roster.Data.Model;
+using Roster.Data.Configurations;
 
 namespace Roster.Data;
 
@@ -141,17 +141,13 @@ public sealed partial class RosterDbContext : DbContext
 
     protected override void ConfigureConventions(ModelConfigurationBuilder cb)
     {
-        // Postgres numeric is unbounded. Six decimal places hold every figure the files and
-        // screens carry exactly (hours, rates, shares, counts).
-        cb.Properties<decimal>().HavePrecision(19, 6);
-        cb.Properties<decimal?>().HavePrecision(19, 6);
+        // Postgres numeric → float: every number the app holds is a JavaScript double, so
+        // the column stores exactly the double written and reads it back unchanged.
         cb.Properties<string>().AreUnicode();
 
         if (Provider == DatabaseProvider.Sqlite)
         {
-            // SQLite (tests only) cannot compare, order or sum decimal or DateTimeOffset text.
-            cb.Properties<decimal>().HaveConversion<double>();
-            cb.Properties<decimal?>().HaveConversion<double>();
+            // SQLite (tests only) cannot compare or order DateTimeOffset text.
             cb.Properties<DateTimeOffset>().HaveConversion<DateTimeOffsetToBinaryConverter>();
             cb.Properties<DateTimeOffset?>().HaveConversion<DateTimeOffsetToBinaryConverter>();
         }

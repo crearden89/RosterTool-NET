@@ -1,4 +1,5 @@
-using Roster.Data.Feeds;
+
+using System.Text.Json.Serialization;
 
 namespace Roster.Data.Entities;
 
@@ -39,8 +40,19 @@ public class UploadBatch
     public int AcceptedRows { get; set; }
     public int RejectedRows { get; set; }
     /// <summary>Row-level report, stored as a JSON array (nvarchar(max), default '[]').</summary>
-    public List<RowError> ErrorReport { get; set; } = [];
+    public List<UploadRowError> ErrorReport { get; set; } = [];
 }
+
+/// <summary>
+/// One entry of upload_batches.error_report, in the JSON shape the TypeScript app wrote
+/// ({"row":2,"storeCode":"G001","field":"Date","message":"..."}). Row 0 is a whole-upload
+/// failure message. The feeds' validation errors map onto this one to one.
+/// </summary>
+public sealed record UploadRowError(
+    [property: JsonPropertyName("row")] int Row,
+    [property: JsonPropertyName("storeCode")] string? StoreCode,
+    [property: JsonPropertyName("field")] string? Field,
+    [property: JsonPropertyName("message")] string Message);
 
 /// <summary>
 /// The fortnightly forecast for one store-day. Hours arrive at 100%; the *_90 columns are
@@ -51,29 +63,29 @@ public class BenchmarkDay
     public Guid StoreId { get; set; }
     public DateOnly Date { get; set; }
     public bool IsSco { get; set; }
-    public decimal SalesForecast { get; set; }
-    public decimal Items { get; set; }
+    public double SalesForecast { get; set; }
+    public double Items { get; set; }
     /// <summary>NUMERIC in the live database: forecasts carry decimals.</summary>
-    public decimal CustomerCount { get; set; }
-    public decimal LrHours100 { get; set; }
-    public decimal CleaningHours100 { get; set; }
-    public decimal SpecialsHours100 { get; set; }
-    public decimal ResetHours100 { get; set; }
-    public decimal AdminHours100 { get; set; }
+    public double CustomerCount { get; set; }
+    public double LrHours100 { get; set; }
+    public double CleaningHours100 { get; set; }
+    public double SpecialsHours100 { get; set; }
+    public double ResetHours100 { get; set; }
+    public double AdminHours100 { get; set; }
     /// <summary>Reference only (0001); the single Checkout_Hours total replaced the split.</summary>
-    public decimal RegistersHours100 { get; set; }
+    public double RegistersHours100 { get; set; }
     /// <summary>Reference only (0001).</summary>
-    public decimal ScoHours100 { get; set; }
+    public double ScoHours100 { get; set; }
     /// <summary>The day's checkout labour budget (live-database column).</summary>
-    public decimal CheckoutHours100 { get; set; }
-    public decimal LrHours90 { get; private set; }
-    public decimal CleaningHours90 { get; private set; }
-    public decimal SpecialsHours90 { get; private set; }
-    public decimal ResetHours90 { get; private set; }
-    public decimal AdminHours90 { get; private set; }
-    public decimal RegistersHours90 { get; private set; }
-    public decimal ScoHours90 { get; private set; }
-    public decimal CheckoutHours90 { get; private set; }
+    public double CheckoutHours100 { get; set; }
+    public double LrHours90 { get; private set; }
+    public double CleaningHours90 { get; private set; }
+    public double SpecialsHours90 { get; private set; }
+    public double ResetHours90 { get; private set; }
+    public double AdminHours90 { get; private set; }
+    public double RegistersHours90 { get; private set; }
+    public double ScoHours90 { get; private set; }
+    public double CheckoutHours90 { get; private set; }
     /// <summary>Headcount that sizes the per-employee admin tasks (0019).</summary>
     public int EmployeeCount { get; set; }
     public bool? IsMhs { get; set; }
@@ -89,7 +101,7 @@ public class QuarterHourSegment
     public Guid StoreId { get; set; }
     public DateOnly Date { get; set; }
     public TimeOnly BlockTime { get; set; }
-    public decimal Segment { get; set; }
+    public double Segment { get; set; }
     public Guid? RosterPeriodId { get; set; }
     public Guid? BatchId { get; set; }
 }
@@ -99,23 +111,23 @@ public class ActualsDay
 {
     public Guid StoreId { get; set; }
     public DateOnly Date { get; set; }
-    public decimal ActualSales { get; set; }
-    public decimal ActualItems { get; set; }
+    public double ActualSales { get; set; }
+    public double ActualItems { get; set; }
     /// <summary>Sum of the six per-category hours columns.</summary>
-    public decimal ActualHours100 { get; set; }
+    public double ActualHours100 { get; set; }
     /// <summary>Kronos (UKG) paid hours.</summary>
-    public decimal UkgActualHours { get; set; }
+    public double UkgActualHours { get; set; }
     public Guid? BatchId { get; set; }
-    public decimal? LrHours { get; set; }
-    public decimal? CleaningHours { get; set; }
-    public decimal? SpecialsHours { get; set; }
-    public decimal? ResetHours { get; set; }
-    public decimal? AdminHours { get; set; }
-    public decimal? CheckoutHours { get; set; }
+    public double? LrHours { get; set; }
+    public double? CleaningHours { get; set; }
+    public double? SpecialsHours { get; set; }
+    public double? ResetHours { get; set; }
+    public double? AdminHours { get; set; }
+    public double? CheckoutHours { get; set; }
     public bool? IsMhs { get; set; }
     public bool? HasEsl { get; set; }
     public bool? HasBaler { get; set; }
-    public decimal? ActualCustomers { get; set; }
+    public double? ActualCustomers { get; set; }
 }
 
 /// <summary>
@@ -125,9 +137,9 @@ public class ActualsDay
 public class QuarterHourAllocation
 {
     public Guid StoreId { get; set; }
-    public short DayOfWeek { get; set; }
+    public int DayOfWeek { get; set; }
     public TimeOnly BlockTime { get; set; }
-    public decimal Allocation { get; set; }
+    public double Allocation { get; set; }
     public Guid? BatchId { get; set; }
 }
 
@@ -137,10 +149,10 @@ public class PosIntervalStat
     public Guid StoreId { get; set; }
     public DateOnly Date { get; set; }
     public TimeOnly BlockTime { get; set; }
-    public decimal McoCustomers { get; set; }
-    public decimal ScoCustomers { get; set; }
-    public decimal McoItems { get; set; }
-    public decimal ScoItems { get; set; }
+    public double McoCustomers { get; set; }
+    public double ScoCustomers { get; set; }
+    public double McoItems { get; set; }
+    public double ScoItems { get; set; }
     public Guid? BatchId { get; set; }
 }
 
