@@ -3,6 +3,13 @@
 // seeder makes that organisation and enough invented data around it for every page to
 // show something real. Everything here is invented: store numbers, names and people.
 // There are no passwords: the development sign-in picks one of the seeded users.
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Roster.Data.Configurations;
+using Roster.Data.Jobs;
+using Roster.Data.Users;
+using Roster.Engine.Core;
+
 namespace Roster.Data.Seed;
 
 /// <summary>How to seed.</summary>
@@ -60,8 +67,58 @@ public interface IDevSeeder
     Task<DevSeedReport> SeedAsync(DevSeedOptions options, CancellationToken cancellationToken = default);
 }
 
-internal sealed class DevSeeder : IDevSeeder
+internal sealed class DevSeeder(
+    IRosterDbContextFactory contexts,
+    TimeProvider clock,
+    IOptions<UserDirectoryOptions> userOptions) : IDevSeeder
 {
-    public Task<DevSeedReport> SeedAsync(DevSeedOptions options, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
+    public async Task<DevSeedReport> SeedAsync(DevSeedOptions options, CancellationToken cancellationToken = default)
+    {
+        var today = options.Today ?? Dates.TodayAu(clock.GetUtcNow());
+        await using var db = contexts.CreateSystem("development seed");
+
+        if (options.Reset) await db.Database.EnsureDeletedAsync(cancellationToken);
+        if (options.Migrate || options.Reset)
+        {
+            if (db.Provider == DatabaseProvider.SqlServer) await db.Database.MigrateAsync(cancellationToken);
+            else await db.Database.EnsureCreatedAsync(cancellationToken); // SQLite: the unit tests
+        }
+
+        var existing = await db.Stores.CountAsync(cancellationToken);
+        if (existing > 0)
+            return new DevSeedReport
+            {
+                Seeded = false,
+                Today = today,
+                Message = $"The database already has {existing} store(s); nothing was seeded. Start the app with --reseed to drop it and seed it again.",
+            };
+
+        var counts = new Dictionary<string, int>(await ReferenceData.EnsureAsync(db, cancellationToken));
+        var builder = new DevSeedBuilder(db, today, userOptions.Value.FirstSuperUser);
+        await builder.RunAsync(cancellationToken);
+        foreach (var (table, n) in builder.Counts) counts[table] = counts.GetValueOrDefault(table) + n;
+
+        // This fortnight's EMSO alerts, raised by the real check as of the seeded day.
+        var emso = await new EmsoRosterCheck(contexts, new FixedDay(today)).RunEmsoUnapprovedCheckAsync(cancellationToken);
+        counts["notifications"] = counts.GetValueOrDefault("notifications") + emso.Created;
+
+        return new DevSeedReport
+        {
+            Seeded = true,
+            Today = today,
+            RowCounts = counts,
+            Logins = builder.Logins,
+            KioskLinks = builder.KioskLinks,
+            Message = $"Seeded {SeedCatalogue.Stores.Count} invented stores around {Dates.AuFull(today)}: "
+                + $"{counts.GetValueOrDefault("employees")} team members, {counts.GetValueOrDefault("generated_shifts")} published shifts, "
+                + $"{counts.Values.Sum()} rows in all; the EMSO check raised {emso.Created} alert(s).",
+        };
+    }
+
+    /// <summary>6 pm in Sydney on the seeded day, for the EMSO check.</summary>
+    private sealed class FixedDay(DateOnly day) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() =>
+            new DateTimeOffset(day.ToDateTime(new TimeOnly(18, 0)), TimeSpan.FromHours(10)).ToUniversalTime();
+    }
 }
