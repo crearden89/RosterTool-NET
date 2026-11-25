@@ -1,0 +1,127 @@
+@page "/admin/views"
+@* Port of src/app/(app)/admin/views/page.tsx and ViewsClient.tsx: the visibility
+   matrix, saved as one table (every cell) from the page's save bar. *@
+@inject IViewsService Service
+
+<div>
+    <SettingsHeader Area="Access" Title="Views">
+        <Subtitle>Which pages of the menu each level should see · applies to every store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        <SaveNote>The whole table is saved together.</SaveNote>
+        <ChildContent>
+            <SaveSlot Id="views" Changes="@Changes" Save="SaveAsync" Discard="Discard" />
+            <SettingsSection Id="pages" Flush="true">
+                <Title>Pages by level</Title>
+                <Purpose>Each menu page, and whether each level of the business should see it.</Purpose>
+                <ChildContent>
+                    <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                        <table class="@Ui.Table.Element">
+                            <thead class="@Ui.Table.Head">
+                                <tr>
+                                    <th class="@Ui.Table.Th">Page</th>
+                                    @foreach (var lv in HierarchyLevels.All)
+                                    {
+                                        <th class="@($"{Ui.Table.Th} text-center")" title="@HierarchyLevels.Labels[lv]">@lv</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ var seen = new HashSet<string>(); }
+                                @foreach (var t in Tabs)
+                                {
+                                    @if (seen.Add(t.Section))
+                                    {
+                                        <tr class="@($"{Ui.Table.Row} bg-[var(--ui-canvas)]")">
+                                            <td colspan="@(1 + HierarchyLevels.All.Count)" class="px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase">@t.Section</td>
+                                        </tr>
+                                    }
+                                    <tr class="@Ui.Table.Row">
+                                        <td class="@Ui.Table.Td">@t.Label</td>
+                                        @foreach (var lv in HierarchyLevels.All)
+                                        {
+                                            var key = ViewsMatrix.Key(lv, t.Key);
+                                            var on = _draft.Value.TryGetValue(key, out var v) ? v : true;
+                                            var changed = !_draft.Base.TryGetValue(key, out var b) || on != b;
+                                            <td class="px-3 py-2 text-center">
+                                                <button type="button" aria-pressed="@(on ? "true" : "false")"
+                                                        aria-label="@($"{t.Label} for {HierarchyLevels.Labels[lv]}: {(on ? "visible" : "hidden")}")"
+                                                        @onclick="() => Toggle(key)"
+                                                        class="@Ui.Cx("rounded-lg px-3 py-1 text-xs font-semibold", Ui.FocusRing, on ? "bg-[var(--ui-ink)] text-white" : "bg-[var(--ui-lavender)] text-[var(--ui-muted)]", changed ? "ring-2 ring-[var(--ui-gold)] ring-offset-1" : null)">
+                                                    @(on ? "Visible" : "Hidden")
+                                                </button>
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (_error is not null)
+                    {
+                        <div class="border-t border-[var(--ui-line)] px-5 py-3 sm:px-6">
+                            <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+                        </div>
+                    }
+                </ChildContent>
+            </SettingsSection>
+            <SettingsSection Id="how-used">
+                <Title>How this is used</Title>
+                <Purpose>What the table does today, and what it doesn't yet.</Purpose>
+                <ChildContent>
+                    <p class="text-sm text-[var(--ui-muted)]">
+                        This is the visibility configuration store. It records what each level should see; wiring
+                        it into live route/sidebar enforcement is a follow-up (right now access is still governed
+                        by the login access tier). Anything not explicitly set defaults to Visible.
+                    </p>
+                </ChildContent>
+            </SettingsSection>
+        </ChildContent>
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("pages", "Pages by level"),
+        new("how-used", "How this is used"),
+    ];
+
+    // ALL_TABS: every menu page; the key is its href.
+    private static readonly IReadOnlyList<ViewTab> Tabs =
+        NavConfig.AllTabs.Select(t => new ViewTab(t.Key, t.Label, t.Section)).ToList();
+
+    private FormDraft<Dictionary<string, bool>> _draft = new([]);
+    private string? _error;
+
+    private int Changes => _draft.Value.Count(kv => !_draft.Base.TryGetValue(kv.Key, out var b) || b != kv.Value);
+
+    protected override async Task OnInitializedAsync() =>
+        _draft = new FormDraft<Dictionary<string, bool>>(ViewsMatrix.Saved(Tabs, await Service.LoadAsync()));
+
+    private void Toggle(string key) =>
+        _draft.Set(s => new Dictionary<string, bool>(s) { [key] = !(s.TryGetValue(key, out var v) ? v : true) });
+
+    private async Task<bool> SaveAsync()
+    {
+        var sent = _draft.Value;
+        var res = await Service.SaveTabVisibilityAsync(ViewsMatrix.Cells(Tabs, sent));
+        if (!res.Ok)
+        {
+            _error = $"Error: {res.Error}";
+            StateHasChanged();
+            return false;
+        }
+        _error = null;
+        _draft.Commit(sent);
+        _draft.Sync(ViewsMatrix.Saved(Tabs, await Service.LoadAsync()));
+        StateHasChanged();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _error = null;
+    }
+}

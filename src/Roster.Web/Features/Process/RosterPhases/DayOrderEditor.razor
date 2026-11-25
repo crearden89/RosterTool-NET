@@ -1,0 +1,38 @@
+@* Port of DayOrderEditor in src/app/(app)/admin/process/roster/OrderClient.tsx.
+   Comma-separated day list editor ("Sat, Sun, Tue, Fri, Mon, Wed, Thu") - each
+   of the seven days exactly once. *@
+
+<div class="mt-1.5">
+    <label class="text-xs text-[var(--ui-muted)]">
+        Day order
+        <input value="@_text" @oninput="OnInput" aria-invalid="@(_parsed is null ? "true" : null)"
+               class="@Ui.Cx("ml-2 w-72 max-w-full text-xs", Ui.CompactField, _parsed is null ? "ring-2 ring-[var(--ui-bad)]" : null)" />
+    </label>
+    @if (_parsed is null)
+    {
+        <p class="mt-0.5 text-xs text-[var(--ui-bad)]">List all seven days exactly once, e.g. "Sat, Sun, Tue, Fri, Mon, Wed, Thu".</p>
+    }
+</div>
+
+@code {
+    private string _text = "";
+    private List<int>? _parsed;
+
+    [Parameter] public IReadOnlyList<int>? Value { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<int>> OnChange { get; set; }
+
+    // The box keeps what was typed; it starts from the value it was given.
+    protected override void OnInitialized()
+    {
+        _text = DayOrderText.Format(Value ?? RosterOrder.DefaultFloorDayOrder);
+        _parsed = DayOrderText.Parse(_text);
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        _text = e.Value?.ToString() ?? "";
+        _parsed = DayOrderText.Parse(_text);
+        if (_parsed is not null) await OnChange.InvokeAsync(_parsed);
+    }
+}

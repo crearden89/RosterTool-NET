@@ -1,0 +1,200 @@
+@page "/admin/data-feed"
+@* Port of src/app/(app)/admin/data-feed/page.tsx and DataFeedClient.tsx. *@
+@inject IDataFeedService Service
+@inject RosterJs RosterJs
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div>
+    <SettingsHeader Area="Data" Title="Data Feed">
+        <Subtitle>The tokens that let other systems push actuals, benchmarks and POS data · applies to every store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @* Each token is created, rotated or deleted at once, as before; a label typed
+           and not created counts as an unsaved change when leaving the page. *@
+        <LeaveGuard Id="feed-token" Dirty="@(Js.Trim(_label) != "")" />
+        <SettingsSection Id="tokens">
+            <Title>Feed tokens</Title>
+            <Purpose>One token per integration. Rotating one stops the old token at once; deleting one rejects its pushes from then on.</Purpose>
+            <ChildContent>
+                @if (_view.Tokens.Count == 0)
+                {
+                    <p class="mb-3 text-sm text-[var(--ui-muted)]">No tokens yet - create one per integration (e.g. one for the area-database sync).</p>
+                }
+                else
+                {
+                    <div class="mb-4 overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+                        <table class="@Ui.Table.Element">
+                            <thead class="@Ui.Table.Head">
+                                <tr>
+                                    <th class="@Ui.Table.Th">Label</th>
+                                    <th class="@Ui.Table.Th">Token</th>
+                                    <th class="@Ui.Table.Th">Created</th>
+                                    <th class="@Ui.Table.Th">Last used</th>
+                                    <th class="@Ui.Table.Th"><span class="sr-only">Actions</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in _view.Tokens)
+                                {
+                                    <tr @key="t.Id" class="@Ui.Table.Row">
+                                        <td class="whitespace-nowrap px-3 py-2 font-semibold">@t.Label</td>
+                                        <td class="px-3 py-2">
+                                            <div class="flex items-center gap-2">
+                                                <code class="max-w-[16rem] truncate rounded bg-[var(--ui-canvas)] px-1.5 py-0.5 text-xs">@t.Token</code>
+                                                <button type="button" class="@SmallBtn" @onclick="() => CopyAsync(t.Token, t.Id.ToString())">@(_copied == t.Id.ToString() ? "Copied ✓" : "Copy")</button>
+                                            </div>
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-[var(--ui-muted)]">@Dt(t.CreatedAt)</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-[var(--ui-muted)]">@Dt(t.LastUsedAt)</td>
+                                        <td class="px-3 py-2 text-right">
+                                            <div class="flex justify-end gap-2">
+                                                <button type="button" class="@SmallBtn" disabled="@_pending" @onclick="() => RotateAsync(t)">Rotate</button>
+                                                <button type="button" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)" disabled="@_pending" @onclick="() => DeleteAsync(t)">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="flex flex-wrap items-center gap-3">
+                    <input class="@Ui.FieldClass" aria-label="New token label" placeholder="New token label (e.g. area-db-sync)"
+                           @bind="_label" @bind:event="oninput" />
+                    <button type="button" class="@Ui.ButtonClass(ButtonKind.Primary)" disabled="@_pending" @onclick="CreateAsync">
+                        <Icon Name="IconName.Plus" Class="h-4 w-4" aria-hidden="true" /> Create token
+                    </button>
+                    @if (_msg is not null)
+                    {
+                        <FormMessage Tone="@(_msg.StartsWith("Error") ? FormMessageTone.Error : FormMessageTone.Ok)">@_msg</FormMessage>
+                    }
+                </div>
+            </ChildContent>
+        </SettingsSection>
+
+        <SettingsSection Id="spec">
+            <Title>Integration spec (for IT)</Title>
+            <Purpose>How another system pushes its files here: the endpoints, the token header and the cadence.</Purpose>
+            <ChildContent>
+                <div class="space-y-2 text-sm text-[var(--ui-ink)]">
+                    <p>
+                        <code class="rounded bg-[var(--ui-canvas)] px-1.5 py-0.5 text-xs">POST /api/ingest/actuals · /api/ingest/benchmark · /api/ingest/pos_quarter_hour</code>
+                    </p>
+                    <ul class="list-disc space-y-1 pl-5">
+                        <li>Header <code class="text-xs">Authorization: Bearer &lt;token&gt;</code>; body is CSV text in the same layout the Uploads screen accepts (same columns, same validation).</li>
+                        <li>Add <code class="text-xs">?mode=validate</code> for a dry run - full validation report, nothing written.</li>
+                        <li>Commits are partial-accept: valid rows land, rejects are returned (and stored on the batch) with row numbers and reasons. HTTP 422 = nothing was written.</li>
+                        <li>Cadence: <b>Actuals</b> several times a day - send each store&apos;s rows dated in that store&apos;s local day. <b>Benchmark</b> fortnightly, on the Friday before planning day. <b>Quarter-Hour</b> whenever the weekly pattern changes.</li>
+                    </ul>
+                    <p class="text-xs text-[var(--ui-muted)]">Full column-by-column spec with a sample sync script: docs/data-feed-integration.md in the repository.</p>
+                </div>
+            </ChildContent>
+        </SettingsSection>
+
+        <SettingsSection Id="pushes">
+            <Title>Recent API pushes</Title>
+            <Purpose>The last 20 files received through the API.</Purpose>
+            <ChildContent>
+                @if (_view.Batches.Count == 0)
+                {
+                    <p class="text-sm text-[var(--ui-muted)]">Nothing received through the API yet.</p>
+                }
+                else
+                {
+                    <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+                        <table class="@Ui.Table.Element">
+                            <thead class="@Ui.Table.Head">
+                                <tr>
+                                    <th class="@Ui.Table.Th">Received</th>
+                                    <th class="@Ui.Table.Th">Type</th>
+                                    <th class="@Ui.Table.Th">Source</th>
+                                    <th class="@($"{Ui.Table.Th} text-right")">Rows</th>
+                                    <th class="@($"{Ui.Table.Th} text-right")">Accepted</th>
+                                    <th class="@($"{Ui.Table.Th} text-right")">Rejected</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var b in _view.Batches)
+                                {
+                                    <tr @key="b.Id" class="@Ui.Table.Row">
+                                        <td class="whitespace-nowrap px-3 py-1.5">@Dt(b.UploadedAt)</td>
+                                        <td class="px-3 py-1.5">@b.Type</td>
+                                        <td class="px-3 py-1.5">@b.Source</td>
+                                        <td class="px-3 py-1.5 text-right">@b.TotalRows</td>
+                                        <td class="px-3 py-1.5 text-right">@b.AcceptedRows</td>
+                                        <td class="@($"px-3 py-1.5 text-right {(b.RejectedRows > 0 ? "font-semibold text-[var(--ui-bad)]" : "")}")">@b.RejectedRows</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </ChildContent>
+        </SettingsSection>
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("tokens", "Feed tokens"),
+        new("spec", "Integration spec"),
+        new("pushes", "Recent API pushes"),
+    ];
+
+    private static readonly string SmallBtn = Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm);
+
+    private DataFeedView _view = new([], []);
+    private string _label = "";
+    private bool _pending;
+    private string? _msg;
+    private string? _copied;
+    private CancellationTokenSource? _copiedTimer;
+
+    private static string Dt(DateTimeOffset? at) => at is { } t ? Dates.AuDateTime(t) : "never";
+
+    protected override async Task OnInitializedAsync() => _view = await Service.LoadAsync();
+
+    private async Task RunAsync(Func<Task<AdminResult>> fn, string okMsg)
+    {
+        _pending = true;
+        var res = await fn();
+        _msg = res.Ok ? okMsg : $"Error: {res.Error}";
+        if (res.Ok) _view = await Service.LoadAsync();
+        _pending = false;
+    }
+
+    private Task CreateAsync() => RunAsync(() => Service.CreateFeedTokenAsync(_label), "Token created.");
+
+    private async Task RotateAsync(FeedTokenRow t)
+    {
+        if (!await RosterJs.ConfirmAsync($"Rotate '{t.Label}'? The current token stops working immediately.")) return;
+        await RunAsync(() => Service.RotateFeedTokenAsync(t.Id), "Token rotated - update the sync job.");
+    }
+
+    private async Task DeleteAsync(FeedTokenRow t)
+    {
+        if (!await RosterJs.ConfirmAsync($"Delete '{t.Label}'? Its pushes will be rejected from now on.")) return;
+        await RunAsync(() => Service.DeleteFeedTokenAsync(t.Id), "Token deleted.");
+    }
+
+    private async Task CopyAsync(string text, string key)
+    {
+        await AdminClipboard.WriteAsync(JS, text);
+        _copied = key;
+        _copiedTimer?.Cancel();
+        var timer = _copiedTimer = new CancellationTokenSource();
+        _ = Task.Delay(1500, timer.Token).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            _ = InvokeAsync(() =>
+            {
+                if (_copied == key) _copied = null;
+                StateHasChanged();
+            });
+        }, TaskScheduler.Default);
+    }
+
+    public void Dispose() => _copiedTimer?.Cancel();
+}
