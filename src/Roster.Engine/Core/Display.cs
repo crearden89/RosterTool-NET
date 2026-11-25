@@ -10,6 +10,8 @@
 
 using Roster.Engine.Pay;
 
+using System.Text.Json.Serialization;
+
 namespace Roster.Engine.Core;
 
 /// <summary>
@@ -23,6 +25,7 @@ public sealed record DisplayBlock : ITile
     // The sub-task the tile is labelled with (Reset, Load Running, Cleaning and
     // Specials; SubTasks). A label only: nothing that plans or checks a day
     // reads it. Plan tiles and roster tiles both carry one.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Sub { get; init; }
 
     public DisplayBlock() { }

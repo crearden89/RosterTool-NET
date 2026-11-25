@@ -1,0 +1,17 @@
+@* Port of src/app/(app)/plan/roster/SubtaskView.tsx (SubtaskViewProvider, useShowSubtasks):
+   holds the page's "Show sub-tasks" choice and hands it down. *@
+<CascadingValue Value="this" IsFixed="false">@ChildContent</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Whether "Show sub-tasks" is on (useShowSubtasks). Off when the page opens.</summary>
+    public bool On { get; private set; }
+
+    public void Set(bool on)
+    {
+        if (On == on) return;
+        On = on;
+        StateHasChanged();
+    }
+}

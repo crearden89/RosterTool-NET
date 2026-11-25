@@ -26,11 +26,15 @@ public sealed class ServicesModule : IDataModule
         services.TryAddScoped<IDatabaseFunctions, DatabaseFunctionsService>();
         services.TryAddScoped<IRefData, RefDataReader>();
         services.TryAddScoped<IPayData, PayDataReader>();
+        services.TryAddScoped<IPayCosts, PayCostsLoader>();
+        services.TryAddScoped<IFreshRosterShifts, PendingFreshRosterShifts>();
 
         services.TryAddScoped<IStoreDayLoader, StoreDayLoader>();
-        services.TryAddScoped<IStage1Feeds, PendingStage1Feeds>();
+        services.TryAddScoped<ITradeCurveSource, PendingTradeCurveSource>();
+        services.TryAddScoped<ITillLoader, TillLoader>();
         services.TryAddScoped<IStage1Loader, Stage1Loader>();
-        services.TryAddScoped<IDayCheckOptionsLoader, PendingDayCheckOptionsLoader>();
+        services.TryAddScoped<IDayCheckOptionsLoader, DayCheckOptionsLoader>();
+        services.TryAddScoped<IDaySlotsLoader, DaySlotsLoader>();
         services.TryAddScoped<IPlanShiftsLoader, PendingPlanShiftsLoader>();
         services.TryAddScoped<IPlanPeriods, PlanPeriods>();
         services.TryAddScoped<IHeldPlans, HeldPlans>();
