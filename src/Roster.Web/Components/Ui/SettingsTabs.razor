@@ -1,0 +1,36 @@
+@* Port of SettingsTabs in src/components/ui/SettingsShell.tsx. *@
+@using Roster.Web.Components.Layout
+@implements IDisposable
+@inject NavigationManager Navigation
+@* An area's pages as one segmented control. Each tab is a real route, so the
+   back button, a bookmark and a deep link behave normally. *@
+<nav aria-label="Pages in this area" class="-mt-2 mb-6 max-w-full overflow-x-auto">
+    <div class="inline-flex gap-1 rounded-xl bg-[var(--ui-lavender)] p-1">
+        @foreach (var t in Tabs)
+        {
+            var active = NavConfig.IsActive(_path, t.Href);
+            <a @key="t.Href" href="@ShellPaths.Href(t.Href)" aria-current="@(active ? "page" : null)"
+               class="@Ui.Cx("rounded-lg px-3.5 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors", Ui.FocusRing, active ? "bg-white text-[var(--ui-ink)] shadow-sm" : "text-[var(--ui-muted)] hover:text-[var(--ui-ink)]")">@t.Label</a>
+        }
+    </div>
+</nav>
+
+@code {
+    private string _path = "/";
+
+    [Parameter, EditorRequired] public IReadOnlyList<NavItem> Tabs { get; set; } = [];
+
+    protected override void OnInitialized()
+    {
+        _path = ShellPaths.PathOf(Navigation);
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _path = ShellPaths.PathOf(Navigation);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

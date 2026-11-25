@@ -1,0 +1,22 @@
+@* Port of SettingsHeader in src/components/ui/SettingsShell.tsx. *@
+@using Roster.Web.Components.Layout
+@* The Super User settings template (approved 15/11/2026), for every Super User
+   page except Pay Rates and Kiosk Links: "SUPER USER · RULES" over the title,
+   the title and a line saying what the page controls and which stores it
+   applies to, then the area's tabs where it has several pages. *@
+<div>
+    <Eyebrow Class="mb-1">Super User · @Area</Eyebrow>
+    <PageHeader Title="@Title" Subtitle="Subtitle" Actions="Actions" />
+    @if (Tabs is not null)
+    {
+        <SettingsTabs Tabs="Tabs" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Area { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public RenderFragment? Subtitle { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public IReadOnlyList<NavItem>? Tabs { get; set; }
+}

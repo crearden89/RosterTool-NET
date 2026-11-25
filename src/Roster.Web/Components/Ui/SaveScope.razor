@@ -1,0 +1,181 @@
+@* Port of src/components/ui/SaveBar.tsx (SaveScope). *@
+@implements IDisposable
+@inject RosterJs Js
+@inject NavigationManager Navigation
+@* One save bar for a settings page (the Super User template approved
+   15/11/2026): one bar at the foot of the page with the number of unsaved
+   changes, Discard and Save.
+
+   A page wraps its content in <SaveScope>. Each form on it that saves as a
+   whole puts a <SaveSlot> in itself: how many changes it holds, how it saves
+   (its own action, with that action's own checks) and how it goes back to
+   what is saved. Save runs each changed form's save in turn; a form that is
+   refused keeps its edits and shows the message itself. Nothing is saved
+   anywhere else and nothing is thrown away without Discard.
+
+   Rows that save one at a time keep their own Save buttons; they tell the
+   scope when they hold an edit (<LeaveGuard>), so leaving the page with an
+   edit anywhere on it asks first: a link in the menu or a tab, a store picker
+   (ConfirmLeaveAsync), a reload or closing the tab, and the back button. *@
+<CascadingValue Value="this" IsFixed="true">
+    <div class="@(ShowBar ? "pb-24" : null)">@ChildContent</div>
+</CascadingValue>
+<NavigationLock ConfirmExternalNavigation="@Dirty" OnBeforeInternalNavigation="OnBeforeInternalNavigationAsync" />
+@if (ShowBar)
+{
+    var total = Total;
+    var saving = _phase == SavePhase.Saving;
+    <div role="region" aria-label="Save changes"
+         class="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ui-line)] bg-white/95 shadow-[0_-6px_18px_rgba(0,0,95,0.07)] backdrop-blur lg:left-60">
+        <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:px-8">
+            <p class="mr-auto min-w-0 flex-1 basis-64 text-sm text-[var(--ui-muted)]" aria-live="polite">
+                @if (saving)
+                {
+                    <b class="text-[var(--ui-ink)]">Saving…</b>
+                }
+                else if (total > 0)
+                {
+                    <b class="text-[var(--ui-ink)]">@($"{total} unsaved change{(total == 1 ? "" : "s")}")</b>
+                }
+                else if (_phase == SavePhase.Saved)
+                {
+                    <b class="inline-flex items-center gap-1 text-[var(--ui-good)]"><Icon Name="IconName.Check" Class="h-4 w-4" StrokeWidth="3" /> All changes saved</b>
+                }
+                else
+                {
+                    <b class="text-[var(--ui-ink)]">No unsaved changes</b>
+                }
+                @if (_phase == SavePhase.Failed && total > 0)
+                {
+                    <span class="font-semibold text-[var(--ui-bad)]"> · Not everything saved - see the message above</span>
+                }
+                @if (Note is not null)
+                {
+                    <span> · @Note</span>
+                }
+            </p>
+            <button type="button" @onclick="DiscardAllAsync" disabled="@(saving || total == 0)" class="@Ui.ButtonClass(ButtonKind.Secondary)">Discard</button>
+            <button type="button" @onclick="SaveAllAsync" disabled="@(saving || total == 0)" class="@Ui.ButtonClass(ButtonKind.Accent)">@(saving ? "Saving…" : "Save changes")</button>
+        </div>
+    </div>
+}
+
+@code {
+    public const string LeaveMessage = "This page has changes that aren't saved. Leave without saving them?";
+
+    private readonly List<string> _order = [];
+    private readonly Dictionary<string, ISaveSlot> _slots = [];
+    private readonly Dictionary<string, int> _changes = [];
+    private readonly Dictionary<string, bool> _loose = [];
+    private SavePhase _phase = SavePhase.Idle;
+    private bool _leaveConfirmed;
+    private bool _disposed;
+
+    /// <summary>The save bar's line after the count ("Changes apply from the next Generate").</summary>
+    [Parameter] public RenderFragment? Note { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>How many changes the forms on the page hold.</summary>
+    public int Total => _order.Sum(id => _changes.GetValueOrDefault(id));
+
+    /// <summary>Any unsaved change on the page: a form's, or a row's own edit.</summary>
+    public bool Dirty => Total > 0 || _loose.Values.Any(v => v);
+
+    private bool ShowBar => _order.Count > 0;
+
+    internal void Register(string id, ISaveSlot slot)
+    {
+        _slots[id] = slot;
+        if (!_order.Contains(id)) _order.Add(id);
+        Changed();
+    }
+
+    internal void Unregister(string id)
+    {
+        _slots.Remove(id);
+        _order.Remove(id);
+        _changes.Remove(id);
+        Changed();
+    }
+
+    internal void SetChanges(string id, int n)
+    {
+        if (_changes.TryGetValue(id, out var was) && was == n) return;
+        _changes[id] = n;
+        if (n > 0 && _phase == SavePhase.Saved) _phase = SavePhase.Idle;
+        Changed();
+    }
+
+    internal void SetLoose(string id, bool dirty)
+    {
+        if (_loose.GetValueOrDefault(id) == dirty) return;
+        _loose[id] = dirty;
+        Changed();
+    }
+
+    /// <summary>
+    /// For a navigation the page starts itself (a store picker): asks before
+    /// leaving unsaved changes. True means go ahead.
+    /// </summary>
+    public async Task<bool> ConfirmLeaveAsync()
+    {
+        if (!Dirty) return true;
+        var ok = await Js.ConfirmAsync(LeaveMessage);
+        // Asked once already: the navigation that follows is not asked again.
+        _leaveConfirmed = ok;
+        return ok;
+    }
+
+    private async Task OnBeforeInternalNavigationAsync(LocationChangingContext context)
+    {
+        if (_leaveConfirmed)
+        {
+            _leaveConfirmed = false;
+            return;
+        }
+        if (!Dirty) return;
+        // A jump within the page (the "On this page" index) isn't leaving it.
+        var from = new Uri(Navigation.Uri);
+        var to = Navigation.ToAbsoluteUri(context.TargetLocation);
+        if (!string.IsNullOrEmpty(to.Fragment) && from.GetLeftPart(UriPartial.Query) == to.GetLeftPart(UriPartial.Query)) return;
+        if (!await Js.ConfirmAsync(LeaveMessage)) context.PreventNavigation();
+    }
+
+    private async Task SaveAllAsync()
+    {
+        _phase = SavePhase.Saving;
+        var ok = true;
+        foreach (var id in _order.ToList())
+        {
+            if (!_slots.TryGetValue(id, out var slot) || _changes.GetValueOrDefault(id) <= 0) continue;
+            try
+            {
+                if (!await slot.SaveAsync()) ok = false;
+            }
+            catch (Exception) when (!_disposed)
+            {
+                ok = false;
+            }
+        }
+        _phase = ok ? SavePhase.Saved : SavePhase.Failed;
+    }
+
+    private async Task DiscardAllAsync()
+    {
+        var n = Total;
+        if (!await Js.ConfirmAsync($"Discard {n} unsaved change{(n == 1 ? "" : "s")}? The page goes back to what is saved.")) return;
+        foreach (var id in _order.ToList())
+            if (_changes.GetValueOrDefault(id) > 0 && _slots.TryGetValue(id, out var slot)) await slot.DiscardAsync();
+        _phase = SavePhase.Idle;
+    }
+
+    private void Changed()
+    {
+        if (!_disposed) _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _disposed = true;
+
+    private enum SavePhase { Idle, Saving, Saved, Failed }
+}

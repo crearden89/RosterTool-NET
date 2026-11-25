@@ -1,0 +1,76 @@
+@* New: every menu address works before its page is built. A page area's own
+   route (Features/<Area>/, "/plan/sales") always wins over this catch-all, so a
+   page takes over its address the moment it lands, with no change here. Any
+   other address is not found. *@
+@page "/{*path}"
+@attribute [AllowAnonymous]
+@inject NavigationManager Navigation
+
+@if (_item is not null)
+{
+    @if (_tabs is not null)
+    {
+        <SettingsHeader Area="@_area" Title="@_item.Label" Tabs="_tabs">
+            <Subtitle>Part of the Super User settings.</Subtitle>
+        </SettingsHeader>
+    }
+    else
+    {
+        <PageHeader Title="@_item.Label">
+            <Subtitle>@_section</Subtitle>
+        </PageHeader>
+    }
+    <Card>
+        <p class="text-sm text-[var(--ui-muted)]">This page is being rebuilt for the new edition and is not here yet.</p>
+    </Card>
+}
+
+@code {
+    private NavItem? _item;
+    private string _section = "";
+    private string _area = "";
+    private IReadOnlyList<NavItem>? _tabs;
+
+    [Parameter] public string? Path { get; set; }
+
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _item = null;
+        _tabs = null;
+        var path = "/" + (Path ?? "").Trim('/');
+        var found = NavConfig.Find(path);
+        if (found is null)
+        {
+            Navigation.NotFound();
+            return;
+        }
+
+        // The same doors as the page will have: signed in with access, and the
+        // tier its section needs.
+        var principal = AuthenticationState is null ? null : (await AuthenticationState).User;
+        var user = SignedInUser.FromPrincipal(principal);
+        if (principal?.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo($"account/sign-in?returnUrl={Uri.EscapeDataString(new Uri(Navigation.Uri).PathAndQuery)}", forceLoad: true);
+            return;
+        }
+        if (user is null)
+        {
+            Navigation.NavigateTo("account/no-access", forceLoad: true);
+            return;
+        }
+        if (found.Value.Section.Tiers is { } tiers && !tiers.Contains(user.Tier))
+        {
+            Navigation.NavigateTo("overview");
+            return;
+        }
+
+        _item = found.Value.Item;
+        _section = found.Value.Section.Section;
+        (_area, _tabs) = path.StartsWith("/admin/rules/", StringComparison.OrdinalIgnoreCase) ? ("Rules", NavConfig.RulesTabs)
+            : path.StartsWith("/admin/process/", StringComparison.OrdinalIgnoreCase) ? ("Process", NavConfig.ProcessTabs)
+            : ("", (IReadOnlyList<NavItem>?)null);
+    }
+}

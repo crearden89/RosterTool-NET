@@ -1,0 +1,20 @@
+@* Port of src/components/ui/PageChips.tsx. *@
+@* Where a fortnight stands, beside the page title ("Approved · locked", "Published"). *@
+<span title="@Title" class="@Ui.Cx("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold whitespace-nowrap", ToneClasses.Status(Tone))">
+    @if (Icon == StatusIcon.Lock)
+    {
+        <Icon Name="IconName.Lock" Class="h-3.5 w-3.5" StrokeWidth="2.5" />
+    }
+    else if (Icon == StatusIcon.Check)
+    {
+        <Icon Name="IconName.Check" Class="h-3.5 w-3.5" StrokeWidth="3" />
+    }
+    @ChildContent
+</span>
+
+@code {
+    [Parameter] public StatusTone Tone { get; set; } = StatusTone.Green;
+    [Parameter] public StatusIcon Icon { get; set; } = StatusIcon.Check;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
