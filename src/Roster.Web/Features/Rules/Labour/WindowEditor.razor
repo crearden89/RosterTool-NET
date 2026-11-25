@@ -1,0 +1,124 @@
+@* Port of WindowEditor in src/app/(app)/admin/rules/labour/LabourRulesClient.tsx.
+   The chosen window: its day, times and quota, saved with UpdateWindowAsync, or
+   deleted. Edits stay here until saved; leaving the page asks first. *@
+@inject ILabourRulesService Service
+
+<LeaveGuard Id="window-editor" Dirty="Changed" />
+<div class="mt-3 rounded-xl border border-[var(--ui-control)] bg-[var(--ui-canvas)] p-4" role="group" aria-label="Change the window">
+    <div class="mb-3 flex items-center justify-between gap-2">
+        <p class="text-sm font-semibold text-[var(--ui-ink)]">
+            @(Group?.Label ?? Rule.LabourGroup) · @Period.DayLabels[Rule.DayOfWeek] @Rule.WindowStart–@Rule.WindowEnd
+        </p>
+        <button type="button" @onclick="Close" aria-label="Close the editor" class="@($"rounded-md p-1 text-[var(--ui-muted)] hover:bg-white {Ui.FocusRing}")">
+            <Icon Name="IconName.X" Class="h-4 w-4" />
+        </button>
+    </div>
+    <div class="flex flex-wrap items-end gap-3">
+        <label>
+            <span class="@Ui.FieldLabelClass">Day</span>
+            <select value="@_dow" @onchange="e => _dow = (int)Js.Number(e.Value?.ToString() ?? string.Empty)" class="@Ui.CompactField">
+                @for (var i = 0; i < Period.DayLabels.Count; i++)
+                {
+                    <option value="@i">@Period.DayLabels[i]</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span class="@Ui.FieldLabelClass">From</span>
+            <input type="time" value="@_start" @oninput="e => _start = e.Value?.ToString() ?? string.Empty" class="@Ui.CompactField" />
+        </label>
+        <label>
+            <span class="@Ui.FieldLabelClass">To</span>
+            <input type="time" value="@_end" @oninput="e => _end = e.Value?.ToString() ?? string.Empty" class="@Ui.CompactField" />
+        </label>
+        <label title="Optional hours quota: this window fills first, up to this many hours">
+            <span class="@Ui.FieldLabelClass">Hours first</span>
+            <input type="number" min="0.25" step="0.25" value="@_hours" @oninput="e => _hours = e.Value?.ToString() ?? string.Empty"
+                   placeholder="none" class="@($"w-20 text-right {Ui.CompactField}")" />
+        </label>
+        <span class="flex flex-wrap gap-2">
+            <button type="button" @onclick="SaveAsync" disabled="@(_busy || !Changed)" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">Save window</button>
+            <button type="button" @onclick="RemoveAsync" disabled="@_busy" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">Delete</button>
+            <button type="button" @onclick="Close" disabled="@_busy" class="@Ui.ButtonClass(ButtonKind.Quiet, ButtonSize.Sm)">Cancel</button>
+        </span>
+    </div>
+    @if (_error is not null)
+    {
+        <div class="mt-2">
+            <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+        </div>
+    }
+</div>
+
+@code {
+    private int _dow;
+    private string _start = "";
+    private string _end = "";
+    private string _hours = "";
+    private string? _error;
+    private bool _busy;
+
+    [Parameter, EditorRequired] public LabourWindowRow Rule { get; set; } = default!;
+
+    [Parameter] public WindowGroupChip? Group { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>After a save or delete: the page reads the windows again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string SavedHours => Rule.WindowHours is { } h ? Js.NumberToString(h) : "";
+
+    private bool Changed => _dow != Rule.DayOfWeek || _start != Rule.WindowStart || _end != Rule.WindowEnd || _hours != SavedHours;
+
+    // Keyed by the window: a new window gets a new editor, starting from what is saved.
+    protected override void OnInitialized()
+    {
+        _dow = Rule.DayOfWeek;
+        _start = Rule.WindowStart;
+        _end = Rule.WindowEnd;
+        _hours = SavedHours;
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            var res = await Service.UpdateWindowAsync(Rule.Id, _dow, _start, _end, Js.Trim(_hours) == "" ? null : Js.Number(_hours));
+            if (res.Ok)
+            {
+                await OnClose.InvokeAsync();
+                await OnChanged.InvokeAsync();
+            }
+            else _error = res.Error ?? "Could not save the window.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            var res = await Service.DeleteWindowAsync(Rule.Id);
+            if (res.Ok)
+            {
+                await OnClose.InvokeAsync();
+                await OnChanged.InvokeAsync();
+            }
+            else _error = res.Error ?? "Could not delete the window.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

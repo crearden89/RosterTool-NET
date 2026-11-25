@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Roster.Data.Feeds;
 
-public sealed class FeedsModule : IDataModule
+public sealed class FeedsDataModule : IDataModule
 {
     public void Register(IServiceCollection services, IConfiguration configuration)
     {
@@ -22,5 +22,7 @@ public sealed class FeedsModule : IDataModule
         services.TryAddScoped<IFeedStore, EfFeedStore>();
         services.TryAddScoped<IUploadIngest, UploadIngest>();
         services.TryAddScoped<ICurveSource, CurveSource>();
+        services.TryAddScoped<IUkgRosterFiles, UkgRosterFiles>();
+        services.TryAddScoped<IFeedTokens, FeedTokens>();
     }
 }
