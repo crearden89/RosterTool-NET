@@ -41,7 +41,7 @@ public sealed record CoverIssue(string Kind, double Start, double End);
 
 /// <summary>
 /// The two cover minimums (Pick&lt;RosteringRules, "minPeopleOnFloor" | "minAdultsWithJsa"&gt;).
-/// A RosteringRules converts to it implicitly.
+/// A RosteringRules (or the plan day check's Planning.Plan.CoverRules) converts to it implicitly.
 /// </summary>
 public sealed record CoverRules(double MinPeopleOnFloor, double MinAdultsWithJsa)
 {
@@ -50,7 +50,11 @@ public sealed record CoverRules(double MinPeopleOnFloor, double MinAdultsWithJsa
 
     public static CoverRules From(RosteringRules rules) => new(rules.MinPeopleOnFloor, rules.MinAdultsWithJsa);
 
-    public static implicit operator CoverRules(RosteringRules rules) => From(rules);
+    public static implicit operator CoverRules?(RosteringRules? rules) => rules == null ? null : From(rules);
+
+    /// <summary>The plan day check's cover option (DayHours.cs) carries the same two minimums.</summary>
+    public static implicit operator CoverRules?(Planning.Plan.CoverRules? rules) =>
+        rules == null ? null : new(rules.MinPeopleOnFloor, rules.MinAdultsWithJsa);
 }
 
 public static class Coverage
