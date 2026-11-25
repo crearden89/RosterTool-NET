@@ -107,10 +107,3 @@ public sealed class Stage1Loader(IRosterDbContextFactory contexts, IRefData refD
         return minutes.Select(m => (double)m).ToList();
     }
 }
-
-/// <summary>The POS-derived trade curve, until D3's AssembleCurveWeek lands: nothing that plans can run without it.</summary>
-public sealed class PendingTradeCurveSource : ITradeCurveSource
-{
-    public Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetTradeCurveWeekAsync(Guid storeId, CancellationToken ct = default) =>
-        throw new NotImplementedException("getTradeCurveWeek needs D3's AssembleCurveWeek (lib/csv/posAllocation).");
-}

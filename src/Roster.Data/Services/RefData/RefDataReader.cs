@@ -5,7 +5,9 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Roster.Data.Feeds;
 using Roster.Data.Services.Cache;
+using Roster.Data.Services.Planning;
 using Roster.Engine.Core;
 using Roster.Engine.Pay;
 using Roster.Engine.Planning;
@@ -22,9 +24,9 @@ namespace Roster.Data.Services.RefData;
 /// Where the TypeScript read a table with no ORDER BY, rows are taken in a fixed order
 /// (see the agent notes' DIFFS): the same rows, never a different set.
 /// </summary>
-public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IRefData
+public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IRefData, ITradeCurveSource
 {
-    private static string Hms(TimeOnly t) => t.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+    internal static string Hms(TimeOnly t) => t.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 
     /// <summary>timeToMin of the "HH:MM:SS" text Postgres gave for a time column.</summary>
     internal static double Min(TimeOnly t) => Grid.TimeToMin(Hms(t));
@@ -449,16 +451,42 @@ public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IR
             return byDow;
         });
 
-    // The measured trade behind the curve (pos_interval_stats), read once per store
-    // per request: the Load Running start rule's customer figure.
-    public Task<IReadOnlyList<PosCustomerRow>> GetPosCustomerRowsAsync(Guid storeId, CancellationToken ct = default) =>
-        RequestMemo.Cached<IReadOnlyList<PosCustomerRow>>("refdata.getPosCustomerRows", [storeId], async () =>
+    // ─── POS interval statistics ─────────────────────────────────────────────
+    // The measured trade behind the curve (pos_interval_stats). One read per store
+    // per request - a four-week sample is ~1,400 rows - shared by everything that
+    // reads it: the trade-curve derivation and the Load Running start rule's
+    // customer figure.
+    public Task<IReadOnlyList<PosQuarterHourRow>> GetPosIntervalRowsAsync(Guid storeId, CancellationToken ct = default) =>
+        RequestMemo.Cached<IReadOnlyList<PosQuarterHourRow>>("refdata.getPosIntervalRows", [storeId], async () =>
         {
             await using var db = contexts.Create();
             var rows = await db.PosIntervalStats.AsNoTracking().Where(p => p.StoreId == storeId)
                 .OrderBy(p => p.Date).ThenBy(p => p.BlockTime)
-                .Select(p => new { p.Date, p.BlockTime, p.McoCustomers, p.ScoCustomers })
+                .Select(p => new { p.Date, p.BlockTime, p.McoCustomers, p.ScoCustomers, p.McoItems, p.ScoItems })
                 .ToListAsync(ct);
-            return rows.Select(r => new PosCustomerRow(r.Date, Min(r.BlockTime), r.McoCustomers + r.ScoCustomers)).ToList();
+            var code = storeId.ToString("D");
+            return rows.Select(r => new PosQuarterHourRow(0, code, r.Date, Hms(r.BlockTime), r.McoCustomers, r.ScoCustomers, r.McoItems, r.ScoItems)).ToList();
+        });
+
+    public Task<IReadOnlyList<PosCustomerRow>> GetPosCustomerRowsAsync(Guid storeId, CancellationToken ct = default) =>
+        RequestMemo.Cached<IReadOnlyList<PosCustomerRow>>("refdata.getPosCustomerRows", [storeId], async () =>
+            (await GetPosIntervalRowsAsync(storeId, ct))
+                .Select(r => new PosCustomerRow(r.Date, Grid.TimeToMin(r.BlockTime), r.McoCustomers + r.ScoCustomers)).ToList());
+
+    // ─── The trade curve a store plans with ──────────────────────────────────
+    // Derived at READ time from the POS interval statistics (public holidays and
+    // zero-trade dates excluded), per weekday, falling back per weekday to the
+    // legacy quarter_hour_allocation rows for stores whose POS export has not
+    // been loaded yet. This is THE curve source: the Till engine, the Stage 1
+    // placement curve and the plan page's trade-curve card all read it, so a new
+    // POS upload changes every one of them at the next request with no derived
+    // write in between.
+    public Task<IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>>> GetTradeCurveWeekAsync(Guid storeId, CancellationToken ct = default) =>
+        RequestMemo.Cached("refdata.getTradeCurveWeek", [storeId], async () =>
+        {
+            var pos = await GetPosIntervalRowsAsync(storeId, ct);
+            var legacyWeek = await GetQuarterHourWeekAsync(storeId, ct);
+            var holidays = await GetHolidaySetAsync(storeId, ct);
+            return PosAllocation.AssembleCurveWeek(pos, legacyWeek.Values.SelectMany(v => v), holidays);
         });
 }
