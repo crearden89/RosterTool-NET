@@ -1,6 +1,10 @@
 // Port of bulkUploadNonOpEntries in src/app/(app)/admin/non-op-categories/actions.ts.
 
+using Microsoft.EntityFrameworkCore;
 using Roster.Data;
+using Roster.Data.Entities;
+using Roster.Data.Feeds;
+using Roster.Engine.Core;
 using Roster.Data.Scope;
 using Roster.Web.Features.Admin.Shared;
 
@@ -26,12 +30,80 @@ public interface INonOpEntryUpload
 
 internal sealed class NonOpEntryUpload(IRosterDbContextFactory contexts, IStoreScope scope) : INonOpEntryUpload
 {
-    public Task<NonOpUploadResult> BulkUploadNonOpEntriesAsync(string csvText, CancellationToken ct = default)
+    private static readonly string[] Required = ["Day", "NonOpHoursCategory", "NonOpHoursSubCategory", "Minutes", "Store ID"];
+
+    public async Task<NonOpUploadResult> BulkUploadNonOpEntriesAsync(string csvText, CancellationToken ct = default)
     {
         scope.RequireSuperUser();
-        _ = contexts;
-        // Reads the file with lib/csv/parse (parseCsv, missingHeaders, cell, num,
-        // toIsoDate), which D3 is porting to Roster.Data/Feeds.
-        throw new NotImplementedException("Waits for D3's port of lib/csv/parse.");
+        var (headers, rows) = CsvParse.ParseCsv(csvText);
+        var missing = CsvParse.MissingHeaders(headers, Required);
+        if (missing.Count > 0) return new NonOpUploadResult(false, $"Missing required column(s): {string.Join(", ", missing)}");
+        if (rows.Count == 0) return new NonOpUploadResult(false, "No rows found in the file.");
+
+        await using var db = contexts.CreateSystem("Non-Op Categories: bulk upload of entries");
+        var storeByCode = new Dictionary<string, Guid>();
+        foreach (var s in await db.Stores.AsNoTracking().Select(s => new { s.Id, s.Code }).ToListAsync(ct))
+            storeByCode[s.Code.ToUpperInvariant()] = s.Id;
+        var catByName = new Dictionary<string, Guid>();
+        foreach (var c in await db.NonOpCategories.AsNoTracking().Select(c => new { c.Id, c.Name }).ToListAsync(ct))
+            catByName[Js.Trim(c.Name).ToLowerInvariant()] = c.Id;
+        var subByCatAndName = new Dictionary<string, Guid>();
+        foreach (var s in await db.NonOpSubcategories.AsNoTracking().Select(s => new { s.Id, s.CategoryId, s.Name }).ToListAsync(ct))
+            subByCatAndName[$"{s.CategoryId}:{Js.Trim(s.Name).ToLowerInvariant()}"] = s.Id;
+
+        var rowErrors = new List<NonOpRowError>();
+        var inserts = new List<NonOpEntry>();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            var rowNo = i + 2; // 1-based + header row
+            var date = CsvParse.ToIsoDate(CsvParse.Cell(row, "Day"));
+            if (date is null || !AdminParse.TryDate(date, out var day))
+            {
+                rowErrors.Add(new NonOpRowError(rowNo, $"Day '{CsvParse.Cell(row, "Day") ?? ""}' is not a valid DD/MM/YYYY date"));
+                continue;
+            }
+            var storeCode = StoreIds.FormatStoreId(CsvParse.Cell(row, "Store ID") ?? "");
+            if (!storeByCode.TryGetValue(storeCode.ToUpperInvariant(), out var storeId))
+            {
+                rowErrors.Add(new NonOpRowError(rowNo, $"Unknown store '{CsvParse.Cell(row, "Store ID") ?? ""}'"));
+                continue;
+            }
+            var catName = Js.Trim(CsvParse.Cell(row, "NonOpHoursCategory") ?? "");
+            if (!catByName.TryGetValue(catName.ToLowerInvariant(), out var catId))
+            {
+                rowErrors.Add(new NonOpRowError(rowNo, $"Unknown category '{catName}'"));
+                continue;
+            }
+            var subName = Js.Trim(CsvParse.Cell(row, "NonOpHoursSubCategory") ?? "");
+            if (!subByCatAndName.TryGetValue($"{catId}:{subName.ToLowerInvariant()}", out var subId))
+            {
+                rowErrors.Add(new NonOpRowError(rowNo, $"Unknown sub-category '{subName}' under '{catName}'"));
+                continue;
+            }
+            var minutes = Js.Round(CsvParse.Num(row, "Minutes"));
+            if (!double.IsFinite(minutes) || minutes <= 0)
+            {
+                rowErrors.Add(new NonOpRowError(rowNo, $"Minutes '{CsvParse.Cell(row, "Minutes") ?? ""}' must be a positive number"));
+                continue;
+            }
+            inserts.Add(new NonOpEntry
+            {
+                StoreId = storeId,
+                Date = day,
+                SubcategoryId = subId,
+                EmployeeId = null,
+                Minutes = (int)minutes,
+                Description = CsvParse.Cell(row, "Description") ?? "",
+            });
+        }
+
+        if (inserts.Count > 0)
+        {
+            db.NonOpEntries.AddRange(inserts);
+            var saved = await AdminDb.WriteAsync(() => db.SaveChangesAsync(ct));
+            if (!saved.Ok) return new NonOpUploadResult(false, saved.Error, null, rowErrors);
+        }
+        return new NonOpUploadResult(true, null, inserts.Count, rowErrors);
     }
 }

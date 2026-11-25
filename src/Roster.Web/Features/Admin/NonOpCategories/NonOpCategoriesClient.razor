@@ -1,0 +1,47 @@
+@* Port of NonOpCategoriesClient in src/app/(app)/admin/non-op-categories/NonOpCategoriesClient.tsx.
+   Each category and sub-category is added, renamed, changed or deleted on its own, as
+   before. A form closes only once its save is accepted, so a refused one keeps what
+   was typed; an open form counts as an unsaved change when leaving the page. *@
+@inject INonOpCategoriesService Service
+
+<LeaveGuard Id="new-category" Dirty="@(Js.Trim(_newCat) != "")" />
+<SettingsSection Id="categories">
+    <Title>Categories</Title>
+    <Purpose>Each sub-category carries a default time (pre-filled when a store records it), an optional maximum, and - for items with no fixed time - a note naming who approves it.</Purpose>
+    <ChildContent>
+        <div class="flex flex-wrap items-center gap-2">
+            <input placeholder="New category name" aria-label="New category name" @bind="_newCat" @bind:event="oninput" class="@Ui.CompactField" />
+            <button type="button" @onclick="AddCategoryAsync" disabled="@(_pending || Js.Trim(_newCat) == "")" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                <Icon Name="IconName.Plus" Class="h-3.5 w-3.5" aria-hidden="true" /> Add category
+            </button>
+            @if (_msg is not null)
+            {
+                <FormMessage Tone="@(_msg.StartsWith("Error") ? FormMessageTone.Error : FormMessageTone.Ok)">@_msg</FormMessage>
+            }
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+@foreach (var c in View.Categories)
+{
+    <CategoryPanel @key="c.Id" Category="c" Subs="@View.Subs.Where(s => s.CategoryId == c.Id).ToList()" Reload="Reload" />
+}
+
+@code {
+    [Parameter, EditorRequired] public NonOpCategoriesView View { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback Reload { get; set; }
+
+    private string _newCat = "";
+    private bool _pending;
+    private string? _msg;
+
+    private async Task AddCategoryAsync()
+    {
+        _pending = true;
+        var res = await Service.AddCategoryAsync(_newCat);
+        if (res.Ok) _newCat = "";
+        _msg = res.Ok ? null : $"Error: {res.Error}";
+        if (res.Ok) await Reload.InvokeAsync();
+        _pending = false;
+    }
+}

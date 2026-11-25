@@ -1,0 +1,80 @@
+@* Port of src/components/nonop/NonOpBulkUpload.tsx: spreadsheet upload for Non-Op
+   entries, matching the columns the client's current system exports. SUPER USER ONLY
+   (the action enforces it): stores record their own hours one entry at a time, so no
+   store can post a batch against another store or backdate one. *@
+@inject INonOpEntryUpload Upload
+
+<SettingsSection Id="bulk">
+    <Title>Bulk upload Non-Op entries</Title>
+    <Purpose>Add many stores' Non-Op entries at once from your current system's export. Entries are added as the file is read.</Purpose>
+    <ChildContent>
+        <p class="text-sm text-[var(--ui-muted)]">
+            CSV with the columns your current system exports:
+            <code class="rounded bg-[var(--ui-canvas)] px-1 py-0.5 text-xs">Day (DD/MM/YYYY), NonOpHoursCategory, NonOpHoursSubCategory, Description, Minutes, Store ID</code>.
+            @(ScopeNote ?? "") Rows are added, not replaced — clear a day first if you&apos;re re-uploading it. (Save an Excel sheet as CSV first.)
+        </p>
+
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+            @if (_busy)
+            {
+                <button type="button" disabled class="@Ui.ButtonClass(ButtonKind.Primary)">Uploading…</button>
+            }
+            else
+            {
+                @* The label opens the hidden file input, as the button did. *@
+                <label class="@($"{Ui.ButtonClass(ButtonKind.Primary)} cursor-pointer")">
+                    Choose CSV file
+                    <InputFile @key="_inputVersion" accept=".csv,text/csv" class="hidden" OnChange="OnFileAsync" />
+                </label>
+            }
+            @if (_result is { Accepted: { } accepted, Error: null })
+            {
+                <span role="status" class="@($"text-sm font-medium {(accepted > 0 ? "text-[var(--ui-good)]" : "text-[var(--ui-muted)]")}")">
+                    @($"{accepted} entr{(accepted == 1 ? "y" : "ies")} added{(_result.RowErrors is { Count: > 0 } re ? $" · {re.Count} row(s) rejected" : "")}")
+                </span>
+            }
+            @if (_result?.Error is { } error)
+            {
+                <span role="alert" class="text-sm font-medium text-[var(--ui-bad)]">Error: @error</span>
+            }
+        </div>
+
+        @if (_result?.RowErrors is { Count: > 0 } rowErrors)
+        {
+            <ul class="mt-3 max-h-48 list-disc overflow-y-auto rounded-xl bg-[var(--brand-red-tint)] px-6 py-3 text-xs text-[var(--ui-bad)]">
+                @foreach (var e in rowErrors.Take(50))
+                {
+                    <li @key="e.Row">Row @e.Row: @e.Message</li>
+                }
+                @if (rowErrors.Count > 50)
+                {
+                    <li>…and @(rowErrors.Count - 50) more</li>
+                }
+            </ul>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    /// <summary>The line about which stores the file may name.</summary>
+    [Parameter] public string? ScopeNote { get; set; }
+
+    private bool _busy;
+    private NonOpUploadResult? _result;
+    private int _inputVersion;
+
+    private async Task OnFileAsync(InputFileChangeEventArgs e)
+    {
+        var f = e.File;
+        _busy = true;
+        _result = null;
+        StateHasChanged();
+        string text;
+        await using (var stream = f.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024))
+        using (var reader = new StreamReader(stream))
+            text = await reader.ReadToEndAsync();
+        _result = await Upload.BulkUploadNonOpEntriesAsync(text);
+        _busy = false;
+        _inputVersion++; // a fresh input, so the same file can be chosen again
+    }
+}
