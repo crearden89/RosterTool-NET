@@ -1,0 +1,111 @@
+@* Port of src/app/floor/[token]/page.tsx and AutoRefresh.tsx.
+   Public, no-login Floor Display (spec 11.10): the wall screen in the store,
+   reached by the store's secret kiosk link. ?date= shows another day (no now,
+   no ticking); ?view=notes is the walk notes form. *@
+@page "/floor/{Token}"
+@attribute [AllowAnonymous]
+@layout KioskLayout
+@implements IDisposable
+@inject IKioskLinkCheck KioskLinks
+@inject IFloorService Floor
+@inject NavigationManager Navigation
+@inject ILogger<FloorPage> Log
+
+@if (data?.Notes is { } notes)
+{
+    @* No auto-refresh here: a refresh mid-typing would wipe an unsaved note,
+       and there is nothing clock-driven on this screen to keep fresh. *@
+    <div class="floor-screen floor-notesView">
+        <FloorHeader Info="notes.Header">
+            <Right>
+                <a href="@notes.BackHref" class="floor-btn floor-solid floor-back">Back to the floor</a>
+            </Right>
+        </FloorHeader>
+        @if (notes.Drift is { } drift)
+        {
+            <DriftBanner Drift="drift" />
+        }
+        <WalkNotes Token="@Token" Items="notes.Notes" Crew="notes.Crew" Today="notes.Today" CompletedToday="notes.CompletedToday"
+                   OnChanged="ReloadAsync" />
+    </div>
+}
+else if (data?.Screen is { } screen)
+{
+    <FloorScreen Token="@Token" View="screen" OnChanged="ReloadAsync" />
+}
+
+@code {
+    /// <summary>
+    /// The kiosk hangs on a wall - nobody presses reload. The page reads itself
+    /// again on an interval so the clock, the line at the current time, the
+    /// pale-yellow next-2-hours band and everyone's now/next track it on their own.
+    /// </summary>
+    public static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(300);
+
+    [Parameter] public string Token { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "date")] public string? Date { get; set; }
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
+    private FloorPageData? data;
+    private Timer? refresh;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await ReadAsync()) return;
+        if (RendererInfo.IsInteractive) KeepRefreshing(data?.Screen is not null);
+    }
+
+    // The page's server render: the link check, then the day's reads. False when
+    // the link sent the page elsewhere.
+    private async Task<bool> ReadAsync()
+    {
+        var link = await KioskLinks.CheckAsync(Token);
+        if (link.Status == KioskLinkStatus.NotFound)
+        {
+            data = null;
+            Navigation.NotFound();
+            return false;
+        }
+        if (link.Status == KioskLinkStatus.SignInRequired)
+        {
+            Navigation.NavigateTo(KioskLinks.SignInUrl(Navigation), forceLoad: true);
+            return false;
+        }
+        data = await Floor.LoadAsync(Token, link, Date, View);
+        return true;
+    }
+
+    // After a tick, a note or Undo: the TypeScript's router.refresh().
+    private async Task ReloadAsync()
+    {
+        await ReadAsync();
+        StateHasChanged();
+    }
+
+    private void KeepRefreshing(bool on)
+    {
+        if (on && refresh is null)
+            refresh = new Timer(_ => InvokeAsync(RefreshAsync), null, RefreshEvery, RefreshEvery);
+        else if (!on && refresh is not null)
+        {
+            refresh.Dispose();
+            refresh = null;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        // A refresh that fails (the database briefly away) leaves the screen as it
+        // was, as a failed router.refresh() does; the next one tries again.
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception e)
+        {
+            Log.LogWarning(e, "Floor Display refresh failed for a kiosk link; keeping the screen as it was");
+        }
+    }
+
+    public void Dispose() => refresh?.Dispose();
+}

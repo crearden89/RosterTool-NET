@@ -1,0 +1,60 @@
+@* Port of FloorScreen in src/app/floor/[token]/FloorScreen.tsx.
+   The wall screen: who is on, what they are doing now and next, the whole
+   staffed day as task bars, the day's admin tasks and walk notes, and the
+   truck. The page's 5-minute refresh moves the clock on. *@
+
+<div class="floor-screen @(View.Header.OtherDay ? "floor-otherDay" : "")" style="@Vars">
+    <FloorHeader Info="View.Header" />
+    @if (View.Drift is { } drift)
+    {
+        <DriftBanner Drift="drift" />
+    }
+    <div class="floor-main">
+        <section class="floor-left" aria-label="Roster">
+            @if (View.Span is { } span && View.Rows.Count > 0 && View.EmptyMessage is null)
+            {
+                <FloorTimeline Rows="View.Rows" Span="span" Now="View.Now" Premium="View.Premium" OtherDay="View.Header.OtherDay" />
+            }
+            else
+            {
+                <div class="floor-empty">
+                    @(View.EmptyMessage?.Title ?? "No approved roster for today.")
+                    @if (!string.IsNullOrEmpty(View.EmptyMessage?.Detail))
+                    {
+                        <small>@View.EmptyMessage.Detail</small>
+                    }
+                </div>
+            }
+        </section>
+        <aside class="floor-side" aria-label="Admin tasks and walk notes">
+            @if (View.AdminTasks.Count > 0)
+            {
+                <AdminTaskChecklist Token="@Token" Tasks="View.AdminTasks" CheckedNames="View.CheckedNames" CanTick="View.CanTick" OnChanged="OnChanged" />
+            }
+            <WalkNotesPanel Token="@Token" Items="View.Notes" Today="View.Today" NotesHref="@View.NotesHref" OnChanged="OnChanged" />
+        </aside>
+    </div>
+    <LoadStrip Load="View.Load" OtherDay="View.Header.OtherDay" Href="@View.LoadHref" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Token { get; set; } = "";
+    [Parameter, EditorRequired] public FloorScreenView View { get; set; } = default!;
+
+    /// <summary>Reads the page again (the TypeScript's router.refresh()).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // The row sizes for the number of people on (FloorModel.RowScaleFor), as the
+    // stylesheet's custom properties.
+    private string Vars
+    {
+        get
+        {
+            var s = View.Scale;
+            var n = FloorTiles.N;
+            return $"--n: {n(Math.Max(1, View.Rows.Count))}; --min-row: {n(FloorModel.MinRow)}; --max-row: {n(FloorModel.MaxRow)}; " +
+                   $"--fs-name: {n(s.Name)}; --fs-tag: {n(s.Tag)}; --fs-time: {n(s.Time)}; --pill-h: {n(s.Pill)}; " +
+                   $"--fs-pill: {n(s.PillFont)}; --pill-px: {n(s.PillPad)}; --now-gap: {n(s.Gap)}; --fs-next: {n(s.Next)}; --bar: {n(s.Bar)}";
+        }
+    }
+}

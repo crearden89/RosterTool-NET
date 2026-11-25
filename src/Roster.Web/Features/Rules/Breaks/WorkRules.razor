@@ -1,0 +1,129 @@
+@* Port of WorkRules in src/app/(app)/admin/rules/breaks/BreakRulesClient.tsx.
+   The award limits by role, saved as one table (SaveAsync) from the page's
+   save bar. *@
+@inject IBreakRulesService Service
+
+<SettingsSection Id="work-rules" Flush="true">
+    <Title>Shifts and breaks</Title>
+    <Purpose>The award limits every shift is cut and costed against: break entitlements, shift lengths, rest gaps and the weekly and consecutive-day caps.</Purpose>
+    <ChildContent>
+        <SaveSlot Id="work-rules" Changes="Changes" Save="SaveAsync" Discard="Discard" />
+        <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Role</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Min shift</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Max shift</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Gap (h)</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Weekly cap</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Consec days</th>
+                        <th class="@Ui.Table.Th">Break rule</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _draft.Value)
+                    {
+                        var role = r.Role;
+                        <tr @key="role" class="@Ui.Table.Row">
+                            <td class="@($"{Ui.Table.Td} font-semibold whitespace-nowrap")">
+                                @role <span class="text-xs font-normal text-[var(--ui-muted)]">@Roles.Labels.GetValueOrDefault(role)</span>
+                            </td>
+                            <td class="@($"{Ui.Table.Td} text-right")">
+                                <input type="number" step="0.5" aria-label="@($"{role} minimum shift hours")" value="@Js.NumberToString(r.MinShiftHours)"
+                                       @oninput="e => Set(role, x => x with { MinShiftHours = Num(e) })" class="@NumClass" />
+                            </td>
+                            <td class="@($"{Ui.Table.Td} text-right")">
+                                <input type="number" step="0.5" aria-label="@($"{role} maximum shift hours")" value="@Js.NumberToString(r.MaxShiftHours)"
+                                       @oninput="e => Set(role, x => x with { MaxShiftHours = Num(e) })" class="@NumClass" />
+                            </td>
+                            <td class="@($"{Ui.Table.Td} text-right")">
+                                <input type="number" step="0.5" aria-label="@($"{role} rest gap hours")" value="@Js.NumberToString(r.GapHours)"
+                                       @oninput="e => Set(role, x => x with { GapHours = Num(e) })" class="@NumClass" />
+                            </td>
+                            <td class="@($"{Ui.Table.Td} text-right")">
+                                <input type="number" step="1" aria-label="@($"{role} weekly cap")" value="@Text(r.WeeklyCap)"
+                                       @oninput="e => Set(role, x => x with { WeeklyCap = Num(e) })" class="@NumClass" />
+                            </td>
+                            <td class="@($"{Ui.Table.Td} text-right")">
+                                <input type="number" step="1" aria-label="@($"{role} consecutive days")" value="@Text(r.ConsecDayCap)"
+                                       @oninput="e => Set(role, x => x with { ConsecDayCap = Num(e) })" class="@NumClass" />
+                            </td>
+                            <td class="@Ui.Table.Td">
+                                <select aria-label="@($"{role} break rule")" value="@r.BreakType"
+                                        @onchange="e => Set(role, x => x with { BreakType = e.Value?.ToString() ?? x.BreakType })" class="@Ui.CompactField">
+                                    <option value="flat_30_unpaid">30 min unpaid (flat)</option>
+                                    <option value="tiered">Tiered by length</option>
+                                </select>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_error is not null)
+        {
+            <div class="border-t border-[var(--ui-line)] px-5 py-3 sm:px-6">
+                <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private const string NumClass = "w-20 text-right " + Ui.CompactField;
+
+    private FormDraft<IReadOnlyList<BreakRuleInput>> _draft = new([]);
+    private bool _started;
+    private string? _error;
+
+    /// <summary>The table as saved.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<BreakRuleInput> Rules { get; set; } = [];
+
+    /// <summary>After a save: the page reads the table again.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private int Changes => SaveBar.CountChanged(_draft.Base, _draft.Value,
+        r => r.MinShiftHours, r => r.MaxShiftHours, r => r.GapHours, r => r.WeeklyCap, r => r.ConsecDayCap, r => r.BreakType);
+
+    protected override void OnParametersSet()
+    {
+        if (!_started)
+        {
+            _draft = new FormDraft<IReadOnlyList<BreakRuleInput>>(Rules);
+            _started = true;
+        }
+        else _draft.Sync(Rules);
+    }
+
+    // Number(e.target.value): a blank box reads 0.
+    private static double Num(ChangeEventArgs e) => Js.Number(e.Value?.ToString() ?? "");
+
+    private static string Text(double? v) => v is { } n ? Js.NumberToString(n) : "";
+
+    private void Set(string role, Func<BreakRuleInput, BreakRuleInput> patch) =>
+        _draft.Set(rows => rows.Select(r => r.Role == role ? patch(r) : r).ToList());
+
+    private async Task<bool> SaveAsync()
+    {
+        var sent = _draft.Value;
+        var res = await Service.SaveAsync(sent);
+        if (!res.Ok)
+        {
+            _error = $"Error: {res.Error}";
+            StateHasChanged();
+            return false;
+        }
+        _error = null;
+        _draft.Commit(sent);
+        await OnSaved.InvokeAsync();
+        StateHasChanged();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _error = null;
+    }
+}
