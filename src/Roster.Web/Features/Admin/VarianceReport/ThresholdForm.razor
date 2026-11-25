@@ -1,0 +1,58 @@
+@* Port of src/app/(app)/admin/variance-report/ThresholdForm.tsx: the three variance
+   thresholds, saved by their own button as before (the report around them is
+   read-only). data_light_pct also drives the dashboard's Data light. *@
+@inject IVarianceReportService Service
+
+<LeaveGuard Id="variance-thresholds" Dirty="@Changed" />
+<div class="flex flex-wrap items-end gap-4">
+    <label title="Dashboard Data light: every metric must sit within this % of benchmark to show green">
+        <span class="@Ui.FieldLabelClass">Data light ±%</span>
+        <input type="number" min="0" max="100" class="@Inp" value="@Js.NumberToString(_light)" @oninput="@(e => _light = Js.Number(e.Value?.ToString()))" />
+    </label>
+    <label title="Sales / items exceptions on this report">
+        <span class="@Ui.FieldLabelClass">Metrics ±%</span>
+        <input type="number" min="0" max="500" class="@Inp" value="@Js.NumberToString(_metric)" @oninput="@(e => _metric = Js.Number(e.Value?.ToString()))" />
+    </label>
+    <label title="Labour-hour exceptions on this report">
+        <span class="@Ui.FieldLabelClass">Hours ±%</span>
+        <input type="number" min="0" max="500" class="@Inp" value="@Js.NumberToString(_hours)" @oninput="@(e => _hours = Js.Number(e.Value?.ToString()))" />
+    </label>
+    <button type="button" disabled="@_saving" @onclick="SaveAsync" class="@Ui.ButtonClass(ButtonKind.Primary)">@(_saving ? "Saving…" : "Save thresholds")</button>
+    @if (_err is not null)
+    {
+        <FormMessage Tone="FormMessageTone.Error">@_err</FormMessage>
+    }
+</div>
+
+@code {
+    private static readonly string Inp = $"w-20 {Ui.CompactField}";
+
+    [Parameter, EditorRequired] public VarianceThresholds Saved { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback Reload { get; set; }
+
+    private double _light, _metric, _hours;
+    private bool _started, _saving;
+    private string? _err;
+
+    protected override void OnParametersSet()
+    {
+        if (_started) return;
+        (_light, _metric, _hours) = (Saved.DataLightPct, Saved.MetricPct, Saved.HoursPct);
+        _started = true;
+    }
+
+    private bool Changed => _light != Saved.DataLightPct || _metric != Saved.MetricPct || _hours != Saved.HoursPct;
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        var res = await Service.SaveVarianceSettingsAsync(_light, _metric, _hours);
+        if (!res.Ok) _err = res.Error ?? "Save failed";
+        else
+        {
+            _err = null;
+            await Reload.InvokeAsync();
+        }
+        _saving = false;
+    }
+}

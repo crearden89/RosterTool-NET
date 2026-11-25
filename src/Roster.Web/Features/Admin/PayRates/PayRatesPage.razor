@@ -1,0 +1,19 @@
+@page "/admin/pay-rates"
+@* Port of src/app/(app)/admin/pay-rates/page.tsx. *@
+@inject IPayRatesService Service
+
+<div>
+    <PageHeader Title="Pay Rate Table" />
+    @if (_view is { } view)
+    {
+        <PaySettingsCard Settings="view.Settings" TaxRates="view.TaxRates" />
+        <RateGridEditor Rates="view.Rates" Positions="view.Positions" />
+    }
+</div>
+
+@code {
+    private PayRatesView? _view;
+
+    // The whole grid: a partial read would show every position past the cut as zero.
+    protected override async Task OnInitializedAsync() => _view = await Service.LoadAsync();
+}

@@ -1,0 +1,122 @@
+@page "/admin/uploads"
+@* Port of src/app/(app)/admin/uploads/page.tsx. *@
+
+@inject IUploadsService Service
+
+<div>
+    <SettingsHeader Area="Data" Title="Uploads">
+        <Subtitle>The benchmark, actuals, leave, contact and POS files the planner reads · applies to every store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        <SettingsSection Id="upload">
+            <Title>Upload a file</Title>
+            <Purpose>Check a file first, then import it. Nothing is written until you import.</Purpose>
+            <Aside>
+                <div class="text-right">
+                    <span class="text-2xl font-bold text-[var(--ui-ink)] tabular-nums">@_view.ExpectedStores</span>
+                    <span class="text-sm text-[var(--ui-muted)]">expected store@(_view.ExpectedStores == 1 ? "" : "s")</span>
+                    <p class="text-xs text-[var(--ui-muted)]">opening date on or before today</p>
+                </div>
+            </Aside>
+            <ChildContent>
+                <Uploader Committed="ReloadAsync" />
+            </ChildContent>
+        </SettingsSection>
+
+        <SettingsSection Id="recent" Flush="true">
+            <Title>Recent uploads</Title>
+            <Purpose>The last 20 files, with how many rows each one loaded.</Purpose>
+            <ChildContent>
+                <p class="px-5 pb-4 text-xs text-[var(--ui-muted)] sm:px-6">
+                    Rows / Accepted / Rejected count data rows in the file (a benchmark file has ~14 rows per
+                    store; the leave exports are network-wide, so one file covers every store). Expand a batch
+                    with rejections to see why each row was rejected.
+                </p>
+                <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                    <table class="@Ui.Table.Element">
+                        <thead class="@Ui.Table.Head">
+                            <tr>
+                                <th class="@Ui.Table.Th">Type</th>
+                                <th class="@Ui.Table.Th">File</th>
+                                <th class="@Ui.Table.Th">Uploaded</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">Rows</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">Accepted</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">Rejected</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_view.Batches.Count == 0)
+                            {
+                                <tr><td colspan="6" class="@Ui.Table.Empty">No uploads yet.</td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var b in _view.Batches)
+                                {
+                                    <tr @key="b.Id" class="@($"{Ui.Table.Row} align-top")">
+                                        <td class="@Ui.Table.Td">@(global::Roster.Engine.Core.UploadTypes.Labels.TryGetValue(b.Type, out var label) ? label : b.Type)</td>
+                                        <td class="@Ui.Table.Td">@b.Filename</td>
+                                        <td class="@Ui.Table.Td">@Dates.AuDateTime(b.UploadedAt)</td>
+                                        <td class="@($"{Ui.Table.Td} text-right")">@b.TotalRows</td>
+                                        <td class="@($"{Ui.Table.Td} text-right text-[var(--ui-good)]")">@b.AcceptedRows</td>
+                                        <td class="@($"{Ui.Table.Td} text-right")">
+                                            @* A report can exist with nothing rejected: a write that stopped
+                                               after every row had landed. *@
+                                            @if (b.Errors.Count > 0)
+                                            {
+                                                <details>
+                                                    <summary class="cursor-pointer text-[var(--ui-bad)]">@b.RejectedRows</summary>
+                                                    <div class="mt-2 max-h-60 min-w-[280px] overflow-y-auto rounded-lg border border-[var(--ui-line)] text-left">
+                                                        <table class="w-full text-xs">
+                                                            <thead class="@Ui.Table.Head">
+                                                                <tr>
+                                                                    <th class="px-2 py-1">Row</th>
+                                                                    <th class="px-2 py-1">Store</th>
+                                                                    <th class="px-2 py-1">Field</th>
+                                                                    <th class="px-2 py-1">Reason</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach (var e in b.Errors)
+                                                                {
+                                                                    <tr class="@Ui.Table.Row">
+                                                                        <td class="px-2 py-1">@(e.Row > 0 ? e.Row.ToString() : "-")</td>
+                                                                        <td class="px-2 py-1">@(e.StoreCode ?? "-")</td>
+                                                                        <td class="px-2 py-1">@(e.Field ?? "-")</td>
+                                                                        <td class="px-2 py-1 text-[var(--ui-bad)]">@e.Message</td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </details>
+                                            }
+                                            else
+                                            {
+                                                <span class="@(b.RejectedRows > 0 ? "text-[var(--ui-bad)]" : null)">@b.RejectedRows</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </ChildContent>
+        </SettingsSection>
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("upload", "Upload a file"),
+        new("recent", "Recent uploads"),
+    ];
+
+    private UploadsView _view = new([], 0);
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync() => _view = await Service.LoadAsync();
+}

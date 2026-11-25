@@ -1,0 +1,183 @@
+@* Port of src/app/(app)/admin/pay-rates/PayRatesClient.tsx: the pay-rate grid, one day
+   type and one group of positions at a time. Saving sends only the cells that changed
+   (lib/payroll/rateGrid), so an untouched cell is never written. *@
+@using global::Roster.Engine.Pay
+@inject IPayRatesService Service
+
+<div>
+    <div class="mb-2 flex flex-wrap gap-2">
+        @foreach (var dt in DayTypes)
+        {
+            <button @key="dt" @onclick="() => _tab = dt" class="@TabBtn(_tab == dt)">@DayTypeLabels[dt]</button>
+        }
+    </div>
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+        @foreach (var g in Groups)
+        {
+            <button @key="g.Key" @onclick="() => _group = g.Key" class="@TabBtn(_group == g.Key)">@g.Label</button>
+        }
+        <span class="text-xs text-[var(--brand-navy)]/50">Editing @DayTypeLabels[_tab] · Save writes every position, not just this group</span>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-[var(--brand-border)] bg-white">
+        <table class="text-sm">
+            <thead class="ui-thead">
+                <tr>
+                    <th class="px-3 py-2 text-left font-medium">Hour</th>
+                    @foreach (var p in Cols)
+                    {
+                        <th @key="p.Code" class="px-3 py-2 font-medium" title="@p.Label">@ShortLabel(p)</th>
+                    }
+                </tr>
+                <tr class="border-t border-[var(--ui-line)]">
+                    <th class="px-3 py-1 text-left text-xs font-normal normal-case tracking-normal">Fill all hours →</th>
+                    @foreach (var p in Cols)
+                    {
+                        var code = p.Code;
+                        <th @key="code" class="px-1 py-1">
+                            <input type="number" step="0.01" placeholder="$" @oninput="@(e => FillColumn(code, e.Value?.ToString() ?? ""))"
+                                   class="w-20 rounded border border-[var(--ui-control)] bg-white px-1 py-0.5 text-right text-xs text-[var(--ui-ink)] placeholder:text-[var(--ui-faint)]" />
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var h in Hours)
+                {
+                    <tr @key="h" class="border-t border-[var(--brand-border)]">
+                        <td class="px-3 py-1 font-medium text-[var(--brand-navy)]">@($"{h:00}:00")</td>
+                        @foreach (var p in Cols)
+                        {
+                            var key = RateGrid.RateKey(_tab, h, p.Code);
+                            <td @key="p.Code" class="px-1 py-1">
+                                <input type="number" step="0.01" value="@Js.NumberToString(_values.TryGetValue(key, out var v) && v is { } x ? x : 0)"
+                                       @oninput="@(e => _values[key] = Js.Number(e.Value?.ToString()))"
+                                       class="w-20 rounded border border-[var(--brand-border)] px-1 py-0.5 text-right" />
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-3 flex items-center gap-3">
+        @{ var pending = Pending; }
+        <button @onclick="SaveAsync" disabled="@(_saving || pending.Count == 0)"
+                class="rounded-lg bg-[var(--brand-orange)] px-5 py-2 font-semibold text-white disabled:opacity-50">
+            @(_saving ? "Saving…" : pending.Count == 0 ? $"No {DayTypeLabels[_tab]} changes" : $"Save {pending.Count} {DayTypeLabels[_tab]} rate{(pending.Count == 1 ? "" : "s")}")
+        </button>
+        @if (_msg is not null)
+        {
+            <span class="@($"text-sm {(_msg.StartsWith("Error") ? "text-[var(--brand-red)]" : "text-green-700")}")">@_msg</span>
+        }
+    </div>
+    <p class="mt-2 text-xs text-[var(--brand-navy)]/50">
+        Relieving Shift Manager has no column: it is paid the Store Assistant Fully Flexible rate
+        plus the per-hour sole-manager allowance set above.
+    </p>
+</div>
+
+@code {
+    private static readonly string[] DayTypes = ["weekday", "saturday", "sunday", "public_holiday"];
+
+    private static readonly Dictionary<string, string> DayTypeLabels = new()
+    {
+        ["weekday"] = "Weekday",
+        ["saturday"] = "Saturday",
+        ["sunday"] = "Sunday",
+        ["public_holiday"] = "Public Holiday",
+    };
+
+    // Positions are grouped so the grid stays readable - 30 columns at once is unusable,
+    // but "the SM columns" or "the ASM columns" is exactly how the rates arrive from payroll.
+    private static readonly (string Key, string Label, string[] Roles)[] Groups =
+    [
+        ("SM", "Store Manager", ["SM"]),
+        ("ASM", "Assistant Store Manager", ["ASM"]),
+        ("other", "DSM / Store Assistant / JSA", ["DSM", "SA", "JSA"]),
+    ];
+
+    private static readonly IReadOnlyList<double> Hours = Enumerable.Range(0, 24).Select(h => (double)h).ToList();
+
+    [Parameter, EditorRequired] public IReadOnlyList<PayRateRow> Rates { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<RatePosition> Positions { get; set; } = [];
+
+    private string _tab = "weekday", _group = "SM";
+    private bool _saving;
+    private string? _msg;
+    // Keyed "dayType:hour:position". _baseline is what the server sent; saving compares
+    // against it so an untouched cell is never written.
+    private Dictionary<string, double?> _values = [];
+    private Dictionary<string, double> _baseline = [];
+
+    protected override void OnInitialized()
+    {
+        foreach (var r in Rates)
+        {
+            var key = RateGrid.RateKey(r.DayType, r.Hour, r.Role);
+            _baseline[key] = r.Rate;
+            _values[key] = r.Rate;
+        }
+    }
+
+    private IEnumerable<RatePosition> Cols
+    {
+        get
+        {
+            var group = Groups.FirstOrDefault(g => g.Key == _group);
+            var roles = group.Roles ?? Groups[0].Roles;
+            return Positions.Where(p => roles.Contains(p.BaseRole));
+        }
+    }
+
+    private List<RateCellChange> Pending => RateGrid.ChangedRateCells(_baseline, _values, _tab, Positions.Select(p => p.Code), Hours);
+
+    private static string TabBtn(bool active) =>
+        active ? "rounded-lg px-3 py-1.5 text-sm bg-[var(--brand-navy)] text-white" : "rounded-lg px-3 py-1.5 text-sm bg-[var(--brand-surface)] text-[var(--brand-navy)]";
+
+    // Short column header - the group tab already says which role it is, so the column
+    // only needs what varies within it ("45h Y3", "Fully Flexible").
+    private static string ShortLabel(RatePosition p)
+    {
+        if (p.WeeklyHours is { } wh && p.YearBand is { } yb) return $"{Js.NumberToString(wh)}h Y{Js.NumberToString(yb)}";
+        var s = System.Text.RegularExpressions.Regex.Replace(p.Label, @"^(Store Assistant|JSA)\s*", "");
+        return s.Length > 0 ? s : p.Label;
+    }
+
+    // Fill a column's whole 24 hours in one go. An empty box is ignored: Number("") is
+    // 0, which would otherwise wipe the column on a backspace.
+    private void FillColumn(string code, string raw)
+    {
+        if (Js.Trim(raw) == "") return;
+        var v = Js.Number(raw);
+        if (!double.IsFinite(v) || v < 0) return;
+        var next = new Dictionary<string, double?>(_values);
+        foreach (var h in Hours) next[RateGrid.RateKey(_tab, h, code)] = v;
+        _values = next;
+    }
+
+    private async Task SaveAsync()
+    {
+        var pending = Pending;
+        if (pending.Count == 0)
+        {
+            _msg = "Nothing to save - no rates changed.";
+            return;
+        }
+        _saving = true;
+        _msg = null;
+        // Only the cells that actually changed, across the whole day type (not just the
+        // visible group), so switching groups mid-edit keeps your work.
+        var res = await Service.SaveRatesAsync(pending);
+        _saving = false;
+        if (!res.Ok)
+        {
+            _msg = $"Error: {res.Error}";
+            return;
+        }
+        // Accept the saved values as the new baseline so a second save doesn't re-send them.
+        foreach (var c in pending) _baseline[RateGrid.RateKey(c.DayType, c.Hour, c.Role)] = c.Rate;
+        _msg = $"Saved {pending.Count} rate{(pending.Count == 1 ? "" : "s")}.";
+    }
+}

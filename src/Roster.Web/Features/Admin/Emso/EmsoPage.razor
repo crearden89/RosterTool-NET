@@ -1,0 +1,163 @@
+@page "/admin/emso"
+@* Port of src/app/(app)/admin/emso/page.tsx and EmsoClient.tsx. EMSOs sign in through
+   the company's single sign-on, so a new EMSO login has no password. *@
+@inject IEmsoService Service
+
+<div>
+    <SettingsHeader Area="Access" Title="EMSO Managers">
+        <Subtitle>Each EMSO's area, the stores it covers, and the unapproved-roster check · every area</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @if (_view is { } view)
+        {
+            @* Each login, area and check acts at once, as before; a half-typed login or an
+               area picked and not saved counts as an unsaved change when leaving. *@
+            <LeaveGuard Id="emso-forms" Dirty="@(_username != "" || view.Emsos.Any(e => _sel.TryGetValue(e.Id, out var v) && v != (e.AreaId?.ToString() ?? "")))" />
+            <SettingsSection Id="create">
+                <Title>Create an EMSO login</Title>
+                <Purpose>An EMSO looks after one area: they can generate, approve and edit for every store in it.</Purpose>
+                <ChildContent>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input class="@Ui.FieldClass" aria-label="Username" placeholder="Username" @bind="_username" @bind:event="oninput" />
+                        <select aria-label="Area" class="@Ui.FieldClass" @bind="_newArea">
+                            @foreach (var a in view.Areas)
+                            {
+                                <option @key="a.Id" value="@a.Id">@AreaLabel(a)</option>
+                            }
+                        </select>
+                        <button type="button" class="@Ui.ButtonClass(ButtonKind.Primary)" @onclick="CreateAsync" disabled="@_pending">Create EMSO</button>
+                    </div>
+                    @Message("create")
+                </ChildContent>
+            </SettingsSection>
+
+            <SettingsSection Id="check">
+                <Title>Unapproved-roster check</Title>
+                <Purpose>Notifies each EMSO of stores in their area without an approved roster for the current planning period. Intended for a Wed 6pm schedule — run it here to generate the alerts.</Purpose>
+                <Aside>
+                    <button type="button" class="@Ui.ButtonClass(ButtonKind.Primary)" @onclick="RunCheckAsync" disabled="@_pending">Run check now</button>
+                </Aside>
+                <ChildContent>@Message("check")</ChildContent>
+            </SettingsSection>
+
+            <SettingsSection Id="emsos">
+                <Title>EMSOs and their areas</Title>
+                <Purpose>Move an EMSO to another area; the stores it covers follow the area.</Purpose>
+                <ChildContent>
+                    @if (view.Emsos.Count == 0)
+                    {
+                        <p class="text-sm text-[var(--ui-muted)]">No EMSO users yet.</p>
+                    }
+                    else
+                    {
+                        <div class="space-y-3">
+                            @foreach (var e in view.Emsos)
+                            {
+                                var picked = _sel.TryGetValue(e.Id, out var p) ? p : null;
+                                var chosen = picked ?? e.AreaId?.ToString() ?? "";
+                                var covered = view.Stores.Where(s => s.AreaId?.ToString() == chosen).ToList();
+                                <div @key="e.Id" class="rounded-xl border border-[var(--ui-line)] p-4">
+                                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                                        <h3 class="text-base font-semibold text-[var(--ui-ink)]">
+                                            @e.Username
+                                            <span class="ml-2 text-sm font-normal text-[var(--ui-muted)]">@AreaName(e.AreaId)</span>
+                                        </h3>
+                                        <div class="flex items-center gap-3">
+                                            <select aria-label="@($"{e.Username}'s area")" class="@Ui.FieldClass" value="@chosen"
+                                                    @onchange="@(ev => _sel[e.Id] = ev.Value?.ToString() ?? "")">
+                                                <option value="">— pick area —</option>
+                                                @foreach (var a in view.Areas)
+                                                {
+                                                    <option @key="a.Id" value="@a.Id">@AreaLabel(a)</option>
+                                                }
+                                            </select>
+                                            <button type="button" class="@Ui.ButtonClass(ButtonKind.Secondary)" @onclick="() => SaveAreaAsync(e.Id)"
+                                                    disabled="@(_pending || string.IsNullOrEmpty(picked) || picked == e.AreaId?.ToString())">Save area</button>
+                                        </div>
+                                    </div>
+                                    <p class="text-sm text-[var(--ui-muted)]">
+                                        @(covered.Count == 0 ? "No stores in this area yet." : $"Covers {covered.Count} store(s): {string.Join(", ", covered.Select(s => s.Code))}")
+                                    </p>
+                                </div>
+                            }
+                        </div>
+                    }
+                    @Message("area")
+                </ChildContent>
+            </SettingsSection>
+        }
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("create", "Create an EMSO login"),
+        new("check", "Unapproved-roster check"),
+        new("emsos", "EMSOs and their areas"),
+    ];
+
+    private EmsoView? _view;
+    private bool _pending;
+    private string _username = "", _newArea = "";
+    private string? _msg;
+    // Which card the last message belongs to, so it shows beside its button.
+    private string _msgAt = "create";
+    // Per-EMSO pending area choice (unsaved until Save area is pressed).
+    private readonly Dictionary<Guid, string> _sel = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _view = await Service.LoadAsync();
+        _newArea = _view.Areas.Count > 0 ? _view.Areas[0].Id.ToString() : "";
+    }
+
+    private string RegionName(Guid? id) => _view!.Regions.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
+
+    private string AreaLabel(EmsoAreaRow a) => $"{a.Name} ({RegionName(a.RegionId)})";
+
+    private string AreaName(Guid? id) => _view!.Areas.FirstOrDefault(x => x.Id == id) is { } a ? AreaLabel(a) : "—";
+
+    private RenderFragment Message(string at) => __builder =>
+    {
+        if (_msg is not null && _msgAt == at)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="@(_msg.StartsWith("Error") ? FormMessageTone.Error : FormMessageTone.Ok)">@_msg</FormMessage>
+            </div>
+        }
+    };
+
+    private async Task CreateAsync()
+    {
+        _msgAt = "create";
+        _pending = true;
+        var res = await Service.CreateEmsoAsync(_username, Guid.TryParse(_newArea, out var a) ? a : null);
+        _msg = res.Ok ? "EMSO login created." : $"Error: {res.Error}";
+        if (res.Ok)
+        {
+            _username = "";
+            _view = await Service.LoadAsync();
+        }
+        _pending = false;
+    }
+
+    private async Task SaveAreaAsync(Guid emsoId)
+    {
+        _msgAt = "area";
+        _pending = true;
+        var res = await Service.SetEmsoAreaAsync(emsoId, _sel.TryGetValue(emsoId, out var v) && Guid.TryParse(v, out var g) ? g : null);
+        _msg = res.Ok ? "Area saved." : $"Error: {res.Error}";
+        if (res.Ok) _view = await Service.LoadAsync();
+        _pending = false;
+    }
+
+    private async Task RunCheckAsync()
+    {
+        _msgAt = "check";
+        _pending = true;
+        var res = await Service.RunEmsoCheckNowAsync();
+        _msg = res.Message;
+        _pending = false;
+    }
+}

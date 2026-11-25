@@ -1,0 +1,249 @@
+@* Port of the worked derivation in src/app/(app)/admin/till-preview/page.tsx: what the
+   engine decided against what the file asked for, how the day was built with its real
+   numbers, the store's till ladder and every 15-minute block. *@
+@using global::Roster.Engine.Till
+
+@{
+    var a = Result.Attrs!;
+    var isUpdated = a.HasSco && a.IsNewScoModel;
+    var planned = Result.DailyCheckoutHours;
+    var target = Result.BenchmarkHours90;
+    var variance = planned - target;
+    var peak = Result.Blocks.Aggregate(Result.Blocks[0], (b, x) => x.Segment > b.Segment ? x : b);
+    var capAt = TillEngine.CreditCapSegment(a);
+    var brackets = TillEngine.TierBrackets(a).Where(b => b.Total > 0).ToList();
+}
+
+@* ── Headline: what the engine decided, against what the file asked for ── *@
+<section id="headline" aria-label="What the engine decided" class="grid scroll-mt-20 gap-4 sm:grid-cols-2 lg:scroll-mt-6 lg:grid-cols-4">
+    <Card>
+        <Eyebrow>Benchmark target (90%)</Eyebrow>
+        <p class="mt-1 text-2xl font-bold tabular-nums text-[var(--ui-ink)]">@H(target)</p>
+        <p class="mt-1 text-xs text-[var(--ui-muted)]">
+            @($"{Js.ToFixed(Result.BenchmarkHours100, 4)}h @100% ÷ 0.9")
+            @if (Result.OverrideFactor != 1)
+            {
+                @($" · sales override ×{Js.ToFixed(Result.OverrideFactor, 2)}")
+            }
+        </p>
+    </Card>
+    <Card>
+        <Eyebrow>Planned by the engine</Eyebrow>
+        <p class="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums text-[var(--ui-ink)]">
+            <span class="inline-block h-4 w-4 rounded-sm" style="@($"background: linear-gradient(90deg, {LabourGroups.CheckoutColorLeft} 50%, {LabourGroups.CheckoutColorRight} 50%)")"></span>
+            @H(planned)
+        </p>
+        <p class="mt-1 text-xs text-[var(--ui-muted)]">This is the figure Stage 1 rosters.</p>
+    </Card>
+    <Card>
+        <Eyebrow>Difference</Eyebrow>
+        <p class="@($"mt-1 text-2xl font-bold tabular-nums {(Math.Abs(variance) < 0.005 ? "text-[var(--ui-ink)]" : variance > 0 ? "text-[var(--ui-amber-ink)]" : "text-[var(--ui-bad)]")}")">
+            @($"{(variance >= 0 ? "+" : "")}{Js.ToFixed(variance, 2)}h")
+        </p>
+        <p class="mt-1 text-xs text-[var(--ui-muted)]">
+            @(variance > 0
+                ? "Rounding each block up to whole tills costs more than the target; Stage 1 borrows the excess from the other labour groups."
+                : variance < 0
+                    ? "The engine planned BELOW the target - the SCO credit suppressed tills faster than rounding added them."
+                    : "Planned exactly to target.")
+        </p>
+    </Card>
+    <Card>
+        <Eyebrow>Model</Eyebrow>
+        <p class="mt-1 text-sm font-semibold text-[var(--ui-ink)]">@(isUpdated ? "Updated (bounded-credit SCO)" : "Legacy (ceil/floor)")</p>
+        <p class="mt-1 text-xs text-[var(--ui-muted)]">
+            @($"{N(a.McoRegisters)} registers · {N(a.ScoLanes)} SCO lanes · eff {N(a.ScoEfficiency)} · step {N(a.FirstStep)} · share {N(a.ScoShare)}")
+        </p>
+        <p class="mt-1 text-xs text-[var(--ui-muted)]">@($"{Result.Blocks.Count} × 15-min blocks · trading hours {H(Result.TradingHours)}")</p>
+    </Card>
+</section>
+
+@* ── The derivation, with this day's real numbers ── *@
+<SettingsSection Id="derivation">
+    <Title>How this day was built</Title>
+    <Purpose>Every figure below is this store, this date - not an example.</Purpose>
+    <ChildContent>
+        <ol class="space-y-2 text-sm text-[var(--ui-ink)]">
+            <li>
+                <span class="font-semibold">1. Benchmark.</span>
+                The Benchmark file carries @(Js.ToFixed(Result.BenchmarkHours100, 4))h of checkout for
+                this date at 100%. Divided by 0.9 that is
+                <span class="font-semibold tabular-nums">@(Js.ToFixed(target, 5))h</span> - the
+                day&apos;s target.
+            </li>
+            <li>
+                <span class="font-semibold">2. Shape.</span> The
+                trade curve gives each 15-minute block its share of the day - derived per
+                weekday from the POS quarter-hour statistics (legacy allocation rows where no
+                POS data is loaded), a standing weekly pattern rather than a per-date figure.
+                The shares sum to 1, so this step only decides <em>when</em> the hours sit,
+                never how many there are.
+            </li>
+            <li>
+                <span class="font-semibold">3. Segment.</span>
+                target × share × 4 = concurrent tills of demand in that block. The ×4 converts
+                hours to tills, because one till covers 0.25h of a 15-minute block. The busiest
+                block is @Hm(peak.BlockTime) at
+                @(Js.ToFixed(peak.Allocation * 100, 2))% of the day →
+                <span class="font-semibold tabular-nums">@Seg(peak.Segment)</span> tills of
+                demand.
+            </li>
+            @if (isUpdated)
+            {
+                <li>
+                    <span class="font-semibold">4. SCO bank opens.</span>
+                    Once a block&apos;s segment reaches the first step (@N(a.FirstStep)), the
+                    self-checkout bank opens and takes one attendant.
+                </li>
+                <li>
+                    <span class="font-semibold">5. Credit.</span>
+                    The open bank absorbs demand before another manned register is needed:
+                    <span class="tabular-nums">@($"min({N(a.ScoEfficiency)} × {N(a.ScoLanes)} lanes = {Js.ToFixed(a.ScoEfficiency * a.ScoLanes, 2)}, {N(a.ScoShare)} × segment)")</span>.
+                    @if (capAt is { } cap)
+                    {
+                        <text>
+                            Below a segment of
+                            <span class="font-semibold tabular-nums">@Seg(cap)</span> the
+                            second term is smaller, so the credit still <em>grows with demand</em>;
+                            above it the lane capacity caps it flat.
+                        </text>
+                    }
+                </li>
+                <li>
+                    <span class="font-semibold">6. Registers.</span>
+                    Manned registers come from the tier table with each threshold lifted by the
+                    credit - the ladder below. Because the credit moves with demand, the lower
+                    rungs are wider than the upper ones.
+                </li>
+            }
+            else
+            {
+                <li>
+                    <span class="font-semibold">4. Registers.</span>
+                    This store is on the legacy path: registers are the segment rounded up when
+                    its remainder is 0.1 or more, else rounded down. No SCO credit applies.
+                </li>
+            }
+            <li>
+                <span class="font-semibold">@(isUpdated ? "7" : "5"). Cap.</span>
+                Registers are capped at the @N(a.McoRegisters) the store physically has@(a.ScoLanes > 0 ? $", the attendant at its {N(a.ScoLanes)} lanes" : "").
+            </li>
+            <li>
+                <span class="font-semibold">@(isUpdated ? "8" : "6"). Day total.</span>
+                Each block&apos;s tills × 0.25h, summed =
+                <span class="font-semibold tabular-nums">@H(planned)</span>. Every
+                trading quarter-hour has at least one till, so the day never plans below its
+                @H(Result.TradingHours) of trading (a till is manned whenever the doors are open).
+            </li>
+        </ol>
+    </ChildContent>
+</SettingsSection>
+
+@* ── The store's ladder ── *@
+<SettingsSection Id="ladder">
+    <Title>This store's till ladder</Title>
+    <Purpose>@($"The segment ranges that open each till, for this store's settings - and how many of this day's {Result.Blocks.Count} blocks land in each. Derived by running the engine, so it always matches what actually plans the day.")</Purpose>
+    <ChildContent>
+        <div class="overflow-x-auto rounded-xl border border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Segment range</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Width</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Registers</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">SCO</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Tills</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Blocks today</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in brackets)
+                    {
+                        var n = BlocksIn(b.From, b.To);
+                        <tr class="@Ui.Cx(Ui.Table.Row, n > 0 ? null : "text-[var(--ui-faint)]")">
+                            <td class="px-3 py-1.5 tabular-nums">@($"{Seg(b.From)} – {(b.To is { } to ? Seg(to) : "over")}")</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@(b.To is { } t ? Seg(t - b.From) : "-")</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@N(b.Mco)</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@N(b.Sco)</td>
+                            <td class="px-3 py-1.5 text-right font-semibold tabular-nums">@N(b.Total)</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@(n > 0 ? n.ToString() : "-")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (isUpdated && capAt is { } capSeg)
+        {
+            <p class="mt-2 text-xs text-[var(--ui-muted)]">
+                Uneven widths are expected under this model: while the credit is still growing
+                (segment below @Seg(capSeg)) the threshold rises with demand, so the bracket
+                stretches to first step ÷ (1 − share) = @N(a.FirstStep) ÷ @(Js.ToFixed(1 - a.ScoShare, 2)) =
+                @Seg(a.FirstStep / (1 - a.ScoShare)). Above that the credit is capped and the
+                rungs settle 1.00 apart.
+            </p>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@* ── Block by block ── *@
+<SettingsSection Id="blocks" Flush="true">
+    <Title>Block by block</Title>
+    <Purpose>Each 15-minute block: its share of the day, the demand it makes and the tills the engine opens.</Purpose>
+    <ChildContent>
+        <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        <th class="@Ui.Table.Th">Time</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Share of day</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Segment</th>
+                        <th class="@($"{Ui.Table.Th} text-center")">SCO bank</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Credit</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">MCO</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">SCO</th>
+                        <th class="@($"{Ui.Table.Th} text-right")">Till Allocation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in Result.Blocks)
+                    {
+                        <tr @key="b.BlockTime" class="@Ui.Table.Row">
+                            <td class="px-3 py-1.5 tabular-nums">@Hm(b.BlockTime)</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums text-[var(--ui-muted)]">@(Js.ToFixed(b.Allocation * 100, 2))%</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@Seg(b.Segment)</td>
+                            <td class="px-3 py-1.5 text-center">
+                                @if (b.ScoOn != 0)
+                                {
+                                    <span class="text-[var(--brand-light-blue)]">open</span>
+                                }
+                                else
+                                {
+                                    <span class="text-[var(--ui-faint)]">-</span>
+                                }
+                            </td>
+                            <td class="px-3 py-1.5 text-right tabular-nums text-[var(--ui-muted)]">@Js.ToFixed(b.Credit, 2)</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@N(b.Mco)</td>
+                            <td class="px-3 py-1.5 text-right tabular-nums">@N(b.Sco)</td>
+                            <td class="px-3 py-1.5 text-right font-semibold tabular-nums">@N(b.Total)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    [Parameter, EditorRequired] public TillComputation Result { get; set; } = default!;
+
+    private static string H(double n) => $"{Js.ToFixed(n, 2)}h";
+
+    private static string Seg(double n) => Js.ToFixed(n, 2);
+
+    private static string N(double n) => Js.NumberToString(n);
+
+    private static string Hm(string blockTime) => blockTime.Length >= 5 ? blockTime[..5] : blockTime;
+
+    private int BlocksIn(double from, double? to) =>
+        Result.Blocks.Count(b => b.Segment >= from && (to is null || b.Segment < to));
+}

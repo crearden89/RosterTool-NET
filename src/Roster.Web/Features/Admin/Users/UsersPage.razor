@@ -1,0 +1,143 @@
+@page "/admin/users"
+@* Port of src/app/(app)/admin/users/page.tsx and UsersClient.tsx. People sign in
+   through the company's single sign-on, so a login is a name and an access level:
+   the TypeScript page's password box and its Reset password button have no
+   counterpart here. *@
+@using global::Roster.Data.Entities
+@inject IUsersService Service
+@inject RosterJs RosterJs
+
+<div>
+    <SettingsHeader Area="Access" Title="Users">
+        <Subtitle>Who can sign in, and what each login can see and change · every store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @if (_view is { } view)
+        {
+            @* Each login is created or deleted at once, as before; a half-typed new login
+               counts as an unsaved change when leaving the page. *@
+            <LeaveGuard Id="new-login" Dirty="@(_username != "")" />
+            <SettingsSection Id="create">
+                <Title>Create a login</Title>
+                <Purpose>Store logins are per person (each SM/ASM gets their own), so the audit trail names who generated, edited and approved.</Purpose>
+                <ChildContent>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input class="@Ui.FieldClass" aria-label="Username" placeholder="Username (e.g. jsmith@example.com)" @bind="_username" @bind:event="oninput" />
+                        <select aria-label="Access" class="@Ui.FieldClass" @bind="_tier">
+                            @foreach (var t in UserScope.CreationOrder)
+                            {
+                                <option value="@t.Key()">@t.Label()</option>
+                            }
+                        </select>
+                        @if (_tier == Tier.Store.Key())
+                        {
+                            <select aria-label="Store" class="@Ui.FieldClass" @bind="_storeId">
+                                @foreach (var s in view.Stores)
+                                {
+                                    <option @key="s.Id" value="@s.Id">@($"{s.Code} - {s.Name}")</option>
+                                }
+                            </select>
+                        }
+                        @if (_tier == Tier.Emso.Key())
+                        {
+                            <select aria-label="Area" class="@Ui.FieldClass" @bind="_areaId">
+                                @foreach (var a in view.Areas)
+                                {
+                                    <option @key="a.Id" value="@a.Id">@a.Name</option>
+                                }
+                            </select>
+                        }
+                        <button type="button" class="@Ui.ButtonClass(ButtonKind.Primary)" @onclick="CreateAsync" disabled="@_pending">Create</button>
+                        @if (_msg is not null)
+                        {
+                            <FormMessage Tone="@(_msg.StartsWith("Error") ? FormMessageTone.Error : FormMessageTone.Ok)">@_msg</FormMessage>
+                        }
+                    </div>
+                </ChildContent>
+            </SettingsSection>
+
+            <SettingsSection Id="logins" Flush="true">
+                <Title>Logins</Title>
+                <Purpose>Everyone who can sign in, with their access and what it covers. Delete acts at once.</Purpose>
+                <ChildContent>
+                    <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                        <table class="@Ui.Table.Element">
+                            <thead class="@Ui.Table.Head">
+                                <tr>
+                                    <th class="@($"{Ui.Table.Th} pl-5 sm:pl-6")">Username</th>
+                                    <th class="@Ui.Table.Th">Access</th>
+                                    <th class="@Ui.Table.Th">Scope</th>
+                                    <th class="@Ui.Table.Th"><span class="sr-only">Actions</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var u in view.Users)
+                                {
+                                    <tr @key="u.Id" class="@Ui.Table.Row">
+                                        <td class="py-2 pr-3 pl-5 font-semibold whitespace-nowrap sm:pl-6">
+                                            @u.Username
+                                            @if (u.Id == view.MyId)
+                                            {
+                                                <Pill Tone="PillTone.Navy" Class="ml-2">YOU</Pill>
+                                            }
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap">@u.Tier.Label()</td>
+                                        <td class="px-3 py-2 text-[var(--ui-muted)]">@UserScope.Label(u, view.Stores, view.Areas)</td>
+                                        <td class="py-2 pr-5 pl-3 text-right sm:pr-6">
+                                            <div class="flex justify-end gap-2">
+                                                <button type="button" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)" disabled="@(_pending || u.Id == view.MyId)" @onclick="() => RemoveAsync(u)">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </ChildContent>
+            </SettingsSection>
+        }
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("create", "Create a login"),
+        new("logins", "Logins"),
+    ];
+
+    private UsersView? _view;
+    private bool _pending;
+    private string? _msg;
+    private string _username = "", _tier = Tier.Store.Key(), _storeId = "", _areaId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _view = await Service.LoadAsync();
+        _storeId = _view.Stores.Count > 0 ? _view.Stores[0].Id.ToString() : "";
+        _areaId = _view.Areas.Count > 0 ? _view.Areas[0].Id.ToString() : "";
+    }
+
+    private async Task RunAsync(Func<Task<AdminResult>> fn, string okMsg)
+    {
+        _pending = true;
+        var res = await fn();
+        _msg = res.Ok ? okMsg : $"Error: {res.Error}";
+        if (res.Ok) _view = await Service.LoadAsync();
+        _pending = false;
+    }
+
+    private Task CreateAsync()
+    {
+        var tier = global::Roster.Data.Entities.Tiers.FromKey(_tier);
+        Guid? store = tier == Tier.Store && Guid.TryParse(_storeId, out var s) ? s : null;
+        Guid? area = tier == Tier.Emso && Guid.TryParse(_areaId, out var a) ? a : null;
+        return RunAsync(() => Service.CreateAppUserAsync(_username, tier, store, area), "Login created.");
+    }
+
+    private async Task RemoveAsync(UserRow u)
+    {
+        if (!await RosterJs.ConfirmAsync($"Delete {u.Username}'s login? They are signed out and can no longer sign in.")) return;
+        await RunAsync(() => Service.DeleteAppUserAsync(u.Id), $"{u.Username} deleted.");
+    }
+}
