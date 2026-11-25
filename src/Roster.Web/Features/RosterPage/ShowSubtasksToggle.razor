@@ -1,0 +1,28 @@
+@* Port of src/app/(app)/plan/roster/SubtaskView.tsx (ShowSubtasksToggle). *@
+<button type="button" role="switch" aria-checked="@(On ? "true" : "false")" @onclick="() => SubtaskView?.Set(!On)" title="@Hint"
+        class="@($"inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 {PillClass}")">
+    <span aria-hidden="true" class="@($"relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors {(On ? OnClass : OffClass)}")">
+        <span class="@($"absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform {(On ? "translate-x-[18px]" : "translate-x-0.5")}")"></span>
+    </span>
+    Show sub-tasks
+</button>
+
+@code {
+    [CascadingParameter] public SubtaskViewProvider? SubtaskView { get; set; }
+
+    [Parameter] public SubtaskToggleTone Tone { get; set; } = SubtaskToggleTone.Navy;
+
+    /// <summary>The hover text: what the switch shows on this page.</summary>
+    [Parameter] public string Hint { get; set; } =
+        "Show which sub-task each Reset, Load Running, Cleaning and Specials tile is - on this page and on the printed roster";
+
+    private bool On => SubtaskView?.On == true;
+
+    private string PillClass => Tone == SubtaskToggleTone.Navy
+        ? "bg-white/10 text-white hover:bg-white/15 focus-visible:outline-white"
+        : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)] focus-visible:outline-[color:var(--ui-violet)]";
+
+    private string OnClass => Tone == SubtaskToggleTone.Navy ? "bg-[var(--ui-gold)]" : "bg-[var(--ui-ink)]";
+
+    private string OffClass => Tone == SubtaskToggleTone.Navy ? "bg-white/30" : "bg-[var(--ui-control)]";
+}

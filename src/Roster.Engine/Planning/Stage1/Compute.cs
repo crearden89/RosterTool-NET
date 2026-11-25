@@ -7,6 +7,7 @@
 
 using System.Text.Json.Serialization;
 using Roster.Engine.Core;
+using Roster.Engine.Till;
 using Roster.Engine.Planning.Plan;
 
 namespace Roster.Engine.Planning.Stage1;
@@ -497,13 +498,15 @@ public static class Stage1Compute
         var realloc = PhLoadReallocation(src, holidaySet);
         benchmark90["load_running"] *= realloc.KeepFactor;
 
-        var borrow = CheckoutBorrow.Compute(
-            till.Blocks.Select(b => (Time: Grid.TimeToMin(b.BlockTime), PlannedHours: b.Total / 4, ExactHours: b.Segment / 4)).ToList(),
+        var borrow = Borrow.ComputeBorrow(
+            till.Blocks.Select(b => new BorrowBlock(Grid.TimeToMin(b.BlockTime), b.Total / 4, b.Segment / 4)).ToList(),
             dow,
             benchmark90,
             // The bands' boundaries are settings (R15).
-            ruleOverrides.TryGetValue("borrowMorningEndMin", out var bm) && double.IsFinite(bm) ? bm : 10 * 60,
-            ruleOverrides.TryGetValue("borrowEveningFromMin", out var be) && double.IsFinite(be) ? be : 18 * 60,
+            Borrow.BorrowBandsAt(
+                ruleOverrides.TryGetValue("borrowMorningEndMin", out var bm) && double.IsFinite(bm) ? bm : 10 * 60,
+                ruleOverrides.TryGetValue("borrowEveningFromMin", out var be) && double.IsFinite(be) ? be : 18 * 60),
+            null,
             // Admin's named tasks are fixed commitments for the day, so only the hours
             // it holds ABOVE them can be lent. Without this the borrow ate into work
             // the store still has to do, and Admin planned well over its benchmark.
@@ -513,7 +516,7 @@ public static class Stage1Compute
             new JsMap<string, double>()
                 .Set("admin", adminTasks.Aggregate(0.0, (s, t) => s + t.Minutes) / 60)
                 .Set("cleaning", windows.Where(w => w.Group == "cleaning" && (w.Hours ?? 0) > 0).Aggregate(0.0, (s, w) => s + (w.Hours ?? 0))));
-        foreach (var g in CheckoutBorrow.Borrowable)
+        foreach (var g in Borrow.Borrowable)
             benchmark90[g] = Math.Max(0, benchmark90[g] - borrow.Borrowed[g] + borrow.Lent[g]);
 
         // Non-Op is additive to the hours the plan must cover (not a reallocation).
@@ -689,27 +692,4 @@ public static class Stage1Compute
         if (nextOn) eveningInHours = src.NextBench is not null ? src.NextBench.LrHours90 * PhReallocFraction : 0;
         return (thisOn ? 1 - PhReallocFraction : 1, eveningInHours);
     }
-}
-
-/// <summary>
-/// The checkout rounding borrow as Stage 1 calls it (lib/till/borrow.ts:
-/// computeBorrow over borrowBandsAt, the default floor, and the committed
-/// hours). The borrow itself is the till engine's (E3, Roster.Engine.Till);
-/// this adapter goes once that lands.
-/// </summary>
-internal static class CheckoutBorrow
-{
-    /// <summary>BORROWABLE: the groups the checkout rounding may borrow from.</summary>
-    public static readonly IReadOnlyList<string> Borrowable = ["load_running", "reset", "admin", "specials", "cleaning"];
-
-    public sealed record Result(JsMap<string, double> Borrowed, JsMap<string, double> Lent, double Shortfall);
-
-    public static Result Compute(
-        IReadOnlyList<(double Time, double PlannedHours, double ExactHours)> blocks,
-        int dowMon0,
-        JsMap<string, double> available,
-        double morningEndMin,
-        double eveningFromMin,
-        JsMap<string, double> committed) =>
-        throw new NotImplementedException("Stage 1 needs the till engine's computeBorrow (Roster.Engine.Till, E3)");
 }

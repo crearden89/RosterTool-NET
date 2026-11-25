@@ -4,18 +4,14 @@
 
 using Roster.Engine.Core;
 using Roster.Engine.Pay;
+using Roster.Engine.Planning.Stage1;
 
 namespace Roster.Engine.Rostering.Shaper;
 
 public static partial class PlanShaper
 {
-    // Stage 1's premium-time bounds (stage1/engine's PREMIUM_BEFORE_MIN and
-    // PREMIUM_FROM_MIN; Planning's Stage1Engine once it is on main).
-    private const double PremiumBeforeMin = 7 * 60;
-    private const double PremiumFromMin = 18 * 60;
-
     /// <summary>A quarter-hour with an hourly pay premium (Stage 1's definition).</summary>
-    private static double PremiumHead(double m) => m < PremiumBeforeMin || m >= PremiumFromMin ? 1 : 0;
+    private static double PremiumHead(double m) => m < Stage1Engine.PremiumBeforeMin || m >= Stage1Engine.PremiumFromMin ? 1 : 0;
 
     private static string Fmt(double m) => Grid.MinToTime(m);
 
