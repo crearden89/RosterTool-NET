@@ -2,9 +2,10 @@
 // 0032 tenure-band minutes), 0018 the non-op catalogue, 0019 admin_tasks (with the 0046
 // window changes), 0020 positions, 0021 plan_placement_settings, 0022 variance_settings,
 // 0028 leave_accrual_bands and leave_settings, 0030 probation_buffers, 0031 the
-// paidBreakFactorPct rule and 0038 reset_tasks. The EF Core migration does not carry them
-// yet; the development seeder writes each table's rows when that table is empty, so it
-// does nothing once a migration inserts them.
+// paidBreakFactorPct rule and 0038 reset_tasks. The ReferenceData migration inserts the
+// same rows (a test keeps the two in step); the development seeder writes a table's rows
+// only when it is empty, which happens on a database built without the migrations (the
+// SQLite unit tests), never on a migrated one.
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;

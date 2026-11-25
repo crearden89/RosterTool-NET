@@ -1136,3 +1136,233 @@ VALUES (N'20261125062411_InitialCreate', N'10.0.15');
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'code', N'label', N'base_role', N'weekly_hours', N'year_band', N'has_rate', N'sort_order') AND [object_id] = OBJECT_ID(N'[positions]'))
+    SET IDENTITY_INSERT [positions] ON;
+INSERT INTO [positions] ([code], [label], [base_role], [weekly_hours], [year_band], [has_rate], [sort_order])
+VALUES (N'JSA-16', N'JSA 16 year old', N'JSA', NULL, NULL, CAST(1 AS bit), 10),
+(N'JSA-17', N'JSA 17 year old', N'JSA', NULL, NULL, CAST(1 AS bit), 20),
+(N'SA-FF', N'Store Assistant Fully Flexible', N'SA', NULL, NULL, CAST(1 AS bit), 30),
+(N'SA-LR', N'Store Assistant Limited Roster', N'SA', NULL, NULL, CAST(1 AS bit), 40),
+(N'DSM', N'DSM', N'DSM', NULL, NULL, CAST(1 AS bit), 50),
+(N'RSM', N'Relieving Shift Manager', N'RSM', NULL, NULL, CAST(0 AS bit), 60),
+(N'ASM-30-1', N'ASM 30 hour year 1', N'ASM', 30.0E0, 1, CAST(1 AS bit), 111),
+(N'ASM-30-2', N'ASM 30 hour year 2', N'ASM', 30.0E0, 2, CAST(1 AS bit), 112),
+(N'ASM-32-1', N'ASM 32 hour year 1', N'ASM', 32.0E0, 1, CAST(1 AS bit), 121),
+(N'ASM-32-2', N'ASM 32 hour year 2', N'ASM', 32.0E0, 2, CAST(1 AS bit), 122),
+(N'ASM-35-1', N'ASM 35 hour year 1', N'ASM', 35.0E0, 1, CAST(1 AS bit), 131),
+(N'ASM-35-2', N'ASM 35 hour year 2', N'ASM', 35.0E0, 2, CAST(1 AS bit), 132),
+(N'ASM-40-1', N'ASM 40 hour year 1', N'ASM', 40.0E0, 1, CAST(1 AS bit), 141),
+(N'ASM-40-2', N'ASM 40 hour year 2', N'ASM', 40.0E0, 2, CAST(1 AS bit), 142),
+(N'ASM-45-1', N'ASM 45 hour year 1', N'ASM', 45.0E0, 1, CAST(1 AS bit), 151),
+(N'ASM-45-2', N'ASM 45 hour year 2', N'ASM', 45.0E0, 2, CAST(1 AS bit), 152),
+(N'SM-40-1', N'SM 40 hour year 1', N'SM', 40.0E0, 1, CAST(1 AS bit), 211),
+(N'SM-40-2', N'SM 40 hour year 2', N'SM', 40.0E0, 2, CAST(1 AS bit), 212),
+(N'SM-40-3', N'SM 40 hour year 3', N'SM', 40.0E0, 3, CAST(1 AS bit), 213),
+(N'SM-40-4', N'SM 40 hour year 4', N'SM', 40.0E0, 4, CAST(1 AS bit), 214),
+(N'SM-40-7', N'SM 40 hour year 7', N'SM', 40.0E0, 7, CAST(1 AS bit), 217),
+(N'SM-45-1', N'SM 45 hour year 1', N'SM', 45.0E0, 1, CAST(1 AS bit), 221),
+(N'SM-45-2', N'SM 45 hour year 2', N'SM', 45.0E0, 2, CAST(1 AS bit), 222),
+(N'SM-45-3', N'SM 45 hour year 3', N'SM', 45.0E0, 3, CAST(1 AS bit), 223),
+(N'SM-45-4', N'SM 45 hour year 4', N'SM', 45.0E0, 4, CAST(1 AS bit), 224),
+(N'SM-45-7', N'SM 45 hour year 7', N'SM', 45.0E0, 7, CAST(1 AS bit), 227),
+(N'SM-50-1', N'SM 50 hour year 1', N'SM', 50.0E0, 1, CAST(1 AS bit), 231),
+(N'SM-50-2', N'SM 50 hour year 2', N'SM', 50.0E0, 2, CAST(1 AS bit), 232),
+(N'SM-50-3', N'SM 50 hour year 3', N'SM', 50.0E0, 3, CAST(1 AS bit), 233),
+(N'SM-50-4', N'SM 50 hour year 4', N'SM', 50.0E0, 4, CAST(1 AS bit), 234),
+(N'SM-50-7', N'SM 50 hour year 7', N'SM', 50.0E0, 7, CAST(1 AS bit), 237);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'code', N'label', N'base_role', N'weekly_hours', N'year_band', N'has_rate', N'sort_order') AND [object_id] = OBJECT_ID(N'[positions]'))
+    SET IDENTITY_INSERT [positions] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'minutes_per_pallet', N'color', N'sort_order', N'minutes_per_pallet_lt90', N'minutes_per_pallet_lt60', N'minutes_per_pallet_lt30') AND [object_id] = OBJECT_ID(N'[load_types]'))
+    SET IDENTITY_INSERT [load_types] ON;
+INSERT INTO [load_types] ([name], [minutes_per_pallet], [color], [sort_order], [minutes_per_pallet_lt90], [minutes_per_pallet_lt60], [minutes_per_pallet_lt30])
+VALUES (N'Ambient', 19.0E0, N'#2563eb', 1, 20.899999999999999E0, 23.800000000000001E0, 26.600000000000001E0),
+(N'Long Life', 28.0E0, N'#7c3aed', 2, 30.800000000000001E0, 35.0E0, 39.200000000000003E0),
+(N'Short Life', 20.0E0, N'#059669', 3, 22.0E0, 25.0E0, 28.0E0),
+(N'Freezer', 28.0E0, N'#0891b2', 4, 30.800000000000001E0, 35.0E0, 39.200000000000003E0),
+(N'Bread', 17.0E0, N'#d97706', 5, 18.699999999999999E0, 21.300000000000001E0, 23.800000000000001E0),
+(N'Produce', 10.0E0, N'#16a34a', 6, 11.0E0, 12.5E0, 14.0E0),
+(N'Bulky', 5.0E0, N'#dc2626', 7, 5.5E0, 6.2999999999999998E0, 7.0E0),
+(N'Freeze to Thaw', 11.0E0, N'#0d9488', 8, 12.1E0, 13.800000000000001E0, 15.4E0);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'minutes_per_pallet', N'color', N'sort_order', N'minutes_per_pallet_lt90', N'minutes_per_pallet_lt60', N'minutes_per_pallet_lt30') AND [object_id] = OBJECT_ID(N'[load_types]'))
+    SET IDENTITY_INSERT [load_types] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'sort') AND [object_id] = OBJECT_ID(N'[non_op_categories]'))
+    SET IDENTITY_INSERT [non_op_categories] ON;
+INSERT INTO [non_op_categories] ([name], [sort])
+VALUES (N'Meetings', 1),
+(N'Merchandising', 2),
+(N'Miscellaneous', 3),
+(N'Cleaning', 4),
+(N'Training', 5);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'sort') AND [object_id] = OBJECT_ID(N'[non_op_categories]'))
+    SET IDENTITY_INSERT [non_op_categories] OFF;
+
+INSERT INTO [non_op_subcategories] ([category_id], [name], [min_minutes], [max_minutes], [days_allowed], [default_minutes], [note])
+SELECT c.[id], v.[name], NULL, v.[max_minutes], N'[0,1,2,3,4,5,6]', v.[default_minutes], v.[note]
+FROM (VALUES
+    (N'Meetings', N'Store Manager Meetings', 120, 120, NULL),
+    (N'Meetings', N'Performance Appraisal Preparation (JSA, SA, RSM)', 5, 5, NULL),
+    (N'Meetings', N'Performance Appraisal Preparation (DSM, ASM, SM)', 30, 30, NULL),
+    (N'Meetings', N'Performance Appraisal Completion (JSA, SA, RSM)', 15, 15, NULL),
+    (N'Meetings', N'Performance Appraisal Completion (DSM, ASM, SM)', 60, 60, NULL),
+    (N'Meetings', N'Grievance Investigations', NULL, NULL, N'As approved by EMSO'),
+    (N'Meetings', N'Career Conversations (Employee)', 30, 30, NULL),
+    (N'Meetings', N'Career Conversations (Leader)', 30, 30, NULL),
+    (N'Meetings', N'Performance Development Plan (Employee)', 30, 30, NULL),
+    (N'Meetings', N'Performance Development Plan (Leader)', 30, 30, NULL),
+    (N'Meetings', N'Liquor Accord', NULL, 60, NULL),
+    (N'Meetings', N'SM Interview Completion', 60, 60, NULL),
+    (N'Meetings', N'SM 1:1 Interview Completion', 30, 30, NULL),
+    (N'Meetings', N'30/60/90 Review (Employee)', 30, 30, NULL),
+    (N'Meetings', N'30/60/90 Review (Leader)', 30, 30, NULL),
+    (N'Meetings', N'End of Probation: Personnel Leader Catch Up', 15, 15, NULL),
+    (N'Meetings', N'30/60/90 Position Change Review (Employee)', 30, 30, NULL),
+    (N'Meetings', N'30/60/90 Position Change Review (Leader)', 30, 30, NULL),
+    (N'Meetings', N'Position Change: Personnel Leader Catch Up', 15, 15, NULL),
+    (N'Merchandising', N'Monthly Product Launch', NULL, NULL, N'As determined by Merchandising'),
+    (N'Merchandising', N'Quarterly Remerches', NULL, NULL, N'As determined by Merchandising'),
+    (N'Merchandising', N'Yearly Retorfit Program (MSR)', NULL, NULL, N'As approved by National Merchandising Working Group'),
+    (N'Merchandising', N'Store Refresh or Extension', NULL, NULL, N'As determined by Refresh Guide'),
+    (N'Merchandising', N'Merchndising Trials', NULL, NULL, N'As determined by Merchandising'),
+    (N'Merchandising', N'Seasonal POS Install', NULL, NULL, N'As determined by Merchandising'),
+    (N'Merchandising', N'Grand Openings', NULL, NULL, N'As determined by Grand Opening Guide'),
+    (N'Merchandising', N'Seasonal Remerch', NULL, NULL, N'As determined by Merchandising'),
+    (N'Miscellaneous', N'Travel Time', NULL, NULL, N'As per travel policy'),
+    (N'Miscellaneous', N'Alarm Callouts', 180, 540, NULL),
+    (N'Miscellaneous', N'Power Outages', NULL, NULL, N'As approved by EMSO'),
+    (N'Miscellaneous', N'Store Evacuations', NULL, NULL, N'As approved by EMSO'),
+    (N'Miscellaneous', N'Fire Drills (per person)', 15, 15, NULL),
+    (N'Miscellaneous', N'Quarterly H&S Audits and Regional Safety Day', 120, 120, NULL),
+    (N'Miscellaneous', N'Seasonal Process', NULL, NULL, N'As approved by DSO'),
+    (N'Miscellaneous', N'EA Update', NULL, NULL, N'As approved by DSO'),
+    (N'Miscellaneous', N'Broken Compactor', 15, 60, NULL),
+    (N'Miscellaneous', N'Capacity Constraints', NULL, NULL, N'As approved by DSO'),
+    (N'Cleaning', N'Monthly', NULL, NULL, N'Per approved cleaning time note'),
+    (N'Cleaning', N'Bi-monthly', NULL, NULL, N'Per approved cleaning time note'),
+    (N'Cleaning', N'Quarterly', NULL, NULL, N'Per approved cleaning time note'),
+    (N'Cleaning', N'Biannual or Annual', NULL, NULL, N'Per approved cleaning time note'),
+    (N'Training', N'JSA Pathway (Day 1)', 330, 330, NULL),
+    (N'Training', N'JSA Pathway (Day 2)', 315, 315, NULL),
+    (N'Training', N'JSA Pathway (Day 3)', 495, 495, NULL),
+    (N'Training', N'Store Assistant Pathway (Day 1)', 360, 360, NULL),
+    (N'Training', N'Store Assistant Pathway (Day 2)', 270, 270, NULL),
+    (N'Training', N'Store Assistant Pathway (Day 3)', 540, 540, NULL),
+    (N'Training', N'Store Assistant Pathway (Day 4)', 420, 420, NULL),
+    (N'Training', N'RSM Pathway (Module 1)', 180, 180, NULL),
+    (N'Training', N'RSM Pathway (Module 2)', 180, 180, NULL),
+    (N'Training', N'DSM Pathway', 72, 72, NULL),
+    (N'Training', N'ASM Pathway', 103, 103, NULL),
+    (N'Training', N'Future Leader Program', NULL, NULL, N'As per national agenda'),
+    (N'Training', N'Store Manager Pathway', NULL, NULL, NULL),
+    (N'Training', N'Quarterly Training', NULL, NULL, N'As per Academy NWCP Guide'),
+    (N'Training', N'Head Office Training', NULL, NULL, N'As per agenda'),
+    (N'Training', N'EMSO Store Training', NULL, NULL, N'As approved by DSO')
+) AS v ([category], [name], [default_minutes], [max_minutes], [note])
+JOIN [non_op_categories] c ON c.[name] = v.[category];
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'schedule_type', N'day_of_week', N'nth_week', N'region_days', N'duration_type', N'fixed_minutes', N'minutes_per_unit', N'min_minutes', N'window_start_kind', N'window_start_time', N'window_start_offset_min', N'window_end_kind', N'window_end_time', N'window_end_offset_min', N'sort_order') AND [object_id] = OBJECT_ID(N'[admin_tasks]'))
+    SET IDENTITY_INSERT [admin_tasks] ON;
+INSERT INTO [admin_tasks] ([name], [schedule_type], [day_of_week], [nth_week], [region_days], [duration_type], [fixed_minutes], [minutes_per_unit], [min_minutes], [window_start_kind], [window_start_time], [window_start_offset_min], [window_end_kind], [window_end_time], [window_end_offset_min], [sort_order])
+VALUES (N'APM', N'weekly', 0, NULL, NULL, N'fixed', 15.0E0, NULL, NULL, N'clock', '09:00:00', 0, N'clock', '12:00:00', 0, 10),
+(N'End of Day', N'daily', NULL, NULL, NULL, N'fixed', 17.0E0, NULL, NULL, N'close', NULL, 0, N'none', NULL, 0, 20),
+(N'Comms Overhaul', N'weekly', 0, NULL, NULL, N'fixed', 30.0E0, NULL, NULL, N'clock', '12:00:00', 0, N'clock', '15:00:00', 0, 30),
+(N'Fresh Ordering', N'daily', NULL, NULL, NULL, N'fixed', 150.0E0, NULL, NULL, N'close', NULL, -210, N'close', NULL, 0, 40),
+(N'Longlife Date Checks', N'weekly', 0, NULL, NULL, N'fixed', 120.0E0, NULL, NULL, N'none', NULL, 0, N'clock', '08:30:00', 0, 50),
+(N'Non BAU STM Tasks', N'weekly', 0, NULL, NULL, N'fixed', 60.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 60),
+(N'Parameter Deviation & Custom Bays', N'weekly', 0, NULL, NULL, N'fixed', 15.0E0, NULL, NULL, N'none', NULL, 0, N'clock', '13:00:00', 0, 70),
+(N'STM Date Check', N'daily', NULL, NULL, NULL, N'fixed', 5.0E0, NULL, NULL, N'clock', '17:00:00', 0, N'none', NULL, 0, 80),
+(N'Safe Handover', N'weekly', 4, NULL, NULL, N'fixed', 14.0E0, NULL, NULL, N'clock', '09:00:00', 0, N'none', NULL, 0, 90),
+(N'Till Calibration', N'weekly', NULL, NULL, N'{"501":0,"505":0,"506":0,"504":1,"507":1,"509":1,"503":3,"502":3}', N'till_calibration', NULL, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 100),
+(N'UKG End of Day', N'daily', NULL, NULL, NULL, N'fixed', 6.0E0, NULL, NULL, N'close', NULL, 0, N'none', NULL, 0, 110),
+(N'Use By Date Check', N'daily', NULL, NULL, NULL, N'fixed', 18.0E0, NULL, NULL, N'clock', '17:00:00', 0, N'none', NULL, 0, 120),
+(N'CGOS Ordering', N'daily', NULL, NULL, NULL, N'fixed', 58.5E0, NULL, NULL, N'clock', '13:00:00', 0, N'clock', '16:00:00', 0, 130),
+(N'EMSO Meeting', N'monthly_nth', 1, 3, NULL, N'fixed', 60.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 140),
+(N'UKG End of PayPeriod', N'planning_week', 0, NULL, NULL, N'per_employee', NULL, 1.3200000000000001E0, 20.0E0, N'none', NULL, 0, N'clock', '10:00:00', 0, 150),
+(N'UKG Rostering', N'planning_week', 1, NULL, NULL, N'per_employee', NULL, 3.1600000000000001E0, 48.0E0, N'none', NULL, 0, N'none', NULL, 0, 160),
+(N'Specials Inventory Management', N'monthly_nth', 1, 2, NULL, N'fixed', 210.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 170),
+(N'MyWalk', N'monthly_nth', 1, 2, NULL, N'fixed', 45.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 180),
+(N'Register Assignment', N'daily', NULL, NULL, NULL, N'per_register', NULL, 3.0E0, NULL, N'none', NULL, 0, N'open', NULL, 0, 190),
+(N'Register Cash-Up', N'daily', NULL, NULL, NULL, N'per_register', NULL, 5.0E0, NULL, N'close', NULL, -30, N'none', NULL, 0, 200),
+(N'Register Date Checks', N'monthly_nth', 1, 3, NULL, N'fixed', 45.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 210),
+(N'EMSO Meeting Prep', N'monthly_nth', 0, 3, NULL, N'fixed', 60.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 220),
+(N'SPi Planning', N'planning_week', 1, NULL, NULL, N'per_employee', NULL, 1.79E0, 27.0E0, N'none', NULL, 0, N'none', NULL, 0, 230),
+(N'Specials Price Card Audit', N'weekly', 1, NULL, NULL, N'fixed', 4.0E0, NULL, NULL, N'none', NULL, 0, N'none', NULL, 0, 240);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'schedule_type', N'day_of_week', N'nth_week', N'region_days', N'duration_type', N'fixed_minutes', N'minutes_per_unit', N'min_minutes', N'window_start_kind', N'window_start_time', N'window_start_offset_min', N'window_end_kind', N'window_end_time', N'window_end_offset_min', N'sort_order') AND [object_id] = OBJECT_ID(N'[admin_tasks]'))
+    SET IDENTITY_INSERT [admin_tasks] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'share_pct', N'window_start_kind', N'window_start_time', N'window_start_offset_min', N'window_end_kind', N'window_end_time', N'window_end_offset_min', N'sort_order') AND [object_id] = OBJECT_ID(N'[reset_tasks]'))
+    SET IDENTITY_INSERT [reset_tasks] ON;
+INSERT INTO [reset_tasks] ([name], [share_pct], [window_start_kind], [window_start_time], [window_start_offset_min], [window_end_kind], [window_end_time], [window_end_offset_min], [sort_order])
+VALUES (N'Re-run 1', 20.0E0, N'clock', '10:00:00', 0, N'clock', '14:00:00', 0, 10),
+(N'Re-run 2', 20.0E0, N'clock', '14:00:00', 0, N'clock', '18:00:00', 0, 20),
+(N'First declare (light)', 15.0E0, N'clock', '10:00:00', 0, N'clock', '14:00:00', 0, 30),
+(N'Full decard', NULL, N'close', NULL, -150, N'close', NULL, 0, 40);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'name', N'share_pct', N'window_start_kind', N'window_start_time', N'window_start_offset_min', N'window_end_kind', N'window_end_time', N'window_end_offset_min', N'sort_order') AND [object_id] = OBJECT_ID(N'[reset_tasks]'))
+    SET IDENTITY_INSERT [reset_tasks] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'id') AND [object_id] = OBJECT_ID(N'[plan_placement_settings]'))
+    SET IDENTITY_INSERT [plan_placement_settings] ON;
+INSERT INTO [plan_placement_settings] ([id])
+VALUES (CAST(1 AS bit));
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'id') AND [object_id] = OBJECT_ID(N'[plan_placement_settings]'))
+    SET IDENTITY_INSERT [plan_placement_settings] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'id') AND [object_id] = OBJECT_ID(N'[variance_settings]'))
+    SET IDENTITY_INSERT [variance_settings] ON;
+INSERT INTO [variance_settings] ([id])
+VALUES (CAST(1 AS bit));
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'id') AND [object_id] = OBJECT_ID(N'[variance_settings]'))
+    SET IDENTITY_INSERT [variance_settings] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'id') AND [object_id] = OBJECT_ID(N'[leave_settings]'))
+    SET IDENTITY_INSERT [leave_settings] ON;
+INSERT INTO [leave_settings] ([id])
+VALUES (CAST(1 AS bit));
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'id') AND [object_id] = OBJECT_ID(N'[leave_settings]'))
+    SET IDENTITY_INSERT [leave_settings] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'contract_hours', N'role_class', N'leave_notional_hours', N'accrual_weeks', N'annual_accrual_hours') AND [object_id] = OBJECT_ID(N'[leave_accrual_bands]'))
+    SET IDENTITY_INSERT [leave_accrual_bands] ON;
+INSERT INTO [leave_accrual_bands] ([contract_hours], [role_class], [leave_notional_hours], [accrual_weeks], [annual_accrual_hours])
+VALUES (100.0E0, N'SM', 10.0E0, 5.0E0, 250.0E0),
+(90.0E0, N'SM', 9.0E0, 5.0E0, 225.0E0),
+(80.0E0, N'SM', 8.75E0, 5.0E0, 218.75E0),
+(90.0E0, N'ASM', 9.0E0, 5.0E0, 225.0E0),
+(80.0E0, N'ASM', 8.75E0, 5.0E0, 218.75E0),
+(60.0E0, N'ASM', 6.0E0, 5.0E0, 150.0E0),
+(70.0E0, N'DSM', 7.5E0, 5.0E0, 187.5E0),
+(60.0E0, N'DSM', 7.5E0, 5.0E0, 187.5E0),
+(70.0E0, N'SA', 7.25E0, 4.0E0, 145.0E0),
+(60.0E0, N'SA', 6.5E0, 4.0E0, 130.0E0),
+(55.0E0, N'SA', 6.0E0, 4.0E0, 120.0E0),
+(50.0E0, N'SA', 5.5E0, 4.0E0, 110.0E0),
+(40.0E0, N'SA', 5.25E0, 4.0E0, 80.0E0),
+(30.0E0, N'SA', 4.75E0, 4.0E0, 60.0E0),
+(21.0E0, N'SA', 4.0E0, 4.0E0, 42.0E0);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'contract_hours', N'role_class', N'leave_notional_hours', N'accrual_weeks', N'annual_accrual_hours') AND [object_id] = OBJECT_ID(N'[leave_accrual_bands]'))
+    SET IDENTITY_INSERT [leave_accrual_bands] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'labour_group', N'max_days', N'uplift_pct') AND [object_id] = OBJECT_ID(N'[probation_buffers]'))
+    SET IDENTITY_INSERT [probation_buffers] ON;
+INSERT INTO [probation_buffers] ([labour_group], [max_days], [uplift_pct])
+VALUES (N'*', 30, 40.0E0),
+(N'*', 60, 25.0E0),
+(N'*', 90, 10.0E0);
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'labour_group', N'max_days', N'uplift_pct') AND [object_id] = OBJECT_ID(N'[probation_buffers]'))
+    SET IDENTITY_INSERT [probation_buffers] OFF;
+
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'key', N'value', N'note') AND [object_id] = OBJECT_ID(N'[rostering_rules]'))
+    SET IDENTITY_INSERT [rostering_rules] ON;
+INSERT INTO [rostering_rules] ([key], [value], [note])
+VALUES (N'paidBreakFactorPct', 4.5E0, N'Paid break allowance added to actual hours @100% before OE is measured (Labour Group Rules -> Breaks).');
+IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'key', N'value', N'note') AND [object_id] = OBJECT_ID(N'[rostering_rules]'))
+    SET IDENTITY_INSERT [rostering_rules] OFF;
+
+INSERT INTO [__ef_migrations_history] ([MigrationId], [ProductVersion])
+VALUES (N'20261125210404_ReferenceData', N'10.0.15');
+
+COMMIT;
+GO
+
