@@ -8,6 +8,7 @@ using Roster.Data.Services.Cache;
 using Roster.Data.Services.Held;
 using Roster.Data.Services.RefData;
 using Roster.Engine.Core;
+using Roster.Engine.Planning;
 using Roster.Engine.Planning.Stage1;
 using Roster.Engine.SubTasks;
 

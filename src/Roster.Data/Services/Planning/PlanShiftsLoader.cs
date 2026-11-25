@@ -26,7 +26,7 @@ public sealed class PlanShiftsLoader(
     {
         var slots = await daySlots.ComputeDaySlotsAsync(storeId, date, ct);
         var stage1 = slots.Stage1;
-        if (!stage1.HasData || slots.Shaped is not { } shaped) return PlanShiftComputation.Empty();
+        if (!stage1.HasData || slots.Shaped is not { } shaped) return PlanShifts.Empty();
 
         var priority = await refData.GetTaskPriorityAsync(ct);
         var ruleOverrides = await refData.GetRuleOverridesAsync(ct);
