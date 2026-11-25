@@ -723,6 +723,18 @@
     width: calc(var(--spacing) * 9);
   }
 
+  .w-20 {
+    width: calc(var(--spacing) * 20);
+  }
+
+  .w-24 {
+    width: calc(var(--spacing) * 24);
+  }
+
+  .w-40 {
+    width: calc(var(--spacing) * 40);
+  }
+
   .w-48 {
     width: calc(var(--spacing) * 48);
   }
@@ -843,6 +855,10 @@
     min-width: 230px;
   }
 
+  .min-w-\[720px\] {
+    min-width: 720px;
+  }
+
   .flex-1 {
     flex: 1;
   }
@@ -853,6 +869,10 @@
 
   .shrink-0 {
     flex-shrink: 0;
+  }
+
+  .grow {
+    flex-grow: 1;
   }
 
   .basis-64 {
@@ -1219,6 +1239,16 @@
     border-color: var(--brand-red);
   }
 
+  .border-\[var\(--ui-bad\)\]\/30 {
+    border-color: var(--ui-bad);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-\[var\(--ui-bad\)\]\/30 {
+      border-color: color-mix(in oklab, var(--ui-bad) 30%, transparent);
+    }
+  }
+
   .border-\[var\(--ui-bad\)\]\/40 {
     border-color: var(--ui-bad);
   }
@@ -1277,8 +1307,14 @@
     background-color: var(--brand-red);
   }
 
-  .bg-\[var\(--brand-red-tint\)\] {
+  .bg-\[var\(--brand-red-tint\)\], .bg-\[var\(--brand-red-tint\)\]\/60 {
     background-color: var(--brand-red-tint);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-\[var\(--brand-red-tint\)\]\/60 {
+      background-color: color-mix(in oklab, var(--brand-red-tint) 60%, transparent);
+    }
   }
 
   .bg-\[var\(--brand-surface\)\] {
@@ -1329,8 +1365,14 @@
     }
   }
 
-  .bg-\[var\(--ui-lavender\)\] {
+  .bg-\[var\(--ui-lavender\)\], .bg-\[var\(--ui-lavender\)\]\/50 {
     background-color: var(--ui-lavender);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-\[var\(--ui-lavender\)\]\/50 {
+      background-color: color-mix(in oklab, var(--ui-lavender) 50%, transparent);
+    }
   }
 
   .bg-\[var\(--ui-violet\)\] {
@@ -1389,6 +1431,10 @@
 
   .p-2 {
     padding: calc(var(--spacing) * 2);
+  }
+
+  .p-4 {
+    padding: calc(var(--spacing) * 4);
   }
 
   .p-5 {
@@ -1553,6 +1599,14 @@
 
   .align-middle {
     vertical-align: middle;
+  }
+
+  .align-top {
+    vertical-align: top;
+  }
+
+  .font-mono {
+    font-family: var(--font-geist-mono);
   }
 
   .text-2xl {
@@ -2132,6 +2186,10 @@
 
     .sm\:gap-1\.5 {
       gap: calc(var(--spacing) * 1.5);
+    }
+
+    .sm\:p-5 {
+      padding: calc(var(--spacing) * 5);
     }
 
     .sm\:p-6 {
