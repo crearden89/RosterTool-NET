@@ -3,6 +3,7 @@
 using Roster.Engine.Core;
 using Roster.Engine.Planning.Plan;
 using Roster.Engine.Planning.Stage1;
+using Roster.Web.Features.Review;
 
 namespace Roster.Web.Features.Plan;
 
@@ -61,6 +62,9 @@ public sealed record PlanPageModel
 
     /// <summary>Earlier fortnights still not approved (the overdue banner). Never for peer view.</summary>
     public IReadOnlyList<DateOnly> OverduePeriods { get; init; } = [];
+
+    /// <summary>Where the fortnight's plan review stands (planReviewState). Not shown for another store's plan.</summary>
+    public PlanReviewState ReviewState { get; init; }
 
     /// <summary>An approved plan is locked (owner decision R5): no Generate, no edit, no public-holiday move.</summary>
     public bool Locked { get; init; }

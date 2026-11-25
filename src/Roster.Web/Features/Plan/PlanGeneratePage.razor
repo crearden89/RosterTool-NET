@@ -1,0 +1,187 @@
+@page "/plan/generate"
+@* Port of src/app/(app)/plan/generate/page.tsx (the reads are IPlanService.LoadPageAsync). *@
+@using global::Roster.Data.Services.Review
+@using global::Roster.Web.Features.Review
+@using global::Roster.Web.Features.RosterPage
+@inject IPlanService PlanService
+@inject NavigationManager Navigation
+
+@if (_model is not { } m)
+{
+    <Loading />
+}
+else if (m.RedirectTo is null)
+{
+    @* "Show sub-tasks", as on the Roster page: the switch sits in the generate
+       bar (where the Roster page has it on its floor bar) and the day below
+       reads it. It stays as set from day to day; nothing is saved. *@
+    <SubtaskViewProvider>
+        <div>
+            <FilterBar Stores="_stores"
+                       SelectedStore="m.SelectedStore"
+                       SelectedDate="m.SelectedDate"
+                       PeriodStart="m.PeriodStart"
+                       BasePath="/plan/generate"
+                       HasSnapshot="m.HasSnapshot"
+                       GeneratedAt="m.GeneratedAt"
+                       CanGenerate="m.CanGenerate"
+                       IsPastPeriod="m.IsPastPeriod"
+                       Title="Plan"
+                       Badge="@(!m.Peer && m.SelectedStore is not null ? @<PlanStatusChip State="m.ReviewState" Locked="m.Locked" Page="PlanOrRoster.Plan" /> : null)"
+                       Subtitle="@(m.StoreRow is { } row ? @<text>@row.Name · fortnight @Dates.AuRange(m.PeriodStart, Period.PeriodEndFrom(m.PeriodStart))</text> : null)"
+                       HeaderAction="@(m.ShowReview ? @<ReviewLink Href="@m.ReviewHref" State="m.ReviewState" IsStore="m.IsStoreTier" Locked="m.Locked" /> : null)"
+                       Notices="Notices(m)"
+                       Held="Held(m)"
+                       BarAction="@(m.HasSnapshot ? @<ShowSubtasksToggle Tone="SubtaskToggleTone.Light" Hint="Show which sub-task each Reset, Load Running, Cleaning and Specials tile is, open every group's sub-tasks in Benchmark Hours, and paint them in edit mode" /> : null)"
+                       LockedNote="m.LockedNote"
+                       OnGenerated="ReloadAsync" />
+
+            @if (m.Figures is { } f)
+            {
+                <div class="mb-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+                    <StatCard Label="@Text("Benchmark")" Value="@Text($"{Js.ToFixed(f.Benchmark, 2)} h")" Sub="@Text($"Non-Op {Js.ToFixed(f.NonOp, 2)} h included")" />
+                    <StatCard Label="@Text("Planned")" Value="@Text($"{Js.ToFixed(f.Worked, 2)} h")" Sub="@Text($"{PageFigures.Signed(f.Worked - f.Benchmark)} h against the benchmark")" />
+                    <StatCard Label="@Text("Days within ±1 h")" Value="@Text($"{f.WithinDays} of {f.PlannedDays}")" Sub="@Text("the day hours check")" />
+                    <StatCard Label="@Text("Shifts")" Value="@Text(Js.NumberToString(f.Shifts))" Sub="@Text("planned this fortnight")" />
+                    <StatCard Class="col-span-2 xl:col-span-1" Label="@Text("Flags")">
+                        <Value>
+                            <span>
+                                <span class="@(f.Errors > 0 ? "text-[var(--ui-bad)]" : null)">@f.Errors</span>
+                                <span class="text-base font-semibold text-[var(--ui-muted)]">@(f.Errors == 1 ? "error" : "errors")</span>
+                                @f.Warnings
+                                <span class="text-base font-semibold text-[var(--ui-muted)]">@(f.Warnings == 1 ? "warning" : "warnings")</span>
+                            </span>
+                        </Value>
+                        <Footer>
+                            <a href="@ShellPaths.Href(m.ReviewHref)" class="@Ui.LinkClass">Check them on Review →</a>
+                        </Footer>
+                    </StatCard>
+                </div>
+            }
+
+            @if (m.DayChips.Count > 0)
+            {
+                <Card Padded="false" Class="mb-6 px-3 py-4 sm:p-6">
+                    <DayChips Days="_chips" Selected="m.SelectedDate" />
+                </Card>
+            }
+
+            @if (m.IsPublicHolidayDay && !m.IsReadOnly && !m.IsPastPeriod && !m.Locked && m.SelectedStore is { } phStore)
+            {
+                <PhReallocationToggle StoreId="phStore" Date="m.SelectedDate" InitialOn="m.PhReallocated" OnChanged="ReloadAsync" />
+            }
+
+            @if (m.Day is not { Result.HasData: true, Plan: not null } day)
+            {
+                <Card>
+                    <p class="text-sm text-[var(--brand-navy)]/70">
+                        @(!m.HasSnapshot
+                            ? m.Peer
+                                ? "This store hasn't generated a plan for this fortnight yet."
+                                : "No plan has been generated for this fortnight yet - press Generate Plan to solve and hold it. It then stays exactly as generated until someone regenerates."
+                            : m.Day?.Result.Closed == true
+                                ? "Store closed on this date (special trading hours or a Sales-page override) - nothing to plan."
+                                : "No plan could be generated - this store/date needs benchmark data, trading hours, and POS quarter-hour data. Regenerate after fixing the inputs.")
+                    </p>
+                </Card>
+            }
+            else
+            {
+                <DayPlanBlock Date="m.SelectedDate"
+                              Result="day.Result"
+                              Plan="day.Plan!"
+                              StoreId="m.SelectedStore ?? Guid.Empty"
+                              PeriodStart="m.PeriodStart"
+                              CanEdit="m.CanEdit"
+                              Peer="m.Peer"
+                              TradeCurve="m.TradeCurve"
+                              TradeQuarterHours="m.TradeQuarterHours"
+                              NightFill="m.NightFill"
+                              Cover="m.Cover"
+                              OnSaved="ReloadAsync" />
+            }
+        </div>
+    </SubtaskViewProvider>
+}
+
+@code {
+    private PlanPageModel? _model;
+    private IReadOnlyList<StoreOption> _stores = [];
+    private IReadOnlyList<DayChip> _chips = [];
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+
+    [SupplyParameterFromQuery(Name = "date")] public string? Date { get; set; }
+
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
+    [SupplyParameterFromQuery(Name = "period")] public string? PeriodParam { get; set; }
+
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var m = await PlanService.LoadPageAsync(new PlanPageQuery(Store, Date, View, PeriodParam));
+        // The roster half of this page moved to its own route: old links land there.
+        if (m.RedirectTo is { } to)
+        {
+            _model = m;
+            Navigation.NavigateTo(ShellPaths.Href(to), replace: true);
+            return;
+        }
+        _stores = m.Stores.Select(s => new StoreOption(s.Id, s.Code, s.Name)).ToList();
+        _chips = m.DayChips.Select(c => new DayChip
+        {
+            Date = c.Date,
+            Href = c.Href,
+            Tone = c.Tone switch { PlanChipTone.Ok => DayTone.Ok, PlanChipTone.Error => DayTone.Error, _ => DayTone.Neutral },
+            Note = c.Note,
+            Status = c.Status,
+        }).ToList();
+        _model = m;
+    }
+
+    private static RenderFragment Text(string s) => b => b.AddContent(0, s);
+
+    private static RenderFragment Notices(PlanPageModel m) =>
+        @<text>
+            @if (m.Peer && m.StoreRow is { } row)
+            {
+                <div class="mb-4 rounded-xl border border-[var(--brand-navy)]/20 bg-[var(--brand-navy-tint)] px-5 py-3 text-sm font-semibold text-[var(--brand-navy)]">
+                    Viewing the plan for @row.Code - @row.Name (read-only).
+                </div>
+            }
+            @if (!m.Peer && m.OverduePeriods.Count > 0)
+            {
+                <div class="mb-4 rounded-xl border border-[var(--brand-red)]/40 bg-[var(--brand-red-tint)] px-5 py-3 text-sm font-semibold text-[var(--brand-red)]">
+                    Previous period(s) not approved: @string.Join(", ", m.OverduePeriods.Select(Period.PeriodLabel))
+                </div>
+            }
+        </text>;
+
+    private static RenderFragment Held(PlanPageModel m) =>
+        @<text>
+            @if (!m.HasSnapshot)
+            {
+                <span class="font-semibold text-[var(--ui-ink)]">No plan held for this fortnight yet</span>
+            }
+            else
+            {
+                <span class="font-semibold text-[var(--ui-ink)]">Held plan</span>
+                @if (m.GeneratedAt is { } at)
+                {
+                    <span>Generated @ReviewFormat.Stamp(at)@(m.GeneratorName is { } by ? $" by {by}" : "")</span>
+                }
+                @if (m.Figures is { } f)
+                {
+                    <span>
+                        @f.Days.Count days · <b class="text-[var(--ui-good)]">@f.OkDays OK</b>
+                        @if (f.ErrorDays > 0)
+                        {
+                            @(" · ")<b class="text-[var(--ui-bad)]">@f.ErrorDays with an error</b>
+                        }
+                    </span>
+                }
+            }
+        </text>;
+}
