@@ -1,0 +1,169 @@
+@* Port of src/app/(app)/overview/FortnightPanel.tsx.
+   The store's fortnight - where it is on its way to the floor and the button
+   to the next step - and, beside it, what the store has to do. Shows its
+   skeleton while it reads (the TypeScript streamed it in under Suspense). *@
+@inject IOverviewService Overview
+@inject ILogger<FortnightPanel> Log
+
+@if (_loading)
+{
+    <div class="grid gap-4 lg:grid-cols-3" aria-busy="true">
+        <Card Class="lg:col-span-2">
+            <p class="text-sm text-[var(--ui-muted)]">Loading the fortnight…</p>
+            <div class="mt-4 h-24 rounded-xl bg-[var(--ui-canvas)]"></div>
+        </Card>
+        <Card>
+            <p class="text-sm text-[var(--ui-muted)]">Loading what needs doing…</p>
+            <div class="mt-4 h-24 rounded-xl bg-[var(--ui-canvas)]"></div>
+        </Card>
+    </div>
+}
+else if (_failed)
+{
+    <Unavailable What="The fortnight and what needs doing" />
+}
+else if (_f is { } f)
+{
+    var state = f.State;
+    var figures = f.Figures;
+    var head = FortnightCard.FortnightHeadline(state);
+    var actions = FortnightCard.NextActionsFor(state, CanWrite, IsReviewer);
+    var end = Period.PeriodEndFrom(state.PeriodStart);
+    var behind = f.OverduePeriods.Where(x => x != state.PeriodStart).ToList();
+    double? gap = figures.Planned is { } planned && figures.Benchmark is { } benchmark ? planned - benchmark : null;
+    var facts = new (string Label, string Value, string? Sub)[]
+    {
+        ("Sales forecast", figures.Forecast is { } fc ? Money.Money0(fc) : "-", null),
+        ("Benchmark", figures.Benchmark is { } b ? $"{H2(b)} h" : "-", null),
+        ("Planned", figures.Planned is { } pl ? $"{H2(pl)} h" : "-",
+            gap is { } g ? $"{(g >= 0 ? "+" : "−")}{H2(Math.Abs(g))} h on the benchmark" : null),
+        ("Shifts", figures.Shifts is { } sh ? Js.NumberToString(sh) : "-", null),
+    };
+
+    <div class="grid gap-4 lg:grid-cols-3">
+        <Card Class="lg:col-span-2">
+            <SectionHeader>
+                <Title>Fortnight @FortnightCard.RangeLabel(state.PeriodStart, end)</Title>
+                <Aside>
+                    <span class="flex flex-wrap gap-1.5">
+                        @if (FortnightCard.IsOverdue(state))
+                        {
+                            <Pill Tone="PillTone.Red">Overdue</Pill>
+                        }
+                        <Pill Tone="OverviewTones.Pill(head.Tone)">
+                            @if (head.Lock)
+                            {
+                                <Icon Name="IconName.Lock" Class="h-3 w-3" StrokeWidth="2.5" aria-hidden="true" />
+                            }
+                            @head.Text
+                        </Pill>
+                    </span>
+                </Aside>
+            </SectionHeader>
+            <StepTrack Steps="FortnightCard.FortnightSteps(state).Select(OverviewTones.Step).ToList()" />
+            <dl class="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 border-t border-[var(--ui-line)] pt-4 sm:grid-cols-4">
+                @foreach (var x in facts)
+                {
+                    <div @key="x.Label" class="min-w-0">
+                        <dt>
+                            <Eyebrow>@x.Label</Eyebrow>
+                        </dt>
+                        <dd class="mt-1 text-xl font-bold leading-tight text-[var(--ui-ink)]">@x.Value</dd>
+                        @if (x.Sub is { Length: > 0 })
+                        {
+                            <dd class="mt-0.5 text-xs text-[var(--ui-muted)]">@x.Sub</dd>
+                        }
+                    </div>
+                }
+            </dl>
+            <div class="mt-5 flex flex-wrap gap-2">
+                <a href="@actions.Primary.Href" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">
+                    @actions.Primary.Label <Icon Name="IconName.ArrowRight" Class="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                @if (actions.Secondary is { } secondary)
+                {
+                    <a href="@secondary.Href" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">@secondary.Label</a>
+                }
+            </div>
+            @if (behind.Count > 0)
+            {
+                <p class="mt-3 text-xs text-[var(--ui-bad)]">
+                    Also not on the floor yet:
+                    @for (var i = 0; i < behind.Count; i++)
+                    {
+                        var period = behind[i];
+                        <span @key="period">@(i > 0 ? ", " : "")<a href="@FortnightCard.FortnightLinksFor(state.StoreId, period).Plan" class="@Ui.LinkClass">@FortnightCard.RangeLabel(period, Period.PeriodEndFrom(period))</a></span>
+                    }
+                </p>
+            }
+        </Card>
+        <Card Padded="false">
+            <div class="px-5 pt-5 sm:px-6">
+                <SectionHeader Title="@Text("Needs doing")"
+                               Aside="@(f.Needs.Count > 0 ? Text($"{f.Needs.Count} item{(f.Needs.Count == 1 ? "" : "s")}") : null)" />
+            </div>
+            @if (f.Needs.Count > 0)
+            {
+                <ul class="divide-y divide-[var(--ui-line)] border-t border-[var(--ui-line)]">
+                    @foreach (var x in f.Needs)
+                    {
+                        <li @key="x.Key" class="flex items-start gap-3 px-5 py-3 sm:px-6">
+                            <span aria-hidden="true"
+                                  class="@($"mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl {(x.Tone == ChipTone.Red ? "bg-[var(--brand-red-tint)] text-[var(--ui-bad)]" : "bg-[var(--ui-lavender)] text-[var(--ui-ink)]")}")">
+                                <Icon Name="@KindIcon(x.Kind)" Class="h-4 w-4" />
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-semibold text-[var(--ui-ink)]">@x.Title</span>
+                                <span class="block text-xs text-[var(--ui-muted)]">@x.Detail</span>
+                            </span>
+                            <a href="@x.Href" aria-label="@($"{x.Title}: open {x.LinkLabel}")" class="@($"mt-1 text-xs whitespace-nowrap {Ui.LinkClass}")">@x.LinkLabel →</a>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="flex items-center gap-2 border-t border-[var(--ui-line)] px-5 py-4 text-sm text-[var(--ui-muted)] sm:px-6">
+                    <Icon Name="IconName.CircleCheck" Class="h-4 w-4 text-[var(--ui-good)]" aria-hidden="true" /> Nothing needs doing right now.
+                </p>
+            }
+        </Card>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _failed;
+    private StoreFortnight? _f;
+
+    [Parameter, EditorRequired] public Guid StoreId { get; set; }
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter] public bool CanWrite { get; set; }
+    [Parameter] public bool IsReviewer { get; set; }
+
+    private static string H2(double n) => Js.ToFixed(n, 2);
+
+    private static RenderFragment Text(string text) => b => b.AddContent(0, text);
+
+    private static IconName KindIcon(NeedsKind kind) => kind switch
+    {
+        NeedsKind.Requests => IconName.CalendarDays,
+        NeedsKind.Errors => IconName.CircleAlert,
+        NeedsKind.Warnings => IconName.ClipboardCheck,
+        _ => IconName.UserRound,
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _f = await Overview.LoadStoreFortnightAsync(StoreId, Today);
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "Dashboard: the fortnight for {StoreId} couldn't be read", StoreId);
+            _failed = true;
+        }
+        _loading = false;
+    }
+}
