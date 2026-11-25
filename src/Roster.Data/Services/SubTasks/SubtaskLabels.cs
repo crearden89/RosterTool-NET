@@ -46,17 +46,9 @@ public interface ISubtaskLabels
     Task<List<Shift>> LabelRosterDayAsync(
         Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> roster, CancellationToken ct = default);
 
-    /// <summary>
-    /// publishedSubtaskRuns: each published shift's sub-task codes in the order they are
-    /// worked, keyed "employeeId:yyyy-mm-dd" - what the printed roster shows under the shift
-    /// times. Rows published before sub-tasks are labelled when read; nothing is written back.
-    /// Reads as <paramref name="access"/> (default: the current identity).
-    /// </summary>
-    Task<JsMap<string, List<string>>> PublishedSubtaskRunsAsync(
-        Guid storeId, DateOnly periodStart, IReadOnlyList<DateOnly> dates, AccessContext? access = null, CancellationToken ct = default);
 }
 
-public sealed class SubtaskLabels(IRosterDbContextFactory contexts, IRefData refData, IHeldPlans heldPlans) : ISubtaskLabels
+public sealed class SubtaskLabels(IRosterDbContextFactory contexts, IRefData refData) : ISubtaskLabels
 {
     public Task<LoadBoardAverages> GetLoadBoardAveragesAsync(Guid storeId, DateOnly periodStart, CancellationToken ct = default) =>
         RequestMemo.Cached("refdata.getLoadBoardAverages", [storeId, periodStart], async () =>
@@ -110,7 +102,23 @@ public sealed class SubtaskLabels(IRosterDbContextFactory contexts, IRefData ref
     public async Task<List<Shift>> LabelRosterDayAsync(
         Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> roster, CancellationToken ct = default) =>
         Day.LabelRosterDay(plan, roster, await LabelContextAsync(storeId, date, stage1, ct));
+}
 
+/// <summary>subtasks/stored: the sub-tasks of a published roster, for the printed roster.</summary>
+public interface IPublishedSubtasks
+{
+    /// <summary>
+    /// publishedSubtaskRuns: each published shift's sub-task codes in the order they are
+    /// worked, keyed "employeeId:yyyy-mm-dd" - what the printed roster shows under the shift
+    /// times. Rows published before sub-tasks are labelled when read; nothing is written back.
+    /// Reads as <paramref name="access"/> (default: the current identity).
+    /// </summary>
+    Task<JsMap<string, List<string>>> PublishedSubtaskRunsAsync(
+        Guid storeId, DateOnly periodStart, IReadOnlyList<DateOnly> dates, AccessContext? access = null, CancellationToken ct = default);
+}
+
+public sealed class PublishedSubtasks(IRosterDbContextFactory contexts, ISubtaskLabels labels, IHeldPlans heldPlans) : IPublishedSubtasks
+{
     // ─── Sub-tasks on a PUBLISHED roster (the printed roster) ────────────────
     // A published roster's tiles are rows of shift_task_blocks; since 0049 each
     // carries its sub-task. Rows published before that have none and are labelled
@@ -141,7 +149,7 @@ public sealed class SubtaskLabels(IRosterDbContextFactory contexts, IRefData ref
         foreach (var d in plan?.Days ?? []) stage1Of[d.Date] = d.Result;
         var contextsByDate = new Dictionary<DateOnly, LabelContext>();
         foreach (var date in shifts.Select(s => s.Date).Distinct())
-            contextsByDate[date] = await LabelContextAsync(storeId, date, stage1Of.TryGetValue(date, out var s1) ? ResetSource.From(s1) : null, ct);
+            contextsByDate[date] = await labels.LabelContextAsync(storeId, date, stage1Of.TryGetValue(date, out var s1) ? ResetSource.From(s1) : null, ct);
         return Stored.PublishedSubtaskRuns(
             shifts.Select(s => new StoredShift(s.Id.ToString("D"), s.EmployeeId.ToString("D"), s.Date)).ToList(),
             tiles.Select(t => new StoredTile(t.ShiftId.ToString("D"), RefDataReader.Hms(t.BlockTime), t.LabourGroup, t.SubTask)).ToList(),

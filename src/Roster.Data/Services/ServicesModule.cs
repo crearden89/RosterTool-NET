@@ -38,6 +38,7 @@ public sealed class ServicesModule : IDataModule
         services.TryAddScoped<IDaySlotsLoader, DaySlotsLoader>();
         services.TryAddScoped<IPlanShiftsLoader, PlanShiftsLoader>();
         services.TryAddScoped<ISubtaskLabels, SubtaskLabels>();
+        services.TryAddScoped<IPublishedSubtasks, PublishedSubtasks>();
         services.TryAddScoped<IPlanPeriods, PlanPeriods>();
         services.TryAddScoped<IHeldPlans, HeldPlans>();
 
