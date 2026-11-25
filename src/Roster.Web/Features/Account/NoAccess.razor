@@ -1,0 +1,37 @@
+@* New: signed in with the company account, but not a user of the app. The TypeScript
+   app sent someone without an app_users row back to its login page (requireUser). *@
+@page "/account/no-access"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout BareLayout
+@inject IOptions<BrandingOptions> Branding
+
+<SignInFrame Title="No access">
+    <p class="text-base font-semibold text-[var(--ui-ink)]">You don't have access yet</p>
+    <p class="mt-1.5 text-sm text-[var(--ui-muted)]">
+        @if (_name is not null)
+        {
+            <text>You're signed in as <b class="text-[var(--ui-ink)]">@_name</b>, but @Branding.Value.AppName doesn't have you as a user. </text>
+        }
+        Ask a Super User to add you, then sign in again.
+    </p>
+    @if (_name is not null)
+    {
+        <div class="mt-5">
+            <SignOutButton />
+        </div>
+    }
+</SignInFrame>
+
+@code {
+    private string? _name;
+
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = AuthenticationState is null ? null : (await AuthenticationState).User;
+        if (user?.Identity?.IsAuthenticated == true)
+            _name = user.FindFirst(RosterClaims.DisplayName)?.Value ?? user.Identity.Name;
+    }
+}

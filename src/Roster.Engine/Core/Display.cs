@@ -16,7 +16,7 @@ namespace Roster.Engine.Core;
 /// One tile as the screens show it. Groups: checkout, registers, scos,
 /// load_running, reset, admin, specials, cleaning, non_op, break, flex.
 /// </summary>
-public sealed record DisplayBlock
+public sealed record DisplayBlock : ITile
 {
     public double Time { get; init; } // minutes from midnight
     public string Group { get; init; } = TaskGroups.Flex;

@@ -1,0 +1,31 @@
+@* Port of src/components/ui/SettingsShell.tsx. *@
+@* One section of a settings page: a card with its title and a one-line
+   purpose, an optional action on the right, then its content. Flush lets a
+   table run to the card's edges under the heading. *@
+<section id="@Id" aria-labelledby="@($"{Id}-title")"
+         class="@Ui.Cx("scroll-mt-20 rounded-2xl border border-[var(--ui-line)] bg-white lg:scroll-mt-6", Flush ? "overflow-hidden" : "p-5 sm:p-6", Class)">
+    <div class="@Ui.Cx("flex flex-wrap items-start justify-between gap-3", Flush ? "px-5 pt-5 pb-4 sm:px-6 sm:pt-6" : ChildContent is not null ? "mb-4" : null)">
+        <div class="min-w-0 flex-1 basis-[18rem]">
+            <h2 id="@($"{Id}-title")" class="text-base font-semibold text-[var(--ui-ink)]">@Title</h2>
+            @if (Purpose is not null)
+            {
+                <p class="mt-0.5 max-w-3xl text-sm text-[var(--ui-muted)]">@Purpose</p>
+            }
+        </div>
+        @if (Aside is not null)
+        {
+            <div class="flex shrink-0 flex-wrap items-center gap-2">@Aside</div>
+        }
+    </div>
+    @ChildContent
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter, EditorRequired] public RenderFragment? Title { get; set; }
+    [Parameter] public RenderFragment? Purpose { get; set; }
+    [Parameter] public RenderFragment? Aside { get; set; }
+    [Parameter] public bool Flush { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

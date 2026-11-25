@@ -1,0 +1,46 @@
+@* Port of the fortnight arrows in src/app/(app)/plan/generate/FilterBar.tsx. *@
+@using Roster.Engine.Core
+@inject NavigationManager Navigation
+@* The fortnight arrows in a page header: the fortnight's dates between a
+   previous and a next arrow. Every fortnight stays reachable after time moves
+   on: approved history opens read-only rather than vanishing. *@
+<div class="flex items-center rounded-xl border border-[var(--ui-control)] bg-white">
+    <button type="button" @onclick="() => GoAsync(-1)" disabled="@Disabled" title="Previous fortnight" aria-label="Previous fortnight"
+            class="@Ui.Cx("rounded-l-xl", Arrow)">
+        <Icon Name="IconName.ChevronLeft" Class="h-4 w-4" />
+    </button>
+    <span class="min-w-[8.5rem] px-1 text-center text-sm font-semibold whitespace-nowrap text-[var(--ui-ink)]">@Dates.AuRange(Start, Period.PeriodEndFrom(Start))</span>
+    <button type="button" @onclick="() => GoAsync(1)" disabled="@Disabled" title="Next fortnight" aria-label="Next fortnight"
+            class="@Ui.Cx("rounded-r-xl", Arrow)">
+        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+    </button>
+</div>
+
+@code {
+    private const string Arrow = "px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] disabled:opacity-40 " + Ui.FocusRing;
+
+    [CascadingParameter] public SaveScope? SaveScope { get; set; }
+
+    /// <summary>The Monday the fortnight starts on.</summary>
+    [Parameter, EditorRequired] public DateOnly Start { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Where a move goes. By default the same page with ?period= set to the new start.</summary>
+    [Parameter] public Func<DateOnly, string>? HrefFor { get; set; }
+
+    /// <summary>Called instead of navigating, for a page that moves in place.</summary>
+    [Parameter] public EventCallback<DateOnly> OnMove { get; set; }
+
+    private async Task GoAsync(int n)
+    {
+        var to = Period.AddPeriods(Start, n);
+        if (SaveScope is not null && !await SaveScope.ConfirmLeaveAsync()) return;
+        if (OnMove.HasDelegate)
+        {
+            await OnMove.InvokeAsync(to);
+            return;
+        }
+        Navigation.NavigateTo(HrefFor?.Invoke(to) ?? Navigation.GetUriWithQueryParameter("period", to.ToIso()));
+    }
+}

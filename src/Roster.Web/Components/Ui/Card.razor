@@ -1,0 +1,13 @@
+@* Port of src/components/ui/primitives.tsx. *@
+@* White, rounded, softly bordered. Padded="false" when a list or table runs to its edges. *@
+<div class="@Ui.Cx("rounded-2xl border border-[var(--ui-line)] bg-white", Padded ? "p-5 sm:p-6" : null, Class)" @attributes="AdditionalAttributes">@ChildContent</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>False for a card whose content runs edge to edge (a list, a table).</summary>
+    [Parameter] public bool Padded { get; set; } = true;
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}
