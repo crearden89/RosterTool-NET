@@ -1,0 +1,226 @@
+@* Port of src/app/(app)/admin/store-attributes/AttributeSheet.tsx: one store's details,
+   checkout model and trading hours, saved together (saveStoreAttributes) from the
+   page's save bar. Choosing another store with edits unsaved asks first. *@
+@inject IStoreAttributesService Service
+@inject StoreSelection Selection
+@inject RosterJs RosterJs
+@inject NavigationManager Navigation
+
+@if (View.SelectedId is not { } selectedId)
+{
+    <SettingsSection Id="details">
+        <Title>Store details</Title>
+        <Purpose>Which store, when it opened and the store it is paired with.</Purpose>
+        <ChildContent><p class="text-sm text-[var(--ui-muted)]">No stores configured yet.</p></ChildContent>
+    </SettingsSection>
+}
+else
+{
+    var attr = _draft.Value.Attr;
+    <SaveSlot Id="store-attributes" Changes="@Changes" Save="SaveAsync" Discard="Discard" />
+    <SettingsSection Id="details">
+        <Title>Store details</Title>
+        <Purpose>Which store, when it opened and the store it is paired with.</Purpose>
+        <Aside>
+            <label class="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink)]">
+                Store
+                <select @key="_pickVersion" value="@selectedId" @onchange="SelectStoreAsync" class="@Ui.CompactField">
+                    @foreach (var s in View.Stores)
+                    {
+                        <option @key="s.Id" value="@s.Id">@s.Label</option>
+                    }
+                </select>
+            </label>
+        </Aside>
+        <ChildContent>
+            <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                <label class="block">
+                    <span class="@Ui.FieldLabelClass">Opening date</span>
+                    <input type="date" value="@(attr.OpeningDate ?? "")" class="@($"w-full {Ui.FieldClass}")"
+                           @oninput="@(e => { var v = NullIfEmpty(e.Value?.ToString()); SetAttr(a => a with { OpeningDate = v }); })" />
+                </label>
+                <label class="block">
+                    <span class="@Ui.FieldLabelClass">
+                        Pair Store <span class="font-normal text-[var(--ui-faint)]">match a new store to an existing one</span>
+                    </span>
+                    <select value="@(attr.PairStoreId?.ToString() ?? "")" class="@($"w-full {Ui.FieldClass}")"
+                            @onchange="@(e => { Guid? v = Guid.TryParse(e.Value?.ToString(), out var g) ? g : null; SetAttr(a => a with { PairStoreId = v }); })">
+                        <option value="">- none -</option>
+                        @foreach (var s in View.Stores.Where(s => s.Id != selectedId))
+                        {
+                            <option @key="s.Id" value="@s.Id">@s.Label</option>
+                        }
+                    </select>
+                </label>
+            </div>
+        </ChildContent>
+    </SettingsSection>
+
+    <SettingsSection Id="checkout">
+        <Title>Checkout / SCO model</Title>
+        <Purpose>How the store's tills are planned: its registers, self-checkout lanes and the model that turns demand into tills.</Purpose>
+        <ChildContent>
+            <div class="mb-3">
+                @TickField("Has SCO", attr.HasSco, (a, v) => a with { HasSco = v }, a => a.HasSco, "operates self-checkout")
+                @TickField("Is New SCO Model", attr.IsNewScoModel, (a, v) => a with { IsNewScoModel = v }, a => a.IsNewScoModel, "bounded-credit methodology")
+                @TickField("Night Fill", attr.NightFill, (a, v) => a with { NightFill = v }, a => a.NightFill, "load is worked in the evening - the planner moves Load Running to 18:00 onwards")
+            </div>
+            <div class="grid grid-cols-2 gap-4 md:grid-cols-3">
+                @NumField("MCO Registers Available", attr.McoRegisters, (a, v) => a with { McoRegisters = v }, "1", "hard ceiling")
+                @NumField("SCO Lanes Available", attr.ScoLanes, (a, v) => a with { ScoLanes = v }, "1", null)
+                @NumField("SCO Efficiency", attr.ScoEfficiency, (a, v) => a with { ScoEfficiency = v }, "0.01", "per-lane credit")
+                @NumField("First Step", attr.FirstStep, (a, v) => a with { FirstStep = v }, "0.01", "bank opens")
+                @NumField("SCO Share", attr.ScoShare, (a, v) => a with { ScoShare = v }, "0.01", "clamp 0–0.90")
+                @NumField("OE Target %", attr.OeTargetPct, (a, v) => a with { OeTargetPct = v }, "1", null)
+            </div>
+            <p class="mt-3 text-xs text-[var(--ui-muted)]">
+                There is no minimum checkout hours setting: every trading quarter-hour has at least one
+                till (a register, or the SCO attendant), from the Trading Hours below.
+            </p>
+        </ChildContent>
+    </SettingsSection>
+
+    <SettingsSection Id="trading-hours">
+        <Title>Trading hours</Title>
+        <Purpose>When the store opens and closes on each day of the week.</Purpose>
+        <ChildContent>
+            <div class="space-y-2">
+                @foreach (var h in _draft.Value.Hours)
+                {
+                    var i = h.DayOfWeek;
+                    var day = Period.DayLabels[i];
+                    <div @key="i" class="flex flex-wrap items-center gap-3">
+                        <span class="w-10 text-sm font-semibold text-[var(--ui-ink)]">@day</span>
+                        <button type="button" aria-pressed="@(h.Closed ? "true" : "false")" aria-label="@($"{day} closed")"
+                                @onclick="() => SetHour(i, x => x with { Closed = !x.Closed })"
+                                class="@Ui.Cx("rounded-lg px-3 py-1 text-sm font-semibold", Ui.FocusRing, h.Closed ? "bg-[var(--ui-ink)] text-white" : "border border-[var(--ui-control)] bg-white text-[var(--ui-ink)]")">
+                            Closed
+                        </button>
+                        <input type="time" aria-label="@($"{day} opens")" value="@(h.OpenTime ?? "")" disabled="@h.Closed"
+                               @oninput="@(e => { var v = e.Value?.ToString() ?? ""; SetHour(i, x => x with { OpenTime = v }); })" class="@($"{Ui.CompactField} disabled:opacity-40")" />
+                        <span class="text-[var(--ui-muted)]">–</span>
+                        <input type="time" aria-label="@($"{day} closes")" value="@(h.CloseTime ?? "")" disabled="@h.Closed"
+                               @oninput="@(e => { var v = e.Value?.ToString() ?? ""; SetHour(i, x => x with { CloseTime = v }); })" class="@($"{Ui.CompactField} disabled:opacity-40")" />
+                    </div>
+                }
+            </div>
+            @if (_error is not null)
+            {
+                <div class="mt-3"><FormMessage Tone="FormMessageTone.Error">@_error</FormMessage></div>
+            }
+        </ChildContent>
+    </SettingsSection>
+}
+
+@code {
+    [CascadingParameter] public SaveScope? Scope { get; set; }
+    [Parameter, EditorRequired] public StoreAttributesView View { get; set; } = default!;
+    [Parameter, EditorRequired] public EventCallback Reload { get; set; }
+
+    /// <summary>What the sheet edits: the attributes and the seven days, saved together.</summary>
+    private sealed record Sheet(AttributeValues Attr, IReadOnlyList<TradingHour> Hours);
+
+    private FormDraft<Sheet> _draft = new(new Sheet(AttributeValues.Defaults, []));
+    private bool _started;
+    private string? _error;
+    private int _pickVersion;
+
+    protected override void OnParametersSet()
+    {
+        var saved = new Sheet(View.Attributes, View.Hours);
+        if (!_started)
+        {
+            _draft = new FormDraft<Sheet>(saved);
+            _started = true;
+        }
+        else _draft.Sync(saved);
+    }
+
+    private static string? NullIfEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;
+
+    // Every change applies to the form as it is when the event arrives, never to
+    // the values a handler saw when it was drawn.
+    private void SetAttr(Func<AttributeValues, AttributeValues> change) => _draft.Set(d => d with { Attr = change(d.Attr) });
+
+    private void SetHour(int day, Func<TradingHour, TradingHour> change) =>
+        _draft.Set(d => d with { Hours = d.Hours.Select(h => h.DayOfWeek == day ? change(h) : h).ToList() });
+
+    private int Changes
+    {
+        get
+        {
+            var a = _draft.Value.Attr;
+            var b = _draft.Base.Attr;
+            object?[][] pairs =
+            [
+                [a.HasSco, b.HasSco], [a.IsNewScoModel, b.IsNewScoModel], [a.McoRegisters, b.McoRegisters],
+                [a.ScoLanes, b.ScoLanes], [a.ScoEfficiency, b.ScoEfficiency], [a.FirstStep, b.FirstStep],
+                [a.ScoShare, b.ScoShare], [a.OeTargetPct, b.OeTargetPct], [a.OpeningDate, b.OpeningDate],
+                [a.PairStoreId, b.PairStoreId], [a.NightFill, b.NightFill],
+            ];
+            var n = pairs.Count(p => !Equals(p[0], p[1]) || p[0] is double d && double.IsNaN(d));
+            return n + SaveBar.CountChanged(_draft.Base.Hours, _draft.Value.Hours, h => h.OpenTime, h => h.CloseTime, h => h.Closed);
+        }
+    }
+
+    // A number field: Number(e.target.value) - an empty field reads as 0.
+    private RenderFragment NumField(string label, double value, Func<AttributeValues, double, AttributeValues> set, string step, string? hint) => __builder =>
+    {
+        <label class="block">
+            <span class="@Ui.FieldLabelClass">
+                @label
+                @if (hint is not null)
+                {
+                    <span class="ml-1 font-normal text-[var(--ui-faint)]">@hint</span>
+                }
+            </span>
+            <input type="number" step="@step" value="@Js.NumberToString(value)" class="@($"w-full {Ui.FieldClass}")"
+                   @oninput="@(e => { var v = Js.Number(e.Value?.ToString()); SetAttr(a => set(a, v)); })" />
+        </label>
+    };
+
+    // An on/off setting that saves with the rest of the form (not a switch, which acts at once).
+    private RenderFragment TickField(string label, bool on, Func<AttributeValues, bool, AttributeValues> set, Func<AttributeValues, bool> get, string? hint) => __builder =>
+    {
+        <div class="flex items-center gap-3 py-1">
+            <button type="button" aria-pressed="@(on ? "true" : "false")" aria-label="@label" @onclick="() => SetAttr(a => set(a, !get(a)))"
+                    class="@Ui.Cx("w-14 rounded-lg px-3 py-1 text-sm font-semibold", Ui.FocusRing, on ? "bg-[var(--ui-ink)] text-white" : "border border-[var(--ui-control)] bg-white text-[var(--ui-ink)]")">
+                @(on ? "On" : "Off")
+            </button>
+            <span class="text-sm font-semibold text-[var(--ui-ink)]">@label</span>
+            @if (hint is not null)
+            {
+                <span class="text-xs text-[var(--ui-muted)]">@hint</span>
+            }
+        </div>
+    };
+
+    private async Task SelectStoreAsync(ChangeEventArgs e)
+    {
+        if (!Guid.TryParse(e.Value?.ToString(), out var id)) return;
+        if (!await AdminStorePick.GoAsync(id, "/admin/store-attributes", Scope, Selection, RosterJs, Navigation)) _pickVersion++;
+    }
+
+    private async Task<bool> SaveAsync()
+    {
+        if (View.SelectedId is not { } storeId) return true;
+        var sent = _draft.Value;
+        var res = await Service.SaveStoreAttributesAsync(storeId, sent.Attr, sent.Hours);
+        if (!res.Ok)
+        {
+            _error = $"Error: {res.Error}";
+            StateHasChanged();
+            return false;
+        }
+        _error = null;
+        _draft.Commit(sent);
+        await Reload.InvokeAsync();
+        return true;
+    }
+
+    private void Discard()
+    {
+        _draft.Discard();
+        _error = null;
+    }
+}

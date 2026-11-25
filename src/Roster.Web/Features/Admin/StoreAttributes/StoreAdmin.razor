@@ -1,0 +1,131 @@
+@* Port of src/app/(app)/admin/store-attributes/StoreAdmin.tsx. Each store is created
+   by its own button, as before; a half-typed one counts as an unsaved change when
+   leaving the page. *@
+@inject IStoreAttributesService Service
+
+<LeaveGuard Id="add-stores" Dirty="@(_code != "" || _name != "" || _openingDate != "" || Js.Trim(_csv) != "")" />
+<SettingsSection Id="add-stores">
+    <Title>Add stores</Title>
+    <Purpose>Create a store, or many at once from a list, with default attributes and 07:00-21:00 trading hours.</Purpose>
+    <ChildContent>
+        <div class="mb-3 flex items-center gap-2">
+            <label for="add-store-region" class="text-sm font-semibold text-[var(--ui-ink)]">Region</label>
+            <select id="add-store-region" @bind="_regionId" class="@Ui.FieldClass">
+                @foreach (var r in Regions)
+                {
+                    <option @key="r.Id" value="@r.Id">@r.Name</option>
+                }
+            </select>
+        </div>
+
+        @* Single store *@
+        <div class="mb-4 flex flex-wrap items-end gap-2">
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">Store number</span>
+                <input inputmode="numeric" placeholder="e.g. 25" @bind="_code" @bind:event="oninput" class="@($"{Ui.FieldClass} w-24")" />
+            </label>
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">Name</span>
+                <input placeholder="Name" @bind="_name" @bind:event="oninput" class="@($"{Ui.FieldClass} w-48")" />
+            </label>
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">State</span>
+                <select @bind="_state" class="@Ui.FieldClass">
+                    @foreach (var s in AuStates.All)
+                    {
+                        <option>@s</option>
+                    }
+                </select>
+            </label>
+            <label class="text-sm text-[var(--ui-ink)]">
+                <span class="@Ui.FieldLabelClass">Opening date</span>
+                <input type="date" value="@_openingDate" @oninput="@(e => _openingDate = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+            </label>
+            <button type="button" @onclick="AddAsync" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Primary)">@(_pending ? "Working…" : "Add store")</button>
+        </div>
+
+        @* Bulk *@
+        <details class="rounded-xl bg-[var(--ui-canvas)] px-4 py-3">
+            <summary class="cursor-pointer text-sm font-semibold text-[var(--ui-ink)]">Bulk upload (initial setup)</summary>
+            <p class="mt-2 text-xs text-[var(--ui-muted)]">
+                One store per line: <code>store_number,name,state,opening_date</code> (opening_date
+                optional, yyyy-mm-dd). Store numbers are normalised to the GXXX format (25 → G025). A
+                header row is skipped automatically. All go into the region selected above.
+            </p>
+            <textarea @bind="_csv" @bind:event="oninput" rows="5" placeholder="@CsvPlaceholder" aria-label="Stores, one per line"
+                      class="@($"mt-2 w-full font-mono text-xs {Ui.FieldClass}")"></textarea>
+            <button type="button" @onclick="BulkAsync" disabled="@_pending" class="@($"mt-2 {Ui.ButtonClass(ButtonKind.Primary)}")">@(_pending ? "Working…" : "Create stores")</button>
+        </details>
+
+        @if (_msg is not null)
+        {
+            <div class="mt-3">
+                <FormMessage Tone="@(_msg.StartsWith("Error") ? FormMessageTone.Error : FormMessageTone.Ok)">@_msg</FormMessage>
+            </div>
+        }
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    private const string CsvPlaceholder = "store_number,name,state,opening_date\n10,Newtown,NSW,2026-09-01";
+
+    [Parameter, EditorRequired] public IReadOnlyList<RegionChoice> Regions { get; set; } = [];
+    [Parameter, EditorRequired] public EventCallback Reload { get; set; }
+
+    private string _regionId = "";
+    private bool _regionSet;
+    private string _code = "", _name = "", _state = "NSW", _openingDate = "", _csv = "";
+    private bool _pending;
+    private string? _msg;
+
+    protected override void OnParametersSet()
+    {
+        if (_regionSet) return;
+        _regionId = Regions.Count > 0 ? Regions[0].Id.ToString() : "";
+        _regionSet = true;
+    }
+
+    private async Task AddAsync()
+    {
+        if (!Guid.TryParse(_regionId, out var regionId) || _code == "" || _name == "") return;
+        _msg = null;
+        _pending = true;
+        var code = _code;
+        var res = await Service.AddStoreAsync(regionId, new NewStore(_code, _name, _state, _openingDate));
+        _msg = res.Ok ? $"Added store {StoreIds.FormatStoreId(code)}." : $"Error: {res.Error}";
+        if (res.Ok)
+        {
+            _code = "";
+            _name = "";
+            _openingDate = "";
+            await Reload.InvokeAsync();
+        }
+        _pending = false;
+    }
+
+    private async Task BulkAsync()
+    {
+        var (rows, error) = StoreCsv.Parse(_csv);
+        if (error is not null)
+        {
+            _msg = $"Error: {error}";
+            return;
+        }
+        if (rows.Count == 0)
+        {
+            _msg = "Error: no rows found";
+            return;
+        }
+        if (!Guid.TryParse(_regionId, out var regionId)) return;
+        _msg = null;
+        _pending = true;
+        var res = await Service.BulkAddStoresAsync(regionId, rows);
+        _msg = res.Ok ? $"Created {res.Created} store(s)." : $"Error after {res.Created}: {res.Error}";
+        if (res.Ok)
+        {
+            _csv = "";
+            await Reload.InvokeAsync();
+        }
+        _pending = false;
+    }
+}
