@@ -34,6 +34,8 @@ internal sealed class FixedClock(DateTimeOffset now) : TimeProvider
 
 internal static class Seed
 {
+    private static int _nextCode = 900;
+
     /// <summary>A director group, a region named "501 - Example" and <paramref name="count"/> stores in it (state NSW).</summary>
     public static List<Store> Stores(TestDatabase tdb, int count = 1, string regionName = "501 - Example")
     {
@@ -45,7 +47,7 @@ internal static class Seed
         var stores = Enumerable.Range(1, count).Select(i => new Store
         {
             Id = Guid.NewGuid(),
-            Code = $"G9{i:00}",
+            Code = $"G{Interlocked.Increment(ref _nextCode)}",
             Name = $"Example Store {i}",
             Slug = $"example-{i}-{Guid.NewGuid():N}"[..20],
             RegionId = region.Id,
