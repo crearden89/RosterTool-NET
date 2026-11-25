@@ -1,5 +1,6 @@
 // Port of src/lib/cron/heartbeat.ts.
 using System.Text.Json;
+using Roster.Data.Services.Functions;
 
 namespace Roster.Data.Jobs;
 
@@ -33,9 +34,19 @@ public static class CronResultJson
         result is null ? null : JsonSerializer.Serialize(result, result.GetType(), Options);
 }
 
-internal sealed class CronHeartbeat : ICronHeartbeat
+internal sealed class CronHeartbeat(IDatabaseFunctions functions) : ICronHeartbeat
 {
-    // Until bump_cron_run lands (D2's IDatabaseFunctions), the heartbeat reports "not recorded".
-    public Task<bool> RecordCronRunAsync(string job, object? result = null, CancellationToken cancellationToken = default) =>
-        Task.FromResult(false);
+    public async Task<bool> RecordCronRunAsync(string job, object? result = null, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            JsonElement? json = result is null ? null : JsonSerializer.SerializeToElement(result, result.GetType(), CronResultJson.Options);
+            await functions.BumpCronRunAsync(job, json, cancellationToken);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
