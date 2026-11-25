@@ -478,6 +478,10 @@
     margin-top: calc(var(--spacing) * -2);
   }
 
+  .-mt-4 {
+    margin-top: calc(var(--spacing) * -4);
+  }
+
   .mt-0\.5 {
     margin-top: calc(var(--spacing) * .5);
   }
@@ -904,6 +908,10 @@
     cursor: pointer;
   }
 
+  .resize {
+    resize: both;
+  }
+
   .scroll-mt-20 {
     scroll-margin-top: calc(var(--spacing) * 20);
   }
@@ -1006,6 +1014,10 @@
 
   .gap-x-4 {
     column-gap: calc(var(--spacing) * 4);
+  }
+
+  .gap-x-5 {
+    column-gap: calc(var(--spacing) * 5);
   }
 
   .gap-x-6 {
@@ -1310,6 +1322,26 @@
 
   .bg-white {
     background-color: var(--color-white);
+  }
+
+  .bg-white\/10 {
+    background-color: #ffffff1a;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-white\/10 {
+      background-color: color-mix(in oklab, var(--color-white) 10%, transparent);
+    }
+  }
+
+  .bg-white\/30 {
+    background-color: #ffffff4d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-white\/30 {
+      background-color: color-mix(in oklab, var(--color-white) 30%, transparent);
+    }
   }
 
   .bg-white\/95 {
@@ -1803,6 +1835,10 @@
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
   }
 
+  .filter {
+    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
+  }
+
   .backdrop-blur {
     --tw-backdrop-blur: blur(8px);
     -webkit-backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
@@ -1905,6 +1941,16 @@
       background-color: var(--ui-lavender-strong);
     }
 
+    .hover\:bg-white\/15:hover {
+      background-color: #ffffff26;
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-white\/15:hover {
+        background-color: color-mix(in oklab, var(--color-white) 15%, transparent);
+      }
+    }
+
     .hover\:text-\[var\(--brand-navy\)\]\/60:hover {
       color: var(--brand-navy);
     }
@@ -1950,6 +1996,10 @@
 
   .focus-visible\:outline-\[color\:var\(--ui-violet\)\]:focus-visible {
     outline-color: var(--ui-violet);
+  }
+
+  .focus-visible\:outline-white:focus-visible {
+    outline-color: var(--color-white);
   }
 
   .disabled\:cursor-default:disabled {

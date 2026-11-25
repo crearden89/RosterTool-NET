@@ -1,0 +1,10 @@
+@* Port of src/app/(app)/plan/roster/SubtaskView.tsx (PrintRosterLink): the print link,
+   carrying the sub-tasks choice as it stands when clicked. *@
+<a href="@(SubtaskView?.On == true ? $"{Href}&subtasks=1" : Href)" target="_blank" rel="noopener noreferrer" class="@Class">@ChildContent</a>
+
+@code {
+    [CascadingParameter] public SubtaskViewProvider? SubtaskView { get; set; }
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
