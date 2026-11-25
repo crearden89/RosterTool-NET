@@ -80,7 +80,7 @@ public static class Js
     public static double Number(string? s)
     {
         if (s is null) return double.NaN; // Number(undefined)
-        var t = s.Trim(' ', '\t', '\n', '\v', '\f', '\r', '\u00A0', '\uFEFF', '\u2028', '\u2029');
+        var t = Trim(s);
         if (t.Length == 0) return 0;
         switch (t)
         {
@@ -262,6 +262,22 @@ public static class Js
         if (double.IsNegativeInfinity(x)) return "-Infinity";
         if (x < 0) return "-" + NumberToString(-x);
 
+        var s = ShortestDigits(x, out var n);
+        var k = s.Length;
+        if (k <= n && n <= 21) return s + new string('0', n - k);
+        if (0 < n && n <= 21) return s[..n] + "." + s[n..];
+        if (-6 < n && n <= 0) return "0." + new string('0', -n) + s;
+        var en = n - 1;
+        var expText = (en >= 0 ? "+" : "-") + Math.Abs(en).ToString(CultureInfo.InvariantCulture);
+        return k == 1 ? s + "e" + expText : s[..1] + "." + s[1..] + "e" + expText;
+    }
+
+    /// <summary>
+    /// The shortest decimal digits that round-trip to a finite x &gt; 0, with no
+    /// leading or trailing zeros, and where the point goes: x = 0.digits × 10^n.
+    /// </summary>
+    private static string ShortestDigits(double x, out int n)
+    {
         // .NET's "R" is the shortest round-trip form: "1.5", "1E-07", "1.2345E+21".
         var r = x.ToString("R", CultureInfo.InvariantCulture);
         var e = r.IndexOfAny(['E', 'e']);
@@ -272,24 +288,101 @@ public static class Js
         var fracPart = point < 0 ? "" : mant[(point + 1)..];
         var all = intPart + fracPart;
         // The decimal point sits after intPart.Length digits, moved by exp10.
-        var n = intPart.Length + exp10;
+        n = intPart.Length + exp10;
         // Strip leading zeros (moving the point) and trailing zeros.
         var lead = 0;
         while (lead < all.Length - 1 && all[lead] == '0') lead++;
         all = all[lead..];
         n -= lead;
-        all = all.TrimEnd('0');
-        if (all.Length == 0) return "0";
-        var s = all;
-        var k = s.Length;
-
-        if (k <= n && n <= 21) return s + new string('0', n - k);
-        if (0 < n && n <= 21) return s[..n] + "." + s[n..];
-        if (-6 < n && n <= 0) return "0." + new string('0', -n) + s;
-        var en = n - 1;
-        var expText = (en >= 0 ? "+" : "-") + Math.Abs(en).ToString(CultureInfo.InvariantCulture);
-        return k == 1 ? s + "e" + expText : s[..1] + "." + s[1..] + "e" + expText;
+        return all.TrimEnd('0');
     }
+
+    /// <summary>
+    /// JavaScript <c>x.toLocaleString(locale, { minimumFractionDigits,
+    /// maximumFractionDigits })</c> for the English locales the app runs in
+    /// (en-US, the server's default, and en-AU write numbers the same way):
+    /// "1,234.56". Intl rounds the SHORTEST round-trip digits half away from
+    /// zero, not the exact binary value as toFixed does, so 2.675 at two places
+    /// is "2.68" (toFixed: "2.67") and 1.005 is "1.01". A negative figure keeps
+    /// its sign when it rounds to nothing ("-0"); NaN is "NaN", Infinity "∞".
+    /// The defaults are the plain <c>x.toLocaleString()</c>: up to 3 places.
+    /// </summary>
+    public static string ToLocaleString(double x, int maximumFractionDigits = 3, int minimumFractionDigits = 0)
+    {
+        // RangeError in JavaScript.
+        if (minimumFractionDigits < 0 || maximumFractionDigits > 100 || minimumFractionDigits > maximumFractionDigits)
+            throw new ArgumentOutOfRangeException(nameof(maximumFractionDigits), "fraction digits out of range");
+        if (double.IsNaN(x)) return "NaN";
+        var sign = double.IsNegative(x) ? "-" : "";
+        if (double.IsInfinity(x)) return sign + "\u221E";
+
+        // x = 0.digits × 10^n, then rounded at the maximumFractionDigits place.
+        var digits = "";
+        var n = 0;
+        if (x != 0)
+        {
+            digits = ShortestDigits(Math.Abs(x), out n);
+            var keep = n + maximumFractionDigits;
+            if (keep < 0)
+            {
+                digits = "";
+            }
+            else if (keep < digits.Length)
+            {
+                var up = digits[keep] >= '5';
+                digits = digits[..keep];
+                if (up)
+                {
+                    var d = digits.ToCharArray();
+                    var i = d.Length - 1;
+                    while (i >= 0 && d[i] == '9') d[i--] = '0';
+                    if (i >= 0)
+                    {
+                        d[i]++;
+                        digits = new string(d);
+                    }
+                    else
+                    {
+                        digits = "1" + new string(d);
+                        n++;
+                    }
+                }
+            }
+            digits = digits.TrimEnd('0');
+            if (digits.Length == 0) n = 0;
+        }
+
+        var intDigits = n <= 0 ? "0" : n >= digits.Length ? digits + new string('0', n - digits.Length) : digits[..n];
+        var frac = n >= digits.Length ? "" : n < 0 ? new string('0', -n) + digits : digits[n..];
+        if (frac.Length < minimumFractionDigits) frac += new string('0', minimumFractionDigits - frac.Length);
+
+        var grouped = new StringBuilder(intDigits.Length + intDigits.Length / 3);
+        for (var i = 0; i < intDigits.Length; i++)
+        {
+            if (i > 0 && (intDigits.Length - i) % 3 == 0) grouped.Append(',');
+            grouped.Append(intDigits[i]);
+        }
+        return sign + grouped + (frac.Length > 0 ? "." + frac : "");
+    }
+
+    // JavaScript's WhiteSpace and LineTerminator characters: what trim() strips
+    // and \s matches (.NET's char.IsWhiteSpace differs on U+0085 and U+FEFF).
+    private static readonly char[] WhiteSpaceChars =
+    [
+        (char)0x09, (char)0x0A, (char)0x0B, (char)0x0C, (char)0x0D, (char)0x20, (char)0xA0, (char)0x1680,
+        (char)0x2000, (char)0x2001, (char)0x2002, (char)0x2003, (char)0x2004, (char)0x2005, (char)0x2006,
+        (char)0x2007, (char)0x2008, (char)0x2009, (char)0x200A, (char)0x2028, (char)0x2029, (char)0x202F,
+        (char)0x205F, (char)0x3000, (char)0xFEFF,
+    ];
+
+    /// <summary>JavaScript <c>String.prototype.trim</c>.</summary>
+    public static string Trim(string s) => s.Trim(WhiteSpaceChars);
+
+    /// <summary>JavaScript <c>String.prototype.trimStart</c>.</summary>
+    public static string TrimStart(string s) => s.TrimStart(WhiteSpaceChars);
+
+    /// <summary>JavaScript <c>String.prototype.trimEnd</c>.</summary>
+    public static string TrimEnd(string s) => s.TrimEnd(WhiteSpaceChars);
 
     /// <summary>JavaScript <c>String.prototype.padStart</c>.</summary>
     public static string PadStart(string s, int length, char fill = ' ') =>

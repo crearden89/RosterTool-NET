@@ -33,5 +33,14 @@ const words = ["CGOS Ordering", "Cash-Up", "End of Day", "UKG End of Day", "Fres
   "junior_supervision", "P10", "P2", "P1", "Ds", "D's", "a", "A", "b", "B", "", "10:00:00", "09:45:00", "Till Calibration", "till calibration"];
 const lc = [];
 for (const a of words) for (const b of words) lc.push([a, b, Math.sign(a.localeCompare(b))]);
-writeFileSync(process.argv[2], JSON.stringify({ toFixed, round, str, sorts, localeCompare: lc }));
-console.log(toFixed.length, round.length, sorts.length, lc.length);
+// toLocaleString in the app's two locales: [x as String() ("-0" kept), min, max, locale, text].
+const enc = (x) => (Object.is(x, -0) ? "-0" : String(x));
+const locNums = [...nums, NaN, Infinity, -Infinity, -0.4, 1.0005, 1546977, -1546977.5, 0.9996, 999.9995, -1e-7, 12345678.9,
+  0.0005, -0.0005, 1234.5, 99999.995, 0.125, 0.375, 1234.565, -1234.565];
+const toLocale = [];
+for (const x of locNums)
+  for (const [mn, mx] of [[0, 3], [0, 0], [2, 2], [0, 1], [1, 2], [0, 2], [3, 6]])
+    for (const loc of ["en-US", "en-AU"])
+      toLocale.push([enc(x), mn, mx, loc, x.toLocaleString(loc, { minimumFractionDigits: mn, maximumFractionDigits: mx })]);
+writeFileSync(process.argv[2], JSON.stringify({ toFixed, round, str, sorts, localeCompare: lc, toLocale }));
+console.log(toFixed.length, round.length, sorts.length, lc.length, toLocale.length);

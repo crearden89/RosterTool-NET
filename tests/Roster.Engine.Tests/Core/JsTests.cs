@@ -54,6 +54,36 @@ public class JsTests
     }
 
     [Fact]
+    public void ToLocaleString_matches_Intl_in_en_US_and_en_AU()
+    {
+        var failures = new List<string>();
+        foreach (var v in Vectors.GetProperty("toLocale").EnumerateArray())
+        {
+            var x = Js.Number(v[0].GetString());
+            var (min, max) = (v[1].GetInt32(), v[2].GetInt32());
+            var got = Js.ToLocaleString(x, max, min);
+            if (got != v[4].GetString()) failures.Add($"({v[0].GetString()}).toLocaleString({v[3].GetString()}, {min}..{max}) = {v[4].GetString()}, got {got}");
+        }
+        Assert.Empty(failures);
+        Assert.Equal("1,546,977", Js.ToLocaleString(1546977));
+        Assert.Equal("2.68", Js.ToLocaleString(2.675, 2, 2));
+        Assert.Equal("2.67", Js.ToFixed(2.675, 2));
+        Assert.Equal("1.001", Js.ToLocaleString(1.0005));
+        Assert.Equal("-0", Js.ToLocaleString(-0.4, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Js.ToLocaleString(1, 1, 2));
+    }
+
+    [Fact]
+    public void Trim_strips_what_JavaScript_strips()
+    {
+        var ws = new string([(char)0xFEFF, (char)0x2028, (char)0x3000, ' ', '\t']);
+        Assert.Equal("a b", Js.Trim(ws + "a b" + ws));
+        var nel = new string([(char)0x85]);
+        Assert.Equal(nel + "a", Js.Trim(nel + "a")); // U+0085 is not JavaScript white space
+        Assert.Equal(0, Js.Number(ws));
+    }
+
+    [Fact]
     public void Sort_reproduces_V8_TimSort_even_for_inconsistent_comparators()
     {
         foreach (var s in Vectors.GetProperty("sorts").EnumerateArray())
