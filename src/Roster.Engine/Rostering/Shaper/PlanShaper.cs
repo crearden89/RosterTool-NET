@@ -39,7 +39,7 @@ using Roster.Engine.Pay;
 
 namespace Roster.Engine.Rostering.Shaper;
 
-public static class PlanShaper
+public static partial class PlanShaper
 {
     private const double B = Grid.BlockMin;
 
@@ -83,8 +83,7 @@ public static class PlanShaper
             // per worked hour only ever improves with length - rank plainly by it.
             : ShiftLengthCost.LengthRank(type, lenMin, SaMinMin, MgrMaxMin);
 
-    // ─── The shaper ──────────────────────────────────────────────────────────────
-    public static ShapedDay ShapePlan(ShaperInput input) => throw new NotImplementedException();
+    // ShapePlan and its passes: PlanShaper.ShapePlan.cs.
 
     /// <summary>
     /// JSA labelling: which SA slots a junior may legally be given. Latest-starting
