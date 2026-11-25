@@ -6,8 +6,7 @@ public sealed class RosterModule : IFeatureModule
 {
     public void Register(IServiceCollection services, IConfiguration configuration)
     {
-        // FAKE until the held roster's loaders land (D2/E2/E3): invented data.
-        services.AddScoped<IRosterService, FakeRosterService>();
+        services.AddScoped<IRosterService, RosterService>();
     }
 
     public void Map(IEndpointRouteBuilder endpoints) =>
