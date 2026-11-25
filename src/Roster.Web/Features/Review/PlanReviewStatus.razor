@@ -58,13 +58,9 @@
     public static PlanReviewState PlanReviewState(string? status, string? snapshotKey, int? planVersion)
     {
         if (status == ReviewStatusKeys.Approved)
-            return snapshotKey == PlanKey(planVersion) ? State.Approved : State.NotSubmitted;
+            return snapshotKey == global::Roster.Data.Services.Review.ReviewFormat.PlanKey(planVersion) ? State.Approved : State.NotSubmitted;
         if (status == ReviewStatusKeys.Submitted) return State.Submitted;
         if (status == ReviewStatusKeys.Returned) return State.Returned;
         return State.NotSubmitted;
     }
-
-    // planKey (src/lib/review/server.ts): what a submission and an approval are recorded
-    // against, the held plan's version. The data layer's own copy replaces this once it lands.
-    private static string PlanKey(int? planVersion) => $"plan:{planVersion ?? 0}";
 }
