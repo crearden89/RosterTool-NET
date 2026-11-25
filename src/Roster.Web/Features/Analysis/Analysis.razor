@@ -1,0 +1,248 @@
+@* Port of src/app/(app)/analysis/page.tsx: cost, efficiency and labour density for a store
+   over a date range. *@
+@page "/analysis"
+@inject IServiceProvider Services
+@using AF = global::Roster.Engine.Analysis.Figures
+@using EngineSide = global::Roster.Engine.Analysis.BarSide
+@using UiSide = global::Roster.Web.Components.Ui.BarSide
+@using EngineRoles = global::Roster.Engine.Core.Roles
+@inject ILogger<Analysis> Log
+
+<div>
+    @if (_failed)
+    {
+        <PageHeader Title="Analysis">
+            <Subtitle>Cost, efficiency and labour density for a store over a date range</Subtitle>
+        </PageHeader>
+        <Unavailable What="The analysis" />
+    }
+    else if (_page is { } p)
+    {
+        var a = p.Result;
+        var storeRow = p.Stores.FirstOrDefault(s => s.Id == p.StoreId);
+        var facts = string.Join(" · ", new[]
+        {
+            storeRow?.Name,
+            AnalysisText.RangeLabel(a?.Days ?? []),
+            a is not null ? $"{a.Days.Count} day{(a.Days.Count == 1 ? "" : "s")}" : null,
+        }.Where(x => !string.IsNullOrEmpty(x)));
+        <PageHeader Title="Analysis" Badge="@(a is { HasData: true } ? BasisPill(a) : null)">
+            <Subtitle>@(facts.Length > 0 ? facts : "Cost, efficiency and labour density for a store over a date range")</Subtitle>
+        </PageHeader>
+
+        <FilterBar Stores="p.Stores" StoreId="p.StoreId" StartDate="@p.StartDate" EndDate="@p.EndDate" FullyLoaded="p.FullyLoaded" ShowStoreSelect="p.ShowStoreSelect" />
+
+        @if (a is not { HasData: true })
+        {
+            <Card><p class="text-sm text-[var(--ui-muted)]">No roster/plan data for this range yet.</p></Card>
+        }
+        else
+        {
+            @Figures(a, p.FullyLoaded)
+        }
+    }
+</div>
+
+@code {
+    private AnalysisPage? _page;
+    private bool _failed;
+
+    [SupplyParameterFromQuery(Name = "store")] public string? StoreParam { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public string? StartParam { get; set; }
+    [SupplyParameterFromQuery(Name = "end")] public string? EndParam { get; set; }
+    [SupplyParameterFromQuery(Name = "loaded")] public string? LoadedParam { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _page = await Services.GetRequiredService<IAnalysisService>()
+                .LoadAnalysisAsync(StoreParam, StartParam, EndParam, LoadedParam == "1");
+            _failed = false;
+        }
+        catch (Exception e)
+        {
+            Log.LogError(e, "Analysis couldn't be read");
+            _failed = true;
+        }
+    }
+
+    private static RenderFragment BasisPill(AnalysisResult a) => __builder =>
+    {
+        <Pill Tone="@(a.Basis == Basis.Actual ? PillTone.Green : a.Basis == Basis.Forecast ? PillTone.Amber : PillTone.Soft)">@AF.BasisLabel(a)</Pill>
+    };
+
+    private static RenderFragment Text(string text) => b => b.AddContent(0, text);
+
+    private static UiSide UiBar(EngineSide side) => side switch
+    {
+        EngineSide.Above => UiSide.Above,
+        EngineSide.Below => UiSide.Below,
+        _ => UiSide.None,
+    };
+
+    private static string SplitLabel(string total, IEnumerable<MoneyPart> parts) =>
+        $"Total cost {total}: {string.Join("; ", parts.Select(x => $"{x.Label} {x.Value}, {AnalysisText.Pct0(x.Share)}"))}";
+
+    private static List<SplitPart> SplitParts(IEnumerable<MoneyPart> parts) => parts
+        .Select(x => new SplitPart(
+            x.Key.ToString(),
+            x.Label,
+            x.Share,
+            AnalysisText.PartColour(x.Key).Colour,
+            AnalysisText.PartColour(x.Key).InkText ? SplitInk.Ink : SplitInk.White,
+            $"{x.Label} {x.Value} · {AnalysisText.Pct0(x.Share)} of the total cost"))
+        .ToList();
+
+    private static string PlanNote(AnalysisResult a) =>
+        a.DaysWithoutPlan > 0 ? $" No plan is held for {a.DaysWithoutPlan} of these days, so they count no planned hours." : "";
+
+    private static RenderFragment Figures(AnalysisResult a, bool fullyLoaded) => __builder =>
+    {
+        var costs = AF.CostFigures(a, fullyLoaded).ToDictionary(c => c.Key);
+        var money = AF.MoneyParts(a, fullyLoaded);
+        var roles = AF.RoleRows(a, fullyLoaded);
+        var hours = AF.HoursRows(a);
+        var total = AF.HoursTotalOf(a);
+        var partSub = new Dictionary<MoneyPartKey, string>
+        {
+            [MoneyPartKey.Worked] = costs[CostKey.WorkedPayroll].Sub,
+            [MoneyPartKey.Leave] = costs[CostKey.Leave].Sub,
+            [MoneyPartKey.MakeUp] = costs[CostKey.MakeUp].Sub,
+        };
+        var strip = new[] { costs[CostKey.TotalPayroll], costs[CostKey.Controllables] };
+
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            @foreach (var k in AF.HeadlineFigures(a, fullyLoaded))
+            {
+                <StatCard @key="k.Label" Label="@Text(k.Label)" Value="@Text(k.Value)" Sub="@Text(k.Sub)" />
+            }
+        </div>
+
+        <Card Class="mt-4">
+            <SectionHeader Title="@Text("Where the money goes")">
+                <Aside>Total cost <span class="font-semibold text-[var(--ui-ink)]">@costs[CostKey.TotalCost].Value</span> · @costs[CostKey.TotalCost].Pct</Aside>
+            </SectionHeader>
+            <p class="-mt-1 mb-3 text-xs text-[var(--ui-muted)]">
+                @(fullyLoaded ? "Fully loaded" : "Raw wages"): @AF.BasisNote(a, fullyLoaded).
+            </p>
+            <SplitBar Label="@SplitLabel(costs[CostKey.TotalCost].Value, money.Parts)" Parts="SplitParts(money.Parts)" />
+            <ul class="mt-4 grid gap-4 sm:grid-cols-3">
+                @foreach (var x in money.Parts)
+                {
+                    <li @key="x.Key" class="flex items-start gap-2.5">
+                        <span aria-hidden="true" class="mt-1 h-3 w-3 shrink-0 rounded-sm" style="background: @AnalysisText.PartColour(x.Key).Colour"></span>
+                        <span class="min-w-0">
+                            <span class="block text-sm font-semibold text-[var(--ui-ink)]">@x.Label</span>
+                            <span class="block text-lg font-bold leading-tight text-[var(--ui-ink)]">@x.Value</span>
+                            <span class="block text-xs font-semibold text-[var(--ui-ink)]/80">@x.Pct</span>
+                            <span class="block text-xs text-[var(--ui-muted)]">@partSub[x.Key]</span>
+                        </span>
+                    </li>
+                }
+            </ul>
+            <dl class="mt-5 grid gap-x-4 gap-y-3 border-t border-[var(--ui-line)] pt-4 sm:grid-cols-3">
+                @foreach (var f in strip)
+                {
+                    <div @key="f.Key" class="min-w-0">
+                        <dt><Eyebrow>@f.Label</Eyebrow></dt>
+                        <dd class="mt-1 text-sm">
+                            <span class="block font-bold text-[var(--ui-ink)]">@f.Value</span>
+                            <span class="block text-xs font-semibold text-[var(--ui-ink)]/80">@f.Pct</span>
+                            <span class="block text-xs text-[var(--ui-muted)]">@f.Sub</span>
+                        </dd>
+                    </div>
+                }
+                <div class="min-w-0">
+                    <dt><Eyebrow>The store&apos;s on-costs</Eyebrow></dt>
+                    <dd class="mt-1 text-sm">
+                        <span class="block font-bold text-[var(--ui-ink)]">×@Js.ToFixed(a.OncostMultiplier, 4)</span>
+                        <span class="block text-xs text-[var(--ui-muted)]">
+                            @AF.OnCostWords(a), from Pay Rates: what Fully loaded adds to every cost
+                        </span>
+                    </dd>
+                </div>
+            </dl>
+        </Card>
+
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+            <Card>
+                <SectionHeader Title="@Text("Cost by position")" Aside="@Text(fullyLoaded ? "Fully loaded" : "Raw wages")" />
+                <ul class="space-y-3">
+                    @foreach (var r in roles)
+                    {
+                        <li @key="r.Role">
+                            <div class="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                                <span class="font-semibold text-[var(--ui-ink)]">
+                                    @r.Role <span class="font-normal text-[var(--ui-muted)]">@(EngineRoles.Labels.TryGetValue(r.Role, out var label) ? label : "")</span>
+                                </span>
+                                @if (r.Empty)
+                                {
+                                    <span class="text-xs text-[var(--ui-muted)]">No shifts in this range</span>
+                                }
+                                else
+                                {
+                                    <span class="text-[var(--ui-ink)] tabular-nums">
+                                        <b>@r.Cost</b>
+                                        <span class="text-[var(--ui-muted)]">· @r.Hours h · @r.Shifts shift@(r.Shifts == "1" ? "" : "s") · @r.ShiftShare of shifts</span>
+                                    </span>
+                                }
+                            </div>
+                            <MeterBar Value="r.Bar" Label="@(r.Empty ? $"{r.Role}: no shifts" : $"{r.Role}: {r.Cost}, {r.Hours} hours, {r.Shifts} shifts")" />
+                        </li>
+                    }
+                </ul>
+            </Card>
+
+            <Card>
+                <SectionHeader Title="@Text("Hours against the 90% benchmark")" Aside="@Text($"{total.Planned} h planned · {total.Benchmark} h benchmark")" />
+                <ul class="space-y-3">
+                    @foreach (var v in hours)
+                    {
+                        var noWork = v.Key == "no_work";
+                        var name = AnalysisText.GroupLabel(v.Key);
+                        <li @key="v.Key">
+                            <div class="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                                <span class="flex items-center gap-2 font-semibold text-[var(--ui-ink)]">
+                                    <span aria-hidden="true" class="@($"h-2.5 w-2.5 rounded-sm {(noWork ? "border border-dashed border-[var(--ui-muted)]" : "")}")"
+                                          style="@(noWork ? null : $"background: {AnalysisText.GroupColour(v.Key)}")"></span>
+                                    @name
+                                </span>
+                                <span class="tabular-nums">
+                                    <span class="text-xs text-[var(--ui-muted)]">@v.BenchmarkText → @v.PlannedText h</span>
+                                    <b class="@(v.Delta < 0 && v.Side != EngineSide.None ? "text-[var(--ui-bad)]" : "text-[var(--ui-ink)]")">@v.DeltaText</b>
+                                </span>
+                            </div>
+                            <CentredBar Value="v.Bar" Side="@UiBar(v.Side)"
+                                        Label="@(noWork ? $"Planned with no work in it: {v.PlannedText} hours" : $"{name}: {v.PlannedText} hours planned against {v.BenchmarkText} benchmark, {v.DeltaText}")" />
+                            @if (noWork)
+                            {
+                                <p class="mt-1 text-xs text-[var(--ui-muted)]">
+                                    Shift time with no task: held for cover, by the shortest shift, a manager&apos;s handover or a fixed
+                                    roster. It has no benchmark of its own.
+                                </p>
+                            }
+                        </li>
+                    }
+                </ul>
+                <div class="mt-4 flex flex-wrap items-baseline justify-between gap-x-3 border-t border-[var(--ui-line)] pt-3 text-sm font-semibold text-[var(--ui-ink)]">
+                    <span>Total</span>
+                    <span class="tabular-nums">
+                        <span class="text-xs font-normal text-[var(--ui-muted)]">@total.Benchmark → @total.Planned h</span>
+                        @total.DeltaText
+                    </span>
+                </div>
+                <p class="mt-3 text-xs text-[var(--ui-muted)]">
+                    Benchmark → planned hours, from the held plan. Each group is set against its share of the benchmark, as in the
+                    Plan page&apos;s day table, and the shares add up to the total, the Plan page&apos;s: Checkout&apos;s is what
+                    the other groups leave. Left of the line: planned below the benchmark; right: above it.@PlanNote(a)
+                </p>
+            </Card>
+        </div>
+
+        <Card Class="mt-4">
+            <SectionHeader Title="@Text("Labour density")" Aside="@(a.DensityDays > 1 ? Text($"Average day across {a.DensityDays} trading days") : null)" />
+            <DensityChart Density="a.Density" Days="a.DensityDays" />
+        </Card>
+    };
+}

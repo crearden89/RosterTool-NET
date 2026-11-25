@@ -1,0 +1,228 @@
+@* Port of TaskForm in src/app/(app)/admin/rules/labour/AdminTaskCatalogue.tsx.
+   Add/edit form for one task - schedule, duration and window editors switch
+   their fields with the selected type. *@
+
+<div class="mb-3 space-y-3 rounded-xl border border-[var(--ui-control)] bg-[var(--ui-canvas)] p-4">
+    <div class="flex flex-wrap items-end gap-3">
+        <div>
+            <span class="@Ui.FieldLabelClass">Task name</span>
+            <input value="@_name" @oninput="e => _name = Text(e)" class="@($"{Ui.CompactField} min-w-[220px]")" placeholder="Task name" />
+        </div>
+        <div>
+            <span class="@Ui.FieldLabelClass">Schedule</span>
+            <select value="@_scheduleType" @onchange="e => _scheduleType = Text(e)" class="@Ui.CompactField">
+                <option value="daily">Every day</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly_nth">Weekday of month</option>
+                <option value="planning_week">Planning week (wk 1)</option>
+            </select>
+        </div>
+        @if (_scheduleType == "monthly_nth")
+        {
+            <div>
+                <span class="@Ui.FieldLabelClass">Which week</span>
+                <select value="@_nthWeek" @onchange="e => _nthWeek = (int)Js.Number(Text(e))" class="@Ui.CompactField">
+                    @for (var i = 0; i < Nths.Length; i++)
+                    {
+                        <option value="@(i + 1)">@Nths[i]</option>
+                    }
+                </select>
+            </div>
+        }
+        @if (_scheduleType != "daily" && !(_scheduleType == "weekly" && _byRegion))
+        {
+            <div>
+                <span class="@Ui.FieldLabelClass">Day</span>
+                <select value="@_dayOfWeek" @onchange="e => _dayOfWeek = (int)Js.Number(Text(e))" class="@Ui.CompactField">
+                    @for (var i = 0; i < Period.DayLabels.Count; i++)
+                    {
+                        <option value="@i">@Period.DayLabels[i]</option>
+                    }
+                </select>
+            </div>
+        }
+        @if (_scheduleType == "weekly")
+        {
+            <label class="flex items-center gap-1.5 pb-1 text-xs text-[var(--ui-muted)]">
+                <input type="checkbox" checked="@_byRegion" @onchange="e => _byRegion = e.Value is true" />
+                Day varies by region
+            </label>
+        }
+    </div>
+
+    @if (_scheduleType == "weekly" && _byRegion)
+    {
+        <div class="flex flex-wrap gap-2">
+            @foreach (var r in RegionPrefixes)
+            {
+                var prefix = r;
+                <label @key="prefix" class="flex items-center gap-1 text-xs text-[var(--ui-ink)]">
+                    @prefix
+                    <select value="@(_regionDays.TryGetValue(prefix, out var d) ? d.ToString() : "")" @onchange="e => SetRegionDay(prefix, Text(e))" class="@Ui.CompactField">
+                        <option value="">-</option>
+                        @for (var i = 0; i < Period.DayLabels.Count; i++)
+                        {
+                            <option value="@i">@Period.DayLabels[i]</option>
+                        }
+                    </select>
+                </label>
+            }
+        </div>
+    }
+
+    <div class="flex flex-wrap items-end gap-3">
+        <div>
+            <span class="@Ui.FieldLabelClass">Duration</span>
+            <select value="@_durationType" @onchange="e => _durationType = Text(e)" class="@Ui.CompactField">
+                <option value="fixed">Fixed minutes</option>
+                <option value="per_employee">Minutes × EmployeeCount</option>
+                <option value="per_register">Minutes × RegisterCount</option>
+                <option value="till_calibration">Till calibration formula</option>
+            </select>
+        </div>
+        @if (_durationType == "fixed")
+        {
+            <div>
+                <span class="@Ui.FieldLabelClass">Minutes</span>
+                <input type="number" min="0" step="0.5" value="@_fixedMinutes" @oninput="e => _fixedMinutes = Text(e)" class="@($"{Ui.CompactField} w-24")" />
+            </div>
+        }
+        @if (_durationType is "per_employee" or "per_register")
+        {
+            <div>
+                <span class="@Ui.FieldLabelClass">Minutes per @(_durationType == "per_employee" ? "employee" : "register")</span>
+                <input type="number" min="0" step="0.01" value="@_minutesPerUnit" @oninput="e => _minutesPerUnit = Text(e)" class="@($"{Ui.CompactField} w-24")" />
+            </div>
+        }
+        @if (_durationType == "till_calibration")
+        {
+            <span class="pb-1 text-xs text-[var(--ui-muted)]">Registers + SCOs + 1</span>
+        }
+        <div>
+            <span class="@Ui.FieldLabelClass">Minimum minutes (optional)</span>
+            <input type="number" min="0" value="@_minMinutes" @oninput="e => _minMinutes = Text(e)" class="@($"{Ui.CompactField} w-24")" />
+        </div>
+    </div>
+
+    <div class="space-y-1.5">
+        <span class="@Ui.FieldLabelClass">Placement window</span>
+        @WindowSide("start", _startKind, k => _startKind = k, _startTime, t => _startTime = t, _startOffset, o => _startOffset = o)
+        @WindowSide("end", _endKind, k => _endKind = k, _endTime, t => _endTime = t, _endOffset, o => _endOffset = o)
+    </div>
+
+    <div class="flex items-center gap-2">
+        <button type="button" @onclick="Save" disabled="@Pending" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">@(Pending ? "Saving…" : "Save task")</button>
+        <button type="button" @onclick="() => OnCancel.InvokeAsync()" disabled="@Pending" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">Cancel</button>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Nths = ["1st", "2nd", "3rd", "4th", "5th"];
+
+    private string _name = "";
+    private string _scheduleType = "weekly";
+    private int _dayOfWeek;
+    private int _nthWeek = 1;
+    private bool _byRegion;
+    private Dictionary<string, int> _regionDays = [];
+    private string _durationType = "fixed";
+    private string _fixedMinutes = "";
+    private string _minutesPerUnit = "";
+    private string _minMinutes = "";
+    private string _startKind = "none";
+    private string _startTime = "09:00";
+    private string _startOffset = "0";
+    private string _endKind = "none";
+    private string _endTime = "17:00";
+    private string _endOffset = "0";
+
+    /// <summary>The task being changed; null for a new one.</summary>
+    [Parameter] public AdminTaskRow? Initial { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<string> RegionPrefixes { get; set; } = [];
+
+    [Parameter] public bool Pending { get; set; }
+
+    [Parameter] public EventCallback<AdminTaskInput> OnSave { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized()
+    {
+        var t = Initial?.Task;
+        _name = t?.Name ?? "";
+        _scheduleType = t?.ScheduleType ?? "weekly";
+        _dayOfWeek = t?.DayOfWeek ?? 0;
+        _nthWeek = t?.NthWeek ?? 1;
+        _byRegion = t?.RegionDays is not null;
+        _regionDays = t?.RegionDays?.ToDictionary(e => e.Key, e => e.Value) ?? [];
+        _durationType = t?.DurationType ?? "fixed";
+        _fixedMinutes = Str(t?.FixedMinutes);
+        _minutesPerUnit = Str(t?.MinutesPerUnit);
+        _minMinutes = Str(t?.MinMinutes);
+        _startKind = t?.WindowStartKind ?? "none";
+        _startTime = t?.WindowStartTime ?? "09:00";
+        _startOffset = Js.NumberToString(t?.WindowStartOffsetMin ?? 0);
+        _endKind = t?.WindowEndKind ?? "none";
+        _endTime = t?.WindowEndTime ?? "17:00";
+        _endOffset = Js.NumberToString(t?.WindowEndOffsetMin ?? 0);
+    }
+
+    // String(x ?? ""): a missing number shows as an empty box.
+    private static string Str(double? v) => v is { } n ? Js.NumberToString(n) : "";
+
+    private static string Text(ChangeEventArgs e) => e.Value?.ToString() ?? "";
+
+    // numOrNull: a blank box is null, anything else Number(text).
+    private static double? NumOrNull(string s) => Js.Trim(s) == "" ? null : Js.Number(s);
+
+    // Number(s) || 0: a blank or unreadable offset is 0.
+    private static double NumOrZero(string s) => Js.Number(s) is var n && Js.Truthy(n) ? n : 0;
+
+    private void SetRegionDay(string prefix, string value)
+    {
+        var next = new Dictionary<string, int>(_regionDays);
+        if (value == "") next.Remove(prefix);
+        else next[prefix] = (int)Js.Number(value);
+        _regionDays = next;
+    }
+
+    private Task Save() => OnSave.InvokeAsync(new AdminTaskInput
+    {
+        Name = _name,
+        ScheduleType = _scheduleType,
+        DayOfWeek = _scheduleType == "daily" ? null : _byRegion && _scheduleType == "weekly" ? null : _dayOfWeek,
+        NthWeek = _scheduleType == "monthly_nth" ? _nthWeek : null,
+        RegionDays = _scheduleType == "weekly" && _byRegion ? _regionDays : null,
+        DurationType = _durationType,
+        FixedMinutes = NumOrNull(_fixedMinutes),
+        MinutesPerUnit = NumOrNull(_minutesPerUnit),
+        MinMinutes = NumOrNull(_minMinutes),
+        WindowStartKind = _startKind,
+        WindowStartTime = _startKind == "clock" ? _startTime : null,
+        WindowStartOffsetMin = NumOrZero(_startOffset),
+        WindowEndKind = _endKind,
+        WindowEndTime = _endKind == "clock" ? _endTime : null,
+        WindowEndOffsetMin = NumOrZero(_endOffset),
+    });
+
+    private RenderFragment WindowSide(string side, string kind, Action<string> setKind, string time, Action<string> setTime, string offset, Action<string> setOffset) =>
+        @<div class="flex flex-wrap items-center gap-1.5">
+            <span class="w-8 text-xs text-[var(--ui-muted)]">@(side == "start" ? "From" : "To")</span>
+            <select value="@kind" @onchange="e => setKind(Text(e))" class="@Ui.CompactField">
+                <option value="none">@(side == "start" ? "Start of day" : "End of day")</option>
+                <option value="clock">Clock time</option>
+                <option value="open">Store open ±</option>
+                <option value="close">Store close ±</option>
+            </select>
+            @if (kind == "clock")
+            {
+                <input type="time" value="@time" @oninput="e => setTime(Text(e))" class="@Ui.CompactField" />
+            }
+            @if (kind is "open" or "close")
+            {
+                <input type="number" value="@offset" @oninput="e => setOffset(Text(e))" class="@($"{Ui.CompactField} w-20")" />
+                <span class="text-xs text-[var(--ui-muted)]">min (− before, + after)</span>
+            }
+        </div>;
+}
