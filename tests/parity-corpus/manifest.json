@@ -11,13 +11,17 @@
       "cases": 4,
       "full": 67
     },
+    "load": {
+      "cases": 200,
+      "full": 328
+    },
     "painter": {
-      "cases": 150,
+      "cases": 100,
       "full": 6251
     },
     "pay": {
-      "cases": 476,
-      "full": 10317
+      "cases": 500,
+      "full": 11205
     },
     "shaper": {
       "cases": 94,

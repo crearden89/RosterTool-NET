@@ -57,7 +57,7 @@ public static partial class LeaveMetrics
     {
         // name.split("-")[0] always exists, so the TypeScript's ?? "" never applies.
         var dash = name.IndexOf('-');
-        var prefix = (dash < 0 ? name : name[..dash]).Trim().ToUpperInvariant();
+        var prefix = Js.Trim(dash < 0 ? name : name[..dash]).ToUpperInvariant();
         if (prefix.StartsWith('6')) return RoleClass.CASUAL;
         if (prefix.StartsWith('1')) return RoleClass.SM;
         if (prefix.StartsWith('2')) return RoleClass.ASM;
