@@ -1,0 +1,52 @@
+@page "/admin/rules/rostering"
+@* Port of src/app/(app)/admin/rules/rostering/page.tsx and RulesClient.tsx. *@
+@attribute [Authorize(Policy = Policies.SuperUser)]
+@layout RulesLayout
+@inject IRosteringRulesService Service
+
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    <SettingsBody Sections="Sections">
+        <SaveNote>Changes apply from the next Generate; rosters already approved are not rewritten.</SaveNote>
+        <ChildContent>
+            <div class="rounded-2xl border border-[var(--ui-bad)]/30 bg-[var(--brand-red-tint)]/60 p-4 text-sm text-[var(--ui-ink)] sm:p-5">
+                <p class="flex items-center gap-2 font-semibold text-[var(--ui-bad)]">
+                    <Icon Name="IconName.TriangleAlert" Class="h-4 w-4" /> Changes here can have legal implications.
+                </p>
+                <p class="mt-1">
+                    Rules marked <b>Legal</b> encode legislation and the retail award - rest gaps, junior
+                    work windows and caps, and the safety floor. Relaxing one can produce rosters that
+                    breach the law or the award. Confirm any change against the current award and
+                    legislation before saving. <b>Policy</b> rules are business practice and safe to tune.
+                    Changes apply from the next generate; existing approved rosters are not rewritten.
+                </p>
+            </div>
+            <KnownRules Overrides="_data.Overrides" OnChanged="ReloadAsync" />
+            <PayRulesSection Initial="_data.PayRules" OnSaved="ReloadAsync" />
+            <CustomRules Custom="_custom" KnownKeys="KnownKeys" OnChanged="ReloadAsync" />
+        </ChildContent>
+    </SettingsBody>
+}
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+        RuleValueText.Sections.Select(s => new SettingsSectionRef(s.Id, s.Title)).ToList();
+
+    private static readonly HashSet<string> KnownKeys = RuleMetas.All.Select(m => m.Key).ToHashSet();
+
+    private RosteringRulesData? _data;
+    private IReadOnlyList<RuleOverrideRow> _custom = [];
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    // router.refresh(): the page reads the rules again after a change.
+    private async Task ReloadAsync()
+    {
+        _data = await Service.LoadAsync();
+        _custom = _data.Overrides.Where(o => !KnownKeys.Contains(o.Key)).ToList();
+    }
+}

@@ -77,7 +77,8 @@ public class DayStatusTests
         Assert.True(DayStatus.RosterDayOk(Day([Open], closed: true, hasData: false, shifts: [])));
         Assert.False(DayStatus.RosterDayHasError(Day([Open], closed: true)));
         Assert.False(DayStatus.RosterDayOk(Day([], hasData: false, shifts: [])));
-        Assert.False(DayStatus.RosterDayOk(null));
+        Assert.False(DayStatus.RosterDayOk((RosterDay?)null));
+        Assert.False(DayStatus.RosterDayOk((Roster.Engine.Rostering.Fortnight.RosterComputation?)null));
     }
 
     [Fact]

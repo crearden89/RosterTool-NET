@@ -1,0 +1,51 @@
+@* Port of src/app/(app)/plan/roster/FloorBar.tsx.
+   ─── "On the floor": the Roster page's navy bar ─────────────────────────────
+   What the Floor Display and the printed roster show now - published when, or
+   not yet - with everything that puts the roster out together: Show sub-tasks,
+   Print, the payroll CSV and Approve or Withdraw. Print waits for the fortnight
+   to be approved, as it always has; the CSV is the existing export of the
+   published roster (/api/export/ukg). *@
+<section aria-label="On the floor"
+         class="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-2xl bg-[var(--ui-ink)] px-5 py-4 text-white">
+    <div class="min-w-0">
+        <p class="text-[11px] font-semibold tracking-[0.1em] text-white/75 uppercase">On the floor</p>
+        <p class="text-lg leading-snug font-bold">@Title</p>
+        <p class="mt-0.5 text-xs text-white/75">@Line</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <ShowSubtasksToggle />
+        @if (Published)
+        {
+            <PrintRosterLink Href="@PrintHref" Class="@($"{Btn} bg-[var(--ui-gold)] text-[var(--ui-ink)] hover:brightness-95")">
+                <Icon Name="IconName.Printer" Class="h-4 w-4" />
+                Print UKG roster
+            </PrintRosterLink>
+        }
+        else
+        {
+            <span aria-disabled="true" title="Approve the roster for this fortnight first" class="@($"{Btn} cursor-not-allowed bg-white/10 text-white/55")">
+                <Icon Name="IconName.Printer" Class="h-4 w-4" />
+                Print UKG roster
+            </span>
+        }
+        <a href="@ExportHref" class="@($"{Btn} border border-white/40 text-white hover:bg-white/10")">
+            <Icon Name="IconName.Download" Class="h-4 w-4" />
+            Export UKG CSV
+        </a>
+        @Actions
+    </div>
+</section>
+
+@code {
+    private const string OnNavyFocus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+    private const string Btn = "inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold whitespace-nowrap " + OnNavyFocus;
+
+    [Parameter] public bool Published { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Line { get; set; } = "";
+    [Parameter, EditorRequired] public string PrintHref { get; set; } = "";
+    [Parameter, EditorRequired] public string ExportHref { get; set; } = "";
+
+    /// <summary>Approve or Withdraw, for those who may publish.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+}
