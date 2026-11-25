@@ -27,15 +27,16 @@
 //   --kit    an unpacked replay kit (default: unpacked from the checkout into a temp folder)
 //   --seeds  rosterScenario seeds, e.g. 0-39 or 0,3,7 (default 0-39)
 //   --sources which inputs to run (default seeds,kit,g999)
+//   --stores  only these replay kit stores, e.g. G999,G001 (default all)
 //   --no-select  write the full corpus only
 //   --select-only  pick the committed subset again from the full corpus already in --full
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, copyFileSync, symlinkSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, copyFileSync, symlinkSync, writeFileSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { installHooks, overrideModule, stubModule, stubRequest } from "./lib/hooks";
-import { installRecorders } from "./lib/entries";
+import { installRecorders, installShiftCostRecorder } from "./lib/entries";
 import { breathe, closeCorpus, context, copyCases, fileSize, openCorpus, readMetas, select, type Budget, type CaseMeta } from "./lib/recorder";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +54,7 @@ const FULL = resolve(opt("full", join(tmpdir(), "roster-parity-full"))!);
 const OUT = resolve(opt("out", join(REPO, "tests/parity-corpus"))!);
 const SOURCES = new Set(opt("sources", "seeds,kit,g999")!.split(","));
 const SEEDS = parseSeeds(opt("seeds", "0-39")!);
+const STORES = opt("stores") ? new Set(opt("stores")!.split(",")) : null;
 
 function parseSeeds(s: string): number[] {
   return s.split(",").flatMap((part) => {
@@ -82,6 +84,7 @@ overrideModule(`${TS}/src/lib/refdata`, () => ({
   getPosCustomerRows: async () => current!.posCustomers,
 }));
 installRecorders(TS);
+installShiftCostRecorder(TS);
 
 const req = (p: string): Any => require(`${TS}/src/${p}`);
 const { withRequestMemo } = req("lib/requestCache");
@@ -90,12 +93,47 @@ const { computePlanShifts } = req("lib/stage1/planShifts");
 const { computeRosterFortnight } = req("lib/stage2/compute");
 const { tierRosterPeriod } = req("lib/payroll/periodTiers");
 const { periodDatesFrom } = req("lib/period");
+const { computeShiftCosts } = req("lib/payroll/shiftCost");
+
+// Invented pay rates (no real ones are in any input): a base per role, the
+// weekend and holiday loadings, and the early and late premiums; a couple of
+// position codes of their own, so the fallback to the coarser code is used.
+const PAY_ROLES: [string, number][] = [["SA", 31.5], ["JSA", 19.25], ["RSM", 33.75], ["DSM", 36.4], ["ASM", 41.1], ["SM", 47.8], ["SA-FF", 32.05], ["SM-45", 49.3]];
+const DAY_LOADING: [string, number][] = [["weekday", 1], ["saturday", 1.25], ["sunday", 1.5], ["public_holiday", 2.25]];
+const PAY_RATES = PAY_ROLES.flatMap(([role, base]) =>
+  DAY_LOADING.flatMap(([day_type, k]) =>
+    Array.from({ length: 24 }, (_, hour) => ({
+      day_type,
+      hour,
+      role,
+      rate: Math.round(base * k * (hour < 7 ? 1.15 : hour >= 18 ? 1.1 : 1) * 100) / 100,
+    })),
+  ),
+);
+
+/** What a fortnight's roster gives the pay and the load planner, recorded. */
+type AfterRoster = (byDate: Map<string, { shifts: Any[] }>, tiers: unknown, storeId: string) => Promise<void>;
+
+async function costDays(byDate: Map<string, { shifts: Any[] }>, tiers: unknown, storeId: string) {
+  for (const [date, day] of byDate) {
+    const shifts = day.shifts.filter((x) => !x.unfilled);
+    if (shifts.length) await computeShiftCosts(storeId, date, shifts, tiers);
+  }
+}
 
 /** Plan every day of a store-fortnight (Plan page), then roster it. */
-async function runFortnight(label: string, sc: Current, storeId: string, periodStart: string, roster: "fresh" | "held" | "none") {
+async function runFortnight(
+  label: string,
+  sc: Current,
+  storeId: string,
+  periodStart: string,
+  roster: "fresh" | "held" | "none",
+  afterRoster?: AfterRoster,
+) {
   current = sc;
-  const pay = (sc.db.tables as Record<string, unknown[]>).pay_settings;
-  if (!pay) (sc.db.tables as Record<string, unknown[]>).pay_settings = [];
+  const t = sc.db.tables as Record<string, unknown[]>;
+  t.pay_settings ??= [];
+  t.pay_rates = PAY_RATES;
   await withRequestMemo(async () => {
     const held: unknown[] = [];
     for (const date of periodDatesFrom(periodStart) as string[]) {
@@ -109,7 +147,12 @@ async function runFortnight(label: string, sc: Current, storeId: string, periodS
     context.source = `${label} fortnight ${periodStart}`;
     const f = await computeRosterFortnight(storeId, periodStart, roster === "held" ? held : undefined);
     context.source = `${label} pay ${periodStart}`;
-    await tierRosterPeriod(f.byDate);
+    const tiers = await tierRosterPeriod(f.byDate);
+    await costDays(f.byDate, tiers, storeId);
+    if (afterRoster) {
+      context.source = `${label} load ${periodStart}`;
+      await afterRoster(f.byDate, tiers, storeId);
+    }
   });
   await breathe();
 }
@@ -154,12 +197,67 @@ async function kit() {
   ];
   for (const [data, period, roster] of runs) {
     const L = kitLoader(k, data, period);
+    const globals = JSON.parse(readFileSync(join(k, data, "globals.txt"), "utf8").replace(/'/g, '"'));
     for (const code of L.listStoreCodes() as string[]) {
+      if (STORES && !STORES.has(code)) continue;
       const t0 = Date.now();
-      await runFortnight(`${data} ${code}`, L.buildLive(code), L.STORE, period, roster);
+      const live = L.buildLive(code);
+      await runFortnight(`${data} ${code}`, live, L.STORE, period, roster, loadDays(globals.lt ?? [], live.raw));
       log(`${data} ${code} ${period}: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     }
   }
+}
+
+// ─── The load planner (Load Planner page, lib/load/allocate) ─────────────────
+// Each rostered day: the crew are the people with Load Running tiles (from
+// their first one, tenure from their start date), the truck is the export's
+// load types with that weekday's pallets from its load board history, and who
+// owned what on earlier days of the fortnight steers the rotation. Every
+// fourth day the first crew member is pinned to the biggest job, as a manager
+// can on the page.
+function loadDays(types: Any[], raw: Any): AfterRoster {
+  const { planFor } = req("app/load/[token]/loadModel");
+  const { bandForStartDate, daysOfService } = req("lib/load/probation");
+  const ld = new Map<string, number[]>((raw.ld ?? []).map(([name, counts]: [string, number[]]) => [name.replace(/\W/g, ""), counts]));
+  const startById = new Map<string, string | null>((raw.em ?? []).map((e: Any[]) => [`e${e[0]}`, e[6]]));
+  return async (byDate) => {
+    if (!types.length) return;
+    const owned: Record<string, number> = {};
+    let di = 0;
+    for (const [date, day] of byDate) {
+      di++;
+      const crew = day.shifts
+        .filter((x) => !x.unfilled && x.blocks.some((b: Any) => b.group === "load_running"))
+        .map((x) => {
+          const start = startById.get(x.employeeId) ?? null;
+          return {
+            key: x.employeeId,
+            name: x.name,
+            startMin: Math.min(...x.blocks.filter((b: Any) => b.group === "load_running").map((b: Any) => b.time)),
+            tenureBand: bandForStartDate(start, date),
+            days: daysOfService(start, date),
+          };
+        });
+      if (!crew.length) continue;
+      const opts = types.map((lt: Any) => {
+        const counts = ld.get(String(lt.name).replace(/\W/g, "")) ?? [];
+        const recent = counts.filter((n) => n > 0);
+        return {
+          id: lt.name,
+          name: lt.name,
+          minutesPerPallet: lt.minutes_per_pallet,
+          minutes: { gt90: lt.minutes_per_pallet, lt90: lt.minutes_per_pallet_lt90, lt60: lt.minutes_per_pallet_lt60, lt30: lt.minutes_per_pallet_lt30 },
+          color: lt.color,
+          qty: recent.length ? recent[(di * 7) % recent.length] : 0,
+          priority: lt.priority ?? 100,
+        };
+      });
+      const biggest = [...opts].sort((a, b) => b.qty * b.minutes.gt90 - a.qty * a.minutes.gt90)[0];
+      const pins = di % 4 === 0 && biggest?.qty > 0 ? { [crew[0].key]: biggest.name } : {};
+      const plan = planFor({ crew, types: opts, typeCounts: { ...owned } }, pins);
+      for (const c of plan.crew) if (c.primaryType) owned[`${c.key}:${c.primaryType}`] = (owned[`${c.key}:${c.primaryType}`] ?? 0) + 1;
+    }
+  };
 }
 
 async function g999() {
@@ -176,10 +274,10 @@ async function g999() {
 // What the committed corpus keeps of each entry point (uncompressed budget).
 const BUDGETS: Record<string, Budget> = {
   stage1: { cases: 240, bytes: 8e6 },
-  painter: { cases: 150, bytes: 16e6 },
+  painter: { cases: 100, bytes: 16e6 },
   shaper: { cases: 160, bytes: 10e6 },
   fortnight: { cases: 4, bytes: 6e6 },
-  pay: { cases: 1200, bytes: 2e6 },
+  pay: { cases: 1200, bytes: 2e6, fixed: { computeShiftCosts: 24 } },
   till: { cases: 1200, bytes: 3e6 },
   subtasks: { cases: 160, bytes: 3e6 },
   load: { cases: 200, bytes: 2e6 },
