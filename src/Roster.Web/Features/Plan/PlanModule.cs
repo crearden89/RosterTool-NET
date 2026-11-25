@@ -10,7 +10,13 @@ public sealed class PlanModule : IFeatureModule
     {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(sp => new PlanPartKey(sp.GetRequiredService<IConfiguration>()));
-        // FAKE until the data services the real PlanService reads are on main.
-        services.TryAddSingleton<IPlanService, FakePlanService>();
+        // Plan:UseFake = true shows the page on invented data (FakePlanService), for a look
+        // at the page with no plan data in the database.
+        if (configuration.GetValue<bool>("Plan:UseFake"))
+        {
+            services.TryAddSingleton<IPlanService, FakePlanService>();
+            return;
+        }
+        services.TryAddScoped<IPlanService, PlanService>();
     }
 }
