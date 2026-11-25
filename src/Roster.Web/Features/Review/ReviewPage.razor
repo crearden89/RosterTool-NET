@@ -56,7 +56,10 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        _requestedStore = Guid.TryParse(StoreParam, out var s) ? s : null;
+        // ?store= that isn't a store's id still counts as asked-for (it then resolves
+        // like any store out of reach); only no ?store= at all sends a reviewer to
+        // the store waiting for them.
+        _requestedStore = string.IsNullOrEmpty(StoreParam) ? null : Guid.TryParse(StoreParam, out var s) ? s : Guid.Empty;
         _periodStart = ReviewQuery.PeriodStartFrom(PeriodParam, Dates.TodayAu(Clock.GetUtcNow()));
         await ReloadAsync();
     }

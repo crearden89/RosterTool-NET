@@ -1,0 +1,69 @@
+@page "/notifications"
+@* Port of src/app/(app)/notifications/page.tsx, with MarkRead.tsx: opening the
+   screen marks the person's notifications read, then the page and the menu's
+   unread badge refresh. *@
+@inject INotificationService Notifications
+@inject ShellEvents Shell
+
+<div>
+    <PageHeader Title="Notifications">
+        <Subtitle>@($"{_notes.Count(n => n.ReadAt is null)} unread · alerts for you, newest first")</Subtitle>
+    </PageHeader>
+    @if (_notes.Count == 0)
+    {
+        <Card>
+            <p class="text-sm text-[var(--ui-muted)]">No notifications.</p>
+        </Card>
+    }
+    else
+    {
+        <div class="max-w-2xl space-y-2">
+            @foreach (var n in _notes)
+            {
+                var read = n.ReadAt is not null;
+                <div @key="n.Id" class="@($"flex gap-3 rounded-2xl border bg-white p-4 {(read ? "border-[var(--ui-line)]" : "border-[var(--ui-violet)]/35")}")">
+                    <span aria-hidden="true" class="@($"mt-1.5 h-2 w-2 shrink-0 rounded-full {(read ? "bg-[var(--ui-line)]" : "bg-[var(--ui-violet)]")}")"></span>
+                    <div class="min-w-0">
+                        <p class="@($"text-sm text-[var(--ui-ink)] {(read ? "" : "font-semibold")}")">
+                            @if (!read)
+                            {
+                                <span class="sr-only">Unread: </span>
+                            }
+                            @n.Body
+                        </p>
+                        <p class="mt-1 flex items-center gap-2 text-xs text-[var(--ui-muted)]">
+                            <span>@NotificationFormat.LocaleString(n.CreatedAt)</span>
+                            @if (!string.IsNullOrEmpty(n.Link))
+                            {
+                                <a href="@n.Link" class="@Ui.LinkClass">Open</a>
+                            }
+                        </p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<NotificationItem> _notes = [];
+
+    protected override async Task OnInitializedAsync() => _notes = await Notifications.ListMineAsync();
+
+    // MarkRead: once the screen is open, everything is marked read and the page and
+    // the menu's badge read again. A failure leaves the badge; the next visit retries.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            await Notifications.MarkAllReadAsync();
+            Shell.RaiseUnreadChanged();
+            _notes = await Notifications.ListMineAsync();
+            StateHasChanged();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+        }
+    }
+}
