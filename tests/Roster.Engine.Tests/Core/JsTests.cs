@@ -34,6 +34,12 @@ public class JsTests
         Assert.Equal(3, Js.Round(2.5));
         Assert.Equal(-2, Js.Round(-2.5));
         Assert.Equal(0, Js.Round(0.49999999999999994));
+        // -0 where Math.round gives -0 (toLocaleString prints it "-0").
+        Assert.True(double.IsNegative(Js.Round(-0.004)));
+        Assert.True(double.IsNegative(Js.Round(-0.5)));
+        Assert.True(double.IsNegative(Js.Round(-0.0)));
+        Assert.False(double.IsNegative(Js.Round(0.3)));
+        Assert.Equal("-0", Js.ToLocaleString(Js.Round(-0.004)));
     }
 
     [Fact]

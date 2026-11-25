@@ -3,6 +3,7 @@
 using Roster.Engine.Core;
 using Roster.Engine.Planning;
 using Roster.Engine.Planning.Stage1;
+using Roster.Engine.Rostering.Painter;
 
 namespace Roster.Data.Services.RefData;
 
@@ -86,6 +87,18 @@ public interface IRefData
     /// in the engine. Unknown keys are kept and ignored by the engine.
     /// </summary>
     Task<IReadOnlyDictionary<string, double>> GetRuleOverridesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// getRosterOrder: the configured Stage 2 phase order, by position; null = the table is
+    /// empty, so the engine's shipped default order applies.
+    /// </summary>
+    Task<IReadOnlyList<OrderStep>?> GetRosterOrderAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// getTaskPriority (stage2/priority): the configured task-assignment priority order
+    /// (labour_group_priority), unknown groups dropped and missing ones appended.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetTaskPriorityAsync(CancellationToken ct = default);
 
     /// <summary>getLabourWindows: every labour-group time window, by weekday (Mon = 0).</summary>
     Task<IReadOnlyDictionary<int, IReadOnlyList<WindowRule>>> GetLabourWindowsAsync(CancellationToken ct = default);

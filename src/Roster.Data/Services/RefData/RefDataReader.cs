@@ -11,6 +11,7 @@ using Roster.Engine.Pay;
 using Roster.Engine.Planning;
 using Roster.Engine.Planning.Plan;
 using Roster.Engine.Planning.Stage1;
+using Roster.Engine.Rostering.Painter;
 using EngineBreakRule = Roster.Engine.Core.BreakRule;
 
 namespace Roster.Data.Services.RefData;
@@ -203,6 +204,38 @@ public sealed partial class RefDataReader(IRosterDbContextFactory contexts) : IR
             var out_ = new Dictionary<string, double>(StringComparer.Ordinal);
             foreach (var r in rows) out_[r.Key] = r.Value;
             return out_;
+        });
+
+    // ─── Roster order steps ──────────────────────────────────────────────────
+    // The configured Stage 2 phase order. null = table empty = the shipped
+    // default order (the engine's normaliseOrder applies it).
+    public Task<IReadOnlyList<OrderStep>?> GetRosterOrderAsync(CancellationToken ct = default) =>
+        RequestMemo.Cached<IReadOnlyList<OrderStep>?>("refdata.getRosterOrder", async () =>
+        {
+            await using var db = contexts.Create();
+            var rows = await db.RosterOrderSteps.AsNoTracking().OrderBy(r => r.Position).ThenBy(r => r.Id).ToListAsync(ct);
+            if (rows.Count == 0) return null;
+            return rows.Select(r => new OrderStep(r.StepType, r.DayOrder)).ToList();
+        });
+
+    // The config-driven task-assignment priority order (labour_group_priority),
+    // falling back to the engine default if the table is empty. Fetched once per
+    // request however many engine runs need it.
+    public Task<IReadOnlyList<string>> GetTaskPriorityAsync(CancellationToken ct = default) =>
+        RequestMemo.Cached<IReadOnlyList<string>>("stage2.getTaskPriority", async () =>
+        {
+            List<string>? groups;
+            try
+            {
+                await using var db = contexts.Create();
+                groups = await db.LabourGroupPriority.AsNoTracking().OrderBy(r => r.Priority).ThenBy(r => r.LabourGroup)
+                    .Select(r => r.LabourGroup).ToListAsync(ct);
+            }
+            catch (Exception e) when (e is DbUpdateException or System.Data.Common.DbException)
+            {
+                groups = null; // unavailable: the engine's default order
+            }
+            return TaskPriority.FromConfig(groups);
         });
 
     // All labour-group time windows keyed by day-of-week (global config, a few
