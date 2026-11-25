@@ -1,0 +1,129 @@
+@* Port of src/app/(app)/plan/roster/RosterEditor.tsx.
+   Roster editing happens IN the grid: each row's name is a type-ahead picker and
+   its start/finish are time inputs, so a shift is changed where it's read rather
+   than in a separate list underneath that you had to cross-reference. Editing
+   pins the shift - Stage 2 keeps pinned shifts exactly and rebuilds the rest of
+   the fortnight around them. *@
+@using global::Roster.Web.Features.Plan
+@inject IPlanService Plan
+@inject RosterJs Js
+
+<RosterView Rows="@Rows" CostByKey="@CostByKey" DayCost="@DayCost" RowEdit="@RowEdit()" Subtasks="@(SubtaskView?.On == true)" SubtaskLegend="@Legend" />
+
+@if (!ReadOnly)
+{
+    <div class="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-[var(--brand-border)] bg-white px-5 py-3">
+        <span class="pb-1 text-sm font-semibold text-[var(--brand-navy)]">Add a shift</span>
+        <NameCombobox Value="@_addEmp" Options="@Addable()" OnChange="id => _addEmp = id" Placeholder="Type a name…" Disabled="@_busy" Class="w-56" />
+        <input type="time" value="@_addStart" @oninput="e => _addStart = e.Value?.ToString() ?? string.Empty" disabled="@_busy"
+               class="rounded border border-[var(--brand-border)] px-2 py-1 text-sm text-[var(--brand-navy)]" />
+        <span class="pb-1 text-[var(--brand-navy)]/40">–</span>
+        <input type="time" value="@_addEnd" @oninput="e => _addEnd = e.Value?.ToString() ?? string.Empty" disabled="@_busy"
+               class="rounded border border-[var(--brand-border)] px-2 py-1 text-sm text-[var(--brand-navy)]" />
+        <button type="button" disabled="@(_busy || _addEmp.Length == 0)" @onclick="AddAsync"
+                class="rounded-lg bg-[var(--brand-green)] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">Add</button>
+        <span class="pb-1 text-xs text-[var(--brand-navy)]/50">
+            Editing a row pins that shift; the engine rebuilds the rest of the fortnight around it.@(Approved ? " This day is approved — withdraw & re-approve to publish changes to the floor." : "")
+        </span>
+        @if (_msg is not null)
+        {
+            <span class="@($"pb-1 text-sm font-medium {(_msg.StartsWith("Error", StringComparison.Ordinal) ? "text-[var(--brand-red)]" : "text-green-700")}")">@_msg</span>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] public SubtaskViewProvider? SubtaskView { get; set; }
+
+    [Parameter, EditorRequired] public Guid StoreId { get; set; }
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<RosterGridRow> Rows { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<string, double>? CostByKey { get; set; }
+    [Parameter] public (double Ideal, double Actual)? DayCost { get; set; }
+    [Parameter] public IReadOnlyList<RosterLockRow> LockRows { get; set; } = [];
+    [Parameter] public IReadOnlyList<RosterEmployee> Employees { get; set; } = [];
+    [Parameter] public bool Approved { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>A change was saved: the page reads afresh (router.refresh).</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    // The legend of sub-task codes, shown under the tile legend while the switch is on.
+    private static readonly RenderFragment Legend = b =>
+    {
+        b.OpenComponent<SubtaskLegend>(0);
+        b.CloseComponent();
+    };
+
+    private bool _busy;
+    private string? _msg;
+    private string _addEmp = "";
+    private string _addStart = "07:00";
+    private string _addEnd = "15:00";
+
+    private RosterLockRow? ById(string rowKey) => LockRows.FirstOrDefault(r => r.EmployeeId.ToString() == rowKey);
+
+    private IReadOnlyList<ComboOption> Options() => Employees.Select(e => new ComboOption(e.Id.ToString(), e.Name, e.Role)).ToList();
+
+    private IReadOnlyList<ComboOption> Addable()
+    {
+        var rostered = LockRows.Select(r => r.EmployeeId.ToString()).ToHashSet();
+        return Options().Where(o => !rostered.Contains(o.Id)).ToList();
+    }
+
+    private RowEditApi? RowEdit() => ReadOnly ? null : new RowEditApi
+    {
+        Employees = Options(),
+        Busy = _busy,
+        EditableKeys = LockRows.Select(r => r.EmployeeId.ToString()).ToHashSet(),
+        LockedKeys = LockRows.Where(r => r.Locked).Select(r => r.EmployeeId.ToString()).ToHashSet(),
+        OnPerson = EventCallback.Factory.Create<(string RowKey, string EmployeeId)>(this, async x =>
+        {
+            if (ById(x.RowKey) is not { } r || !Guid.TryParse(x.EmployeeId, out var to)) return;
+            await RunAsync(() => Plan.SaveShiftRowAsync(StoreId, Date, r.EmployeeId, to, r.Start, r.End));
+        }),
+        OnTimes = EventCallback.Factory.Create<(string RowKey, double StartMin, double EndMin)>(this, async x =>
+        {
+            if (!Guid.TryParse(x.RowKey, out var id)) return;
+            await RunAsync(() => Plan.SaveShiftRowAsync(StoreId, Date, id, id, x.StartMin, x.EndMin));
+        }),
+        OnRemove = EventCallback.Factory.Create<string>(this, async rowKey =>
+        {
+            var r = ById(rowKey);
+            if (r is not null && !await Js.ConfirmAsync($"Remove {r.Name}'s shift on this day?")) return;
+            if (!Guid.TryParse(rowKey, out var id)) return;
+            await RunAsync(() => Plan.RemoveShiftAsync(StoreId, Date, id));
+        }),
+        OnToggleLock = EventCallback.Factory.Create<string>(this, async rowKey =>
+        {
+            if (ById(rowKey) is not { } r) return;
+            await RunAsync(() => Plan.SetShiftLockAsync(StoreId, Date, r.EmployeeId, !r.Locked, r.Start, r.End));
+        }),
+    };
+
+    private async Task AddAsync()
+    {
+        if (!Guid.TryParse(_addEmp, out var id)) return;
+        await RunAsync(async () =>
+        {
+            var res = await Plan.AddShiftAsync(StoreId, Date, id, RowEditFormat.ToMin(_addStart), RowEditFormat.ToMin(_addEnd));
+            if (res.Ok) _addEmp = "";
+            return res;
+        });
+    }
+
+    private async Task RunAsync(Func<Task<PlanResult>> fn)
+    {
+        _busy = true;
+        try
+        {
+            var res = await fn();
+            _msg = res.Ok ? "Saved." : $"Error: {res.Error}";
+            if (res.Ok) await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,201 @@
+@page "/plan/roster"
+@* Port of src/app/(app)/plan/roster/page.tsx (the markup; its reads and decisions are
+   IRosterService and RosterPageModel). *@
+@using global::Roster.Web.Features.Plan
+@using global::Roster.Web.Features.Review
+@inject IRosterService Service
+
+@if (_m is not { } m)
+{
+    <Loading />
+}
+else
+{
+    <SubtaskViewProvider>
+        <div>
+            <FilterBar Stores="@m.Stores" SelectedStore="@m.SelectedStore" SelectedDate="@m.SelectedDate" PeriodStart="@m.PeriodStart"
+                       BasePath="plan/roster" ShowDate="true" HasSnapshot="@m.HasSnapshot" GeneratedAt="@m.GeneratedAt"
+                       Generates="PlanOrRoster.Roster" CanGenerate="@m.CanGenerate" IsPastPeriod="@m.IsPastPeriod" Title="Roster"
+                       OnGenerated="LoadAsync">
+                <Badge>
+                    @if (m.SelectedStore is not null)
+                    {
+                        <span class="flex flex-wrap items-center gap-2">
+                            @if (m.HasPlan)
+                            {
+                                <PlanStatusChip State="@m.ReviewState" Locked="@(m.ReviewState == PlanReviewState.Approved)" Page="PlanOrRoster.Roster" />
+                            }
+                            @if (m.HasSnapshot)
+                            {
+                                @if (m.RosterApproved)
+                                {
+                                    <StatusChip Tone="StatusTone.Navy">Published</StatusChip>
+                                }
+                                else
+                                {
+                                    <StatusChip Tone="StatusTone.Soft" Icon="StatusIcon.None">Not published</StatusChip>
+                                }
+                            }
+                        </span>
+                    }
+                </Badge>
+                <Subtitle>@m.Subtitle</Subtitle>
+                <HeaderAction>
+                    @if (m.ShowReview)
+                    {
+                        <ReviewLink Href="@m.ReviewHref" State="@m.ReviewState" IsStore="@m.IsStoreTier" Locked="false" />
+                    }
+                </HeaderAction>
+                <Notices>
+                    @if (m.OverduePeriods.Count > 0)
+                    {
+                        <div class="mb-4 rounded-xl border border-[var(--brand-red)]/40 bg-[var(--brand-red-tint)] px-5 py-3 text-sm font-semibold text-[var(--brand-red)]">
+                            Previous period(s) not approved: @string.Join(", ", m.OverduePeriods.Select(Period.PeriodLabel))
+                        </div>
+                    }
+                </Notices>
+            </FilterBar>
+
+            @if (m.Locked)
+            {
+                <Card>
+                    <h2 class="text-lg font-semibold text-[var(--ui-ink)]">The roster is locked until the plan is approved</h2>
+                    <p class="mt-1 max-w-3xl text-sm text-[var(--ui-muted)]">
+                        Plan, Review, then Roster. The store checks the plan's flags and submits it on the Review page; once
+                        its EMSO approves it, the roster can be generated here, built from the approved plan - edits and all.
+                    </p>
+                    <p class="mt-4">
+                        <a href="@m.ReviewHref" class="@Ui.ButtonClass(ButtonKind.Primary)">Go to Review</a>
+                    </p>
+                </Card>
+            }
+            else
+            {
+                @if (m.HasSnapshot)
+                {
+                    <FloorBar Published="@m.RosterApproved" Title="@m.FloorTitle" Line="@m.FloorLine" PrintHref="@m.PrintHref" ExportHref="@m.ExportHref">
+                        <Actions>
+                            @* The store publishes the roster it built from the approved plan. *@
+                            @if (m.CanPublish && m.SelectedStore is { } store)
+                            {
+                                <ApproveButtons StoreId="@store" Date="@m.SelectedDate" PeriodDates="@m.PlanDates" Kind="PlanOrRoster.Roster"
+                                                Approved="@m.RosterApproved" RequiresComment="@(m.CoverNoteDays.Count > 0)"
+                                                CommentReason="@(m.CoverNoteDays.Count > 0 ? m.CoverNoteReason : null)" OnSaved="LoadAsync" />
+                            }
+                        </Actions>
+                    </FloorBar>
+                }
+
+                @if (m.OutOfDateNote is { } note)
+                {
+                    <p class="mb-4 rounded-xl bg-[var(--ui-amber-bg)] px-4 py-2.5 text-sm text-[var(--ui-amber-ink)]">@note</p>
+                }
+
+                @if (m.FortnightCost is { } cost)
+                {
+                    <div class="@($"mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4 {(m.Gate.OutOfDate ? "opacity-50" : "")}")">
+                        <StatCard>
+                            <Label>Fortnight cost</Label>
+                            <Value><span title="@GridFormat.Money(cost.Actual)">@GridFormat.Dollars(cost.Actual)</span></Value>
+                            <Sub>Ideal floor @GridFormat.Dollars(cost.Ideal)</Sub>
+                        </StatCard>
+                        <StatCard>
+                            <Label>Cost of real staff</Label>
+                            <Value>
+                                <span class="@(cost.Delta > 0.005 ? "text-[var(--ui-bad)]" : "text-[var(--ui-good)]")" title="Cost of reshaping the ideal shift structure around real staff">@(cost.Delta < -0.005 ? "−" : "+")@GridFormat.Dollars(Math.Abs(cost.Delta))</span>
+                            </Value>
+                            <Sub>@(cost.Ideal > 0
+                                     ? $"{Js.ToFixed(Math.Abs(cost.Delta / cost.Ideal * 100), 1)}% {(cost.Delta < -0.005 ? "under" : "over")} the ideal shift structure"
+                                     : "against the ideal shift structure")</Sub>
+                        </StatCard>
+                        <StatCard>
+                            <Label>Under contract</Label>
+                            <Value>@(m.Contracts is { } c1 ? People(c1.Under) : "—")</Value>
+                            <Sub>@(m.Contracts is { } c2
+                                     ? c2.Under > 0 ? $"{Js.ToFixed(c2.UnderHours, 2)} h short - paid as make-up" : "everyone has their contract's hours"
+                                     : "shown once the roster is next built")</Sub>
+                        </StatCard>
+                        <StatCard>
+                            <Label>Above contract</Label>
+                            <Value>@(m.Contracts is { } c3 ? People(c3.Over) : "—")</Value>
+                            <Sub>@(m.Contracts is { } c4
+                                     ? c4.Over > 0
+                                         ? $"{Js.ToFixed(c4.OverHours, 2)} h over{(c4.Over <= 2 ? $" · {string.Join(", ", c4.People.Where(p => p.Over).Select(p => p.Name))}" : "")}"
+                                         : "nobody rostered past their contract"
+                                     : "shown once the roster is next built")</Sub>
+                        </StatCard>
+                    </div>
+                }
+
+                @if (m.DayChips.Count > 0)
+                {
+                    <Card Padded="false" Class="mb-6 px-3 py-4 sm:p-6">
+                        <DayChips Days="@m.DayChips" Selected="@m.SelectedDate" />
+                    </Card>
+                }
+
+                @if (m.HasSnapshot && m.SelectedStore is { } dayStore)
+                {
+                    <DayHeading Class="mb-3" Title="@PageFigures.LongDayLabel(m.SelectedDate)">
+                        <Figures>
+                            @if (m.Day is { HasData: true } d)
+                            {
+                                <FigureChip>
+                                    <Value>@d.Rows.Count</Value>
+                                    <Label>@(d.Rows.Count == 1 ? "shift" : "shifts")</Label>
+                                </FigureChip>
+                                <FigureChip>
+                                    <Value>@GridFormat.Money(d.DayTotalCost)</Value>
+                                    <Label>cost · ideal @GridFormat.Money(d.IdealCost)</Label>
+                                </FigureChip>
+                            }
+                            <DayDatePicker Store="@dayStore" Date="@m.SelectedDate" BasePath="plan/roster" />
+                        </Figures>
+                    </DayHeading>
+                }
+
+                @if (m.Day is not { HasData: true } day || m.SelectedStore is not { } editStore)
+                {
+                    <Card>
+                        <p class="text-sm text-[var(--ui-muted)]">@m.EmptyDayMessage</p>
+                    </Card>
+                }
+                else
+                {
+                    <div class="@(m.Gate.OutOfDate ? "opacity-50" : null)">
+                        @* Editing happens inside the grid itself - the name and times on each
+                           row are the controls, so there's no separate panel to cross-reference
+                           against. *@
+                        <RosterEditor StoreId="@editStore" Date="@m.SelectedDate" Rows="@day.Rows" CostByKey="@day.CostByKey"
+                                      DayCost="@((day.IdealCost, day.DayTotalCost))" LockRows="@day.LockRows" Employees="@m.ActiveEmployees"
+                                      Approved="@m.RosterApproved" ReadOnly="@m.EditorReadOnly" OnSaved="LoadAsync" />
+                        <div class="mb-6 grid gap-4 lg:grid-cols-5">
+                            <ChecksCard Class="lg:col-span-3" Rows="@Checks(m)">
+                                <Title>Checks for @PageFigures.LongDayLabel(m.SelectedDate)</Title>
+                                <Aside>@(m.DayHasError ? "Errors: fix them, or add a note on cover when you publish" : "Warnings and notes - the day can still be OK")</Aside>
+                            </ChecksCard>
+                            <ContractsCard Class="lg:col-span-2" Figures="@m.Contracts" Flags="@m.ContractFlags" />
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </SubtaskViewProvider>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+    [SupplyParameterFromQuery(Name = "date")] public string? Date { get; set; }
+    [SupplyParameterFromQuery(Name = "period")] public string? PeriodQuery { get; set; }
+
+    private RosterPageModel? _m;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync() => _m = await Service.LoadPageAsync(new RosterPageQuery(Store, Date, PeriodQuery));
+
+    private static string People(int n) => n == 0 ? "No one" : $"{n} {(n == 1 ? "person" : "people")}";
+
+    private static IReadOnlyList<CheckRow> Checks(RosterPageModel m) =>
+        m.DayChecks.Select(c => CheckRow.Of(c.Key, c.Tone, c.Message)).ToList();
+}
