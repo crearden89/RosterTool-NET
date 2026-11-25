@@ -1,0 +1,359 @@
+@* Port of src/app/load/[token]/LoadPhone.tsx.
+   The phone layout (any screen under 1024 px): the same page as stacked cards
+   in real pixels, the way the Floor Display's walk notes view is built for a
+   screen held in the hand. *@
+@using global::Roster.Engine.Load
+
+<div class="min-h-dvh bg-white">
+    <header class="sticky top-0 z-20 flex items-center gap-3 border-b-2 border-[var(--ui-line)] bg-white px-4 py-3">
+        <a href="@V.FloorHref" @onclick="A.BackAsync" @onclick:preventDefault="@(V.Unsaved || V.D.FromFloor)" aria-label="Back to the Floor Display"
+           class="grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 border-[var(--ui-control)] text-[var(--ui-ink)]">
+            <LoadIcon Name="@LoadIcons.Back" Class="h-5 w-5" />
+        </a>
+        <div class="min-w-0 flex-1">
+            <h1 class="text-xl leading-tight font-bold text-[var(--ui-ink)]">Load Planner</h1>
+            <p class="truncate text-[13px] text-[var(--ui-muted)]">
+                @LoadModel.ShortDay(V.D.Day) · @Grid.MinToTime(V.Now) · @V.D.Store
+            </p>
+        </div>
+        <span class="shrink-0 rounded-full px-3 py-1 text-xs font-bold @Pill(V.Status.Tone)">@V.Status.Short</span>
+    </header>
+    @if (V.Screen == LoadScreen.NoCrew)
+    {
+        <div class="px-4 py-6">
+            <div class="rounded-2xl bg-[#f3f4f9] px-5 py-8 text-center">
+                <p class="text-lg font-semibold text-[var(--ui-ink)]">
+                    @(V.D.RosterApproved ? "No one has Load Running on today's roster." : "No approved roster for today.")
+                </p>
+                <p class="mt-2 text-sm text-[var(--ui-muted)]">
+                    The load plan is built from today's approved roster: everyone with Load Running tiles. Once
+                    @(V.D.RosterApproved ? "someone has Load Running" : "it is approved"), count the truck here and the plan
+                    builds itself.
+                </p>
+            </div>
+        </div>
+    }
+    else if (V.Screen == LoadScreen.Count)
+    {
+        @PhoneCount
+    }
+    else if (V.Plan is { } plan)
+    {
+        @PhonePlan(plan)
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public LoadView V { get; set; } = default!;
+    [Parameter, EditorRequired] public ILoadActions A { get; set; } = default!;
+
+    private static string Pill(LoadTone t) => t switch
+    {
+        LoadTone.Go => "bg-[#dcf3e5] text-[var(--ui-good)]",
+        LoadTone.Wait => "bg-[var(--ui-gold)] text-[var(--ui-ink)]",
+        _ => "bg-[var(--ui-ink)] text-white",
+    };
+
+    private const string BtnGo = "bg-[var(--ui-good)] text-white";
+    private const string BtnSolid = "bg-[var(--ui-ink)] text-white";
+    private const string BtnGhost = "border-2 border-[var(--ui-control)] bg-white text-[var(--ui-ink)]";
+    private const string Hatch = "repeating-linear-gradient(135deg,#64748b 0 4px,#8a97ab 4px 8px)";
+
+    private static string Plural(double n, string one) => $"{Js.NumberToString(n)} {one}{(n == 1 ? "" : "s")}";
+
+    private static string Pct(double n) => Js.NumberToString(n) + "%";
+
+    private RenderFragment Btn(string kind, Func<Task> onClick, bool disabled, RenderFragment content) => __builder =>
+    {
+        <button type="button" @onclick="onClick" disabled="@disabled"
+                class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-base font-bold disabled:opacity-50 @kind">
+            @content
+        </button>
+    };
+
+    private static Func<Task> Sync(Action action) => () => { action(); return Task.CompletedTask; };
+
+    private RenderFragment Message => __builder =>
+    {
+        if (V.Message is { } m)
+        {
+            <p class="text-sm font-semibold @(m.Good ? "text-[var(--ui-good)]" : "text-[var(--ui-bad)]")" role="@(m.Good ? "status" : "alert")">@m.Text</p>
+        }
+    };
+
+    private static RenderFragment NewTag(CrewOption? c) => __builder =>
+    {
+        if (c is not null && c.TenureBand != TenureBands.Gt90 && c.Days is { } days)
+        {
+            <span class="shrink-0 rounded-md bg-[var(--brand-yellow-wash)] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#6b5200] uppercase">
+                New · @(days)d
+            </span>
+        }
+    };
+
+    private RenderFragment PhonePlan(LoadPlan plan) => __builder =>
+    {
+        double? done = V.DoneAt is { } d && !V.Assigning ? d : null;
+        var order = LoadModel.WorkOrder(V.D.Types);
+        <div class="space-y-3 px-4 pt-4 @(V.Assigning ? "pb-44" : "pb-6")">
+            @if (done is { } at)
+            {
+                <p class="flex items-start gap-2 rounded-2xl bg-[var(--ui-good)] px-4 py-3 text-sm font-semibold text-white" role="status">
+                    <LoadIcon Name="@LoadIcons.Tick" Class="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                        Load complete at @Grid.MinToTime(at), @LoadModel.AgainstPlan(plan.TeamFinish, at).
+                        <span class="block font-normal opacity-90">Shown on this screen for now.</span>
+                    </span>
+                </p>
+            }
+            @if (V.Assigning)
+            {
+                <p class="rounded-2xl bg-[var(--brand-yellow-wash)] px-4 py-3 text-sm font-semibold text-[var(--ui-ink)] shadow-[inset_0_0_0_2px_#efdf9a]">
+                    Tap a person's job to pin them to it for today, or leave it on Auto. The plan redraws as you go.
+                </p>
+            }
+            <div class="rounded-2xl px-5 py-4 text-white @(done is not null ? "bg-[var(--ui-good)]" : "bg-[var(--ui-ink)]")">
+                <p class="text-[11px] font-semibold tracking-[0.08em] uppercase opacity-75">
+                    @(done is not null ? "Load complete" : "Team finish")
+                </p>
+                <p class="mt-1 text-5xl leading-none font-extrabold tabular-nums">@Grid.MinToTime(done ?? plan.TeamFinish)</p>
+                <p class="mt-2 text-sm opacity-85">
+                    @(done is { } d2
+                        ? $"Planned {Grid.MinToTime(plan.TeamFinish)} · {LoadModel.AgainstPlanShort(plan.TeamFinish, d2)}"
+                        : $"{Plural(plan.TotalPallets, "pallet")} · {LoadModel.WorkingCrew(plan).Count} on the load · from {Grid.MinToTime(plan.TeamStart)}")
+                </p>
+            </div>
+            @if (V.Assigning && V.Changed.Count > 0 && V.SavedPlan is { } saved)
+            {
+                <p class="px-1 text-xs text-[var(--ui-muted)]">
+                    Before @(V.Changed.Count == 1 ? "this change" : "these changes"): team finish @Grid.MinToTime(saved.TeamFinish).
+                </p>
+            }
+            <section aria-label="Who does what" class="space-y-2">
+                <h2 class="px-1 text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase">Who does what</h2>
+                @foreach (var c in LoadModel.WorkingCrew(plan))
+                {
+                    @PersonCard(c, plan, done)
+                }
+            </section>
+            <section class="rounded-2xl bg-[#f3f4f9] px-4 py-3" aria-label="The truck">
+                <h2 class="flex items-baseline justify-between text-base font-bold text-[var(--ui-ink)]">
+                    The truck
+                    <span class="text-sm font-medium text-[var(--ui-muted)]">@Plural(order.Sum(t => t.Qty), "pallet")</span>
+                </h2>
+                <ul class="mt-2 divide-y divide-[var(--ui-line)]">
+                    @foreach (var t in order)
+                    {
+                        var clear = LoadModel.ClearBy(plan, t.Name);
+                        <li @key="t.Id" class="flex items-center gap-3 py-2 text-sm text-[var(--ui-ink)]">
+                            <i class="h-3.5 w-3.5 shrink-0 rounded" style="background: @t.Color"></i>
+                            <span class="min-w-0 flex-1 truncate">
+                                @t.Name <span class="text-[var(--ui-muted)]">· @Js.NumberToString(t.MinutesPerPallet) min</span>
+                            </span>
+                            <b class="text-base tabular-nums">@Js.NumberToString(t.Qty)</b>
+                            <span class="w-[4.5rem] text-right text-xs text-[var(--ui-muted)] tabular-nums">
+                                @(clear is { } c2 ? $"clear {Grid.MinToTime(c2)}" : "")
+                            </span>
+                        </li>
+                    }
+                </ul>
+            </section>
+            @if (V.Assigning)
+            {
+                <div class="fixed inset-x-0 bottom-0 z-20 space-y-2 border-t border-[var(--ui-line)] bg-white/95 px-4 pt-3 pb-4 backdrop-blur">
+                    @Message
+                    <p class="text-sm font-semibold text-[var(--ui-ink)]">
+                        @(V.Changed.Count > 0 ? $"{Plural(V.Changed.Count, "change")} not saved yet" : "Tap a job to change it")
+                    </p>
+                    <div class="grid grid-cols-2 gap-2">
+                        @Btn(BtnGhost, Sync(A.CancelAssign), V.Pending, @<text>Cancel</text>)
+                        @Btn(BtnSolid, A.SaveAssignAsync, V.Pending || V.Changed.Count == 0, @<text>@(V.Pending ? "Saving…" : "Save")</text>)
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="space-y-2 pt-1">
+                    @Message
+                    @if (done is null)
+                    {
+                        @Btn(BtnGo, A.MarkCompleteAsync, V.Pending, @<text><LoadIcon Name="@LoadIcons.Tick" Class="h-5 w-5" />@(V.Pending ? "Marking…" : "Mark the load complete")</text>)
+                    }
+                    <div class="grid grid-cols-2 gap-2">
+                        @Btn(BtnGhost, Sync(A.StartCount), V.Pending, @<text>Edit the load</text>)
+                        @Btn(BtnGhost, Sync(A.StartAssign), V.Pending, @<text>Assign people</text>)
+                    </div>
+                </div>
+            }
+        </div>
+    };
+
+    private RenderFragment PersonCard(CrewSchedule c, LoadPlan plan, double? done) => __builder =>
+    {
+        var span = LoadModel.TimelineSpanFor(plan, done is not null ? null : V.Now);
+        double P(double t) => (Math.Min(Math.Max(t, span.Lo), span.Hi) - span.Lo) / (span.Hi - span.Lo) * 100;
+        string Colour(string? type) => V.D.Types.FirstOrDefault(x => x.Name == type)?.Color ?? "var(--ui-control)";
+        var pinned = LoadModel.IsPinned(c, V.Pins);
+        var last = LoadModel.IsLast(c, plan);
+        var open = V.Assigning && V.ChooserFor == c.Key;
+        var changed = V.Changed.Contains(c.Key);
+        var crew = V.D.Crew.FirstOrDefault(x => x.Key == c.Key);
+        var jobs = string.Join(" · ", c.Segments.Where(s => !Allocate.IsStretch(s)).Select(s => $"{s.Type} ×{Js.NumberToString(s.Qty)}"));
+        <div @key="c.Key" class="rounded-2xl border px-4 py-3 @(changed ? "border-[#efdf9a] bg-[var(--brand-yellow-wash)]" : "border-[var(--ui-line)] bg-white")">
+            <div class="flex items-center justify-between gap-3">
+                <p class="flex min-w-0 items-center gap-2 font-semibold text-[var(--ui-ink)]">
+                    <span class="truncate">@c.Name</span>
+                    @NewTag(crew)
+                </p>
+                <p class="shrink-0 text-lg font-bold tabular-nums @(last ? "rounded-md bg-[var(--ui-ink)] px-1.5 text-white" : "text-[var(--ui-ink)]")">
+                    @Grid.MinToTime(c.FinishMin)
+                </p>
+            </div>
+            <div class="mt-1.5 flex items-center justify-between gap-3 text-xs text-[var(--ui-muted)]">
+                @if (V.Assigning)
+                {
+                    <button type="button" data-job="@c.Key" aria-expanded="@(open ? "true" : "false")"
+                            aria-label="@($"{c.Name}'s job: {(pinned ? $"{c.PrimaryType}, pinned" : $"Auto, {c.PrimaryType ?? "helps where needed"}")}")"
+                            @onclick="() => A.OpenChooser(open ? null : c.Key)"
+                            class="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold @(pinned ? "text-white" : "bg-white text-[var(--ui-ink)] shadow-[inset_0_0_0_2px_var(--ui-control)]")"
+                            style="@(pinned ? $"background: {Colour(c.PrimaryType)}" : null)">
+                        @if (pinned)
+                        {
+                            <LoadIcon Name="@LoadIcons.Pin" Class="h-3 w-3" />
+                        }
+                        @(pinned ? c.PrimaryType : $"Auto · {c.PrimaryType ?? "helps"}")
+                    </button>
+                }
+                else
+                {
+                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold text-white" style="background: @Colour(c.PrimaryType)">
+                        @if (pinned)
+                        {
+                            <LoadIcon Name="@LoadIcons.Pin" Class="h-3 w-3" />
+                        }
+                        @(c.PrimaryType ?? "Helping")
+                    </span>
+                }
+                <span class="shrink-0 tabular-nums">
+                    @Grid.MinToTime(c.StartMin) → @Grid.MinToTime(c.FinishMin) · @Plural(LoadModel.PalletsOf(c), "pallet")
+                </span>
+            </div>
+            @if (open)
+            {
+                <div class="mt-2 flex flex-wrap gap-2" role="group" aria-label="@($"{c.Name}'s job today")">
+                    @Chip(!V.Pins.ContainsKey(c.Key) || string.IsNullOrEmpty(V.Pins[c.Key]), () => A.Choose(c.Key, null), @<text>Auto</text>)
+                    @foreach (var t in LoadModel.WorkOrder(V.D.Types))
+                    {
+                        @Chip(V.Pins.GetValueOrDefault(c.Key) == t.Name, () => A.Choose(c.Key, t.Name),
+                            @<text><i class="h-2.5 w-2.5 rounded-sm" style="background: @t.Color"></i>@t.Name</text>)
+                    }
+                </div>
+            }
+            <div class="relative mt-2.5 h-4 rounded-full bg-[var(--ui-lavender)] @(done is not null ? "opacity-50" : "")">
+                @foreach (var s in c.Segments)
+                {
+                    <span class="absolute inset-y-0 rounded-[4px]"
+                          style="left: @Pct(P(s.Start)); width: calc(@Pct(P(s.End) - P(s.Start)) - 1px); background: @(Allocate.IsStretch(s) ? Hatch : s.Color)"></span>
+                }
+                @if (span.Now is { } now)
+                {
+                    <span class="absolute -inset-y-1 w-0.5 rounded bg-[var(--ui-ink)]" style="left: @Pct(P(now))"></span>
+                }
+            </div>
+            <p class="mt-1.5 text-xs text-[var(--ui-muted)]">
+                @(jobs.Length > 0 ? jobs : "Stretching only")
+                @if (V.Assigning)
+                {
+                    <span class="block">@LoadModel.WhyLine(c, V.Pins, V.D.TypeCounts)</span>
+                }
+            </p>
+        </div>
+    };
+
+    private RenderFragment Chip(bool pressed, Action onClick, RenderFragment content) => __builder =>
+    {
+        <button type="button" aria-pressed="@(pressed ? "true" : "false")" @onclick="onClick"
+                class="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold @(pressed ? "bg-[var(--ui-ink)] text-white" : "bg-[#f3f4f9] text-[var(--ui-ink)]")">
+            @content
+        </button>
+    };
+
+    private RenderFragment PhoneCount => __builder =>
+    {
+        var sorted = Js.Sorted(V.D.Crew, (x, y) => (x.StartMin - y.StartMin).Or(Js.LocaleCompare(x.Name, y.Name)));
+        <div class="space-y-2 px-4 pt-4 pb-48">
+            <h2 class="text-lg font-bold text-[var(--ui-ink)]">
+                @(V.FirstCount ? "Count today's truck" : "Edit today's load")
+            </h2>
+            <p class="text-sm text-[var(--ui-muted)]">
+                @(V.FirstCount
+                    ? "Tap + for each pallet. The plan builds itself from today's approved roster."
+                    : "Change the counts. The plan is built again when you save.")
+            </p>
+            @foreach (var t in V.D.Types)
+            {
+                var q = V.Qty.GetValueOrDefault(t.Id, 0);
+                <div @key="t.Id" class="flex items-center gap-3 overflow-hidden rounded-2xl pr-3 @(V.LastTapped == t.Id ? "bg-white shadow-[inset_0_0_0_2px_var(--ui-ink)]" : "bg-[#f3f4f9]")">
+                    <i class="w-2 self-stretch" style="background: @t.Color"></i>
+                    <div class="min-w-0 flex-1 py-3">
+                        <p class="truncate font-semibold text-[var(--ui-ink)]">@t.Name</p>
+                        <p class="text-xs text-[var(--ui-muted)]">@Js.NumberToString(t.MinutesPerPallet) min a pallet</p>
+                    </div>
+                    <button type="button" aria-label="@($"One less {t.Name}")" disabled="@(q <= 0 || V.Pending)" @onclick="() => A.Bump(t.Id, -1)"
+                            class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-[var(--ui-ink)] shadow-[inset_0_0_0_2px_var(--ui-control)] disabled:opacity-35">
+                        <LoadIcon Name="@LoadIcons.Minus" Class="h-5 w-5" />
+                    </button>
+                    <b class="w-9 text-center text-2xl font-extrabold tabular-nums @(q == 0 ? "text-[var(--ui-control)]" : "text-[var(--ui-ink)]")" aria-live="polite">
+                        @Js.NumberToString(q)
+                    </b>
+                    <button type="button" aria-label="@($"One more {t.Name}")" disabled="@(q >= 99 || V.Pending)" @onclick="() => A.Bump(t.Id, 1)"
+                            class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--ui-ink)] text-white disabled:opacity-35">
+                        <LoadIcon Name="@LoadIcons.Plus" Class="h-5 w-5" />
+                    </button>
+                </div>
+            }
+            <section class="mt-4 rounded-2xl bg-[#f3f4f9] px-4 py-3" aria-label="Today's crew">
+                <h2 class="flex items-baseline justify-between text-base font-bold text-[var(--ui-ink)]">
+                    Today's crew <span class="text-xs font-medium text-[var(--ui-muted)]">from the approved roster</span>
+                </h2>
+                <ul class="mt-2 space-y-1.5">
+                    @foreach (var c in sorted)
+                    {
+                        <li class="flex items-center justify-between gap-3 text-sm text-[var(--ui-ink)]">
+                            <span class="flex min-w-0 items-center gap-2 font-medium">
+                                <span class="truncate">@c.Name</span>
+                                @NewTag(c)
+                            </span>
+                            <span class="shrink-0 font-mono text-[var(--ui-muted)] tabular-nums">from @Grid.MinToTime(c.StartMin)</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+        </div>
+        <div class="fixed inset-x-0 bottom-0 z-20 space-y-2 border-t border-[var(--ui-line)] bg-white/95 px-4 pt-3 pb-4 backdrop-blur">
+            <p class="flex items-baseline justify-between text-sm text-[var(--ui-muted)]" role="status">
+                <span>
+                    <b class="text-[var(--ui-ink)]">@Plural(V.Total, "pallet")</b> so far
+                </span>
+                <span>
+                    Team finish
+                    <b class="text-lg tabular-nums @(V.Plan is not null && V.Total > 0 ? "text-[var(--ui-ink)]" : "text-[var(--ui-control)]")">
+                        @(V.Plan is { } p && V.Total > 0 ? Grid.MinToTime(p.TeamFinish) : "--:--")
+                    </b>
+                </span>
+            </p>
+            @Message
+            @if (V.FirstCount)
+            {
+                @Btn(BtnSolid, A.SaveCountAsync, V.Pending, @<text>@(V.Pending ? "Saving…" : "Save and build the plan")</text>)
+            }
+            else
+            {
+                <div class="grid grid-cols-2 gap-2">
+                    @Btn(BtnGhost, Sync(A.CancelCount), V.Pending, @<text>Cancel</text>)
+                    @Btn(BtnSolid, A.SaveCountAsync, V.Pending, @<text>@(V.Pending ? "Saving…" : "Save the load")</text>)
+                </div>
+            }
+        </div>
+    };
+}
