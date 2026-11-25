@@ -1,0 +1,131 @@
+@* Port of TaskEditor in src/app/(app)/admin/rules/labour/ResetTaskCatalogue.tsx. *@
+@using Roster.Engine.Planning
+@using Roster.Engine.SubTasks
+@inject ILabourRulesService Service
+
+<LeaveGuard Id="@($"reset-task:{(Row is null ? "new" : Row.Id.ToString())}")" Dirty="@(!SaveBarSame(_d, DraftFrom(Row)))" />
+<div class="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--ui-line)] bg-white px-3 py-2 text-sm">
+    <input value="@_d.Name" @oninput="e => Set(d => d with { Name = Text(e) })" placeholder="Task name" aria-label="Task name" class="@($"w-40 {Ui.CompactField}")" />
+    <select value="@_d.Sizing" @onchange="e => Set(d => d with { Sizing = Text(e) })" class="@($"text-xs {Ui.CompactField}")">
+        <option value="share">% of Reset</option>
+        <option value="fixed">Fixed minutes</option>
+        <option value="remainder">Remainder</option>
+    </select>
+    @if (_d.Sizing == "share")
+    {
+        <input type="number" min="1" max="100" value="@Str(_d.SharePct)" @oninput="e => Set(d => d with { SharePct = Js.Number(Text(e)) })" class="@($"w-16 text-right {Ui.CompactField}")" />
+    }
+    @if (_d.Sizing == "fixed")
+    {
+        <input type="number" min="5" step="5" value="@Str(_d.FixedMinutes)" @oninput="e => Set(d => d with { FixedMinutes = Js.Number(Text(e)) })" class="@($"w-16 text-right {Ui.CompactField}")" />
+    }
+    <span class="text-xs text-[var(--ui-muted)]">window</span>
+    @SideEditor(true)
+    <span class="text-[var(--ui-muted)]">–</span>
+    @SideEditor(false)
+    @* WHERE the task's blocks sit inside that window. This used to be a per-group
+       setting on Planning Order that the engine never read once a catalogue
+       existed; per task it can say the useful thing. *@
+    <select value="@_d.Placement" @onchange="e => Set(d => d with { Placement = Text(e) })" title="@ResetPlacements.All.FirstOrDefault(o => o.Value == _d.Placement).Help"
+            class="@($"text-xs {Ui.CompactField}")">
+        @foreach (var o in ResetPlacements.All)
+        {
+            <option value="@o.Value">@o.Label</option>
+        }
+    </select>
+    @* Which sub-task the task's tiles count under. Empty follows the name, as
+       before this setting existed. *@
+    <select value="@_d.SubTask" @onchange="e => Set(d => d with { SubTask = Text(e) })" title="Which Reset sub-task this task's tiles are labelled"
+            class="@($"text-xs {Ui.CompactField}")">
+        <option value="">Counts as: by name (@SubLabel(Catalogue.ResetSubtaskFor(_d.Name)))</option>
+        <option value="re_runs">Counts as: Re-runs</option>
+        <option value="decarding">Counts as: Decarding</option>
+    </select>
+    <label class="flex items-center gap-1 text-xs text-[var(--ui-muted)]">
+        <input type="checkbox" checked="@_d.Active" @onchange="e => Set(d => d with { Active = e.Value is true })" />
+        active
+    </label>
+    <span class="ml-auto flex items-center gap-2">
+        <button type="button" disabled="@Pending" @onclick="() => Run.InvokeAsync(() => Service.SaveResetTaskAsync(Row?.Id, _d))" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">Save</button>
+        @if (Row is not null)
+        {
+            <button type="button" disabled="@Pending" @onclick="() => Run.InvokeAsync(() => Service.DeleteResetTaskAsync(Row.Id))" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">Delete</button>
+        }
+        else
+        {
+            <button type="button" @onclick="() => OnCancel.InvokeAsync()" class="@Ui.ButtonClass(ButtonKind.Quiet, ButtonSize.Sm)">Cancel</button>
+        }
+    </span>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<(string Kind, string Label)> KindLabel =
+        [("none", "Any"), ("clock", "At time"), ("open", "From open ±"), ("close", "From close ±")];
+
+    private ResetTaskInput _d = new();
+
+    /// <summary>The task as saved; null for a new one.</summary>
+    [Parameter] public ResetTaskRow? Row { get; set; }
+
+    [Parameter] public bool Pending { get; set; }
+
+    /// <summary>Runs a save or delete through the catalogue (its message, its reload).</summary>
+    [Parameter] public EventCallback<Func<Task<SaveResult>>> Run { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized() => _d = DraftFrom(Row);
+
+    /// <summary>The editor's starting values: the saved task, or a new 20% share.</summary>
+    public static ResetTaskInput DraftFrom(ResetTaskRow? r) => new()
+    {
+        Name = r?.Name ?? "",
+        Sizing = r is null ? "share" : r.SharePct is not null ? "share" : r.FixedMinutes is not null ? "fixed" : "remainder",
+        SharePct = r?.SharePct ?? 20,
+        FixedMinutes = r?.FixedMinutes ?? 30,
+        WindowStartKind = r?.WindowStartKind ?? "none",
+        WindowStartTime = r?.WindowStartTime ?? "10:00",
+        WindowStartOffsetMin = r?.WindowStartOffsetMin ?? 0,
+        WindowEndKind = r?.WindowEndKind ?? "none",
+        WindowEndTime = r?.WindowEndTime ?? "14:00",
+        WindowEndOffsetMin = r?.WindowEndOffsetMin ?? 0,
+        Placement = r?.Placement ?? "spread",
+        Active = r?.Active ?? true,
+        SubTask = r?.SubTask is "re_runs" or "decarding" ? r.SubTask : "",
+    };
+
+    private static bool SaveBarSame(ResetTaskInput a, ResetTaskInput b) => SaveBar.Same(a, b);
+
+    private static string SubLabel(string sub) => sub == "re_runs" ? "Re-runs" : "Decarding";
+
+    private static string Text(ChangeEventArgs e) => e.Value?.ToString() ?? "";
+
+    private static string Str(double? v) => v is { } n ? Js.NumberToString(n) : "";
+
+    private void Set(Func<ResetTaskInput, ResetTaskInput> patch) => _d = patch(_d);
+
+    private RenderFragment SideEditor(bool start) => __builder =>
+    {
+        var kind = start ? _d.WindowStartKind : _d.WindowEndKind;
+        var time = start ? _d.WindowStartTime : _d.WindowEndTime;
+        var offset = start ? _d.WindowStartOffsetMin : _d.WindowEndOffsetMin;
+        <span class="flex items-center gap-1">
+            <select value="@kind" @onchange="e => Set(d => start ? d with { WindowStartKind = Text(e) } : d with { WindowEndKind = Text(e) })" class="@($"text-xs {Ui.CompactField}")">
+                @foreach (var k in KindLabel)
+                {
+                    <option value="@k.Kind">@k.Label</option>
+                }
+            </select>
+            @if (kind == "clock")
+            {
+                <input type="time" value="@(time ?? "")" @oninput="e => Set(d => start ? d with { WindowStartTime = Text(e) } : d with { WindowEndTime = Text(e) })" class="@($"text-xs {Ui.CompactField}")" />
+            }
+            @if (kind is "open" or "close")
+            {
+                <input type="number" step="15" value="@Js.NumberToString(offset)"
+                       @oninput="e => Set(d => start ? d with { WindowStartOffsetMin = Js.Number(Text(e)) } : d with { WindowEndOffsetMin = Js.Number(Text(e)) })"
+                       title="Minutes relative to the anchor (negative = before)" class="@($"w-16 text-xs {Ui.CompactField}")" />
+            }
+        </span>
+    };
+}
