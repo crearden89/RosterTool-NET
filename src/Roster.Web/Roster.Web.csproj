@@ -9,4 +9,49 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Sign-in: Microsoft Entra ID (OpenID Connect) and Windows Authentication (Negotiate). -->
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.18.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="10.0.15" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Roster.Web.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Tailwind input is a build source, not a served file. -->
+    <Content Remove="Styles\**" />
+    <None Include="Styles\**" />
+  </ItemGroup>
+
+  <!--
+    Tailwind: compile Styles/app.css and the classes used under Components/ into
+    wwwroot/css/app.css with the Tailwind standalone CLI, when the CLI is installed
+    (tools/tailwind/install.sh or install.ps1, or TailwindCli=<path>). Without it the
+    committed app.css is used as it is, so a plain build needs no Tailwind.
+  -->
+  <PropertyGroup>
+    <TailwindExe Condition="$([MSBuild]::IsOSPlatform('Windows'))">tailwindcss.exe</TailwindExe>
+    <TailwindExe Condition="!$([MSBuild]::IsOSPlatform('Windows'))">tailwindcss</TailwindExe>
+    <TailwindCli Condition="'$(TailwindCli)' == ''">$(MSBuildProjectDirectory)\..\..\tools\tailwind\bin\$(TailwindExe)</TailwindCli>
+    <TailwindInput>$(MSBuildProjectDirectory)\Styles\app.css</TailwindInput>
+    <TailwindOutput>$(MSBuildProjectDirectory)\wwwroot\css\app.css</TailwindOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <TailwindSource Include="Styles\**\*.css;Components\**\*.razor;Components\**\*.cs;Features\**\*.razor;Features\**\*.cs" />
+  </ItemGroup>
+
+  <Target Name="TailwindBuild" BeforeTargets="BeforeBuild" Condition="Exists('$(TailwindCli)')"
+          Inputs="@(TailwindSource)" Outputs="$(TailwindOutput)">
+    <Exec Command="&quot;$(TailwindCli)&quot; --input &quot;$(TailwindInput)&quot; --output &quot;$(TailwindOutput)&quot; --optimize"
+          WorkingDirectory="$(MSBuildProjectDirectory)" StandardOutputImportance="low" />
+    <Touch Files="$(TailwindOutput)" />
+  </Target>
+
+  <Target Name="TailwindSkipped" BeforeTargets="BeforeBuild" Condition="!Exists('$(TailwindCli)')">
+    <Message Importance="low" Text="Tailwind CLI not installed ($(TailwindCli)): using the committed wwwroot/css/app.css." />
+  </Target>
+
 </Project>

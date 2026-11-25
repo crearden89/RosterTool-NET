@@ -1,0 +1,106 @@
+@* Port of src/components/ui/DayBarsChart.tsx. *@
+@inject RosterJs Js
+@* A month (or any run of days) as bars, actual against forecast: one column per
+   day, the forecast as a dashed outline, the actual as a solid bar in front of
+   it (navy on weekdays, violet at weekends), the day's number below and
+   today's in a pill. Hover or keyboard focus shows the day's figures; the
+   arrow keys move from day to day, so the chart is one stop in the tab order.
+   The table under the chart carries the same figures. *@
+<div role="group" aria-label="@Label">
+    <div class="relative ml-9" style="@($"height: {Plot}px")">
+        @foreach (var t in Ticks)
+        {
+            <div @key="t.At" aria-hidden="true" class="absolute inset-x-0 border-t border-[var(--ui-line)]" style="@($"bottom: {Css.N(t.At * Plot)}px")">
+                <span class="absolute -left-9 -translate-y-1/2 text-[10px] text-[var(--ui-faint)] tabular-nums">@t.Label</span>
+            </div>
+        }
+        <div class="absolute inset-0 flex items-end gap-0.5 sm:gap-1">
+            @for (var i = 0; i < Days.Count; i++)
+            {
+                var index = i;
+                var d = Days[i];
+                var align = i < 3 ? "left-0" : i > Days.Count - 4 ? "right-0" : "left-1/2 -translate-x-1/2";
+                <div @key="d.Key" @ref="_bars[index]" role="img" aria-label="@d.Label" tabindex="@(index == _active ? 0 : -1)"
+                     data-prevent-keys="ArrowLeft ArrowRight Home End"
+                     @onkeydown="e => Move(e, index)" @onfocus="() => _active = index"
+                     class="@Ui.Cx("group relative flex h-full min-w-0 flex-1 cursor-default items-end justify-center rounded-md hover:bg-[var(--ui-canvas)]", Ui.FocusRing)">
+                    @if (d.Forecast > 0)
+                    {
+                        <span aria-hidden="true" class="absolute bottom-0 w-full max-w-[22px] rounded-t border-2 border-b-0 border-dashed border-[var(--ui-control)]"
+                              style="@($"height: {Css.N(Math.Max(3, d.Forecast * Plot))}px")"></span>
+                    }
+                    @if (d.Actual > 0)
+                    {
+                        <span aria-hidden="true" class="@Ui.Cx("relative block w-full max-w-[22px] rounded-t transition-[filter] group-hover:brightness-125", d.Weekend ? "bg-[var(--ui-violet)]" : "bg-[var(--ui-ink)]")"
+                              style="@($"height: {Css.N(Math.Max(3, d.Actual * Plot))}px")"></span>
+                    }
+                    <span aria-hidden="true" class="@Ui.Cx("pointer-events-none absolute bottom-full z-20 mb-1 hidden w-48 rounded-xl bg-[var(--ui-ink)] px-3 py-2 text-left text-xs leading-snug text-white shadow-lg group-hover:block group-focus-visible:block", align)">
+                        @for (var j = 0; j < d.Tip.Count; j++)
+                        {
+                            <span class="@(j == 0 ? "block font-semibold" : "block")">@d.Tip[j]</span>
+                        }
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+    <div aria-hidden="true" class="ml-9 mt-1.5 flex gap-0.5 sm:gap-1">
+        @foreach (var d in Days)
+        {
+            <span @key="d.Key" class="flex min-w-0 flex-1 justify-center">
+                <span class="@Ui.Cx("text-[10px] font-semibold tabular-nums", d.Today ? "rounded-full bg-[var(--ui-violet)] px-1 text-white" : "text-[var(--ui-muted)]", d.Today || d.Day == 1 || d.Day % 5 == 0 ? null : "hidden sm:inline")">@d.Day</span>
+            </span>
+        }
+    </div>
+</div>
+
+@code {
+    private const int Plot = 160; // px, the full scale
+    private ElementReference[] _bars = [];
+    private int _active;
+    private int? _focusNext;
+
+    [Parameter, EditorRequired] public IReadOnlyList<DayBarDatum> Days { get; set; } = [];
+
+    /// <summary>Gridlines, as fractions of the scale with their labels ("$100k").</summary>
+    [Parameter] public IReadOnlyList<ChartTick> Ticks { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    protected override void OnInitialized()
+    {
+        var today = Days.Select((d, i) => (d, i)).FirstOrDefault(x => x.d.Today);
+        _active = today.d is null ? 0 : today.i;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_bars.Length != Days.Count) _bars = new ElementReference[Days.Count];
+        if (_active >= Days.Count) _active = Math.Max(0, Days.Count - 1);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Js.ReadyAsync();
+        if (_focusNext is { } to)
+        {
+            _focusNext = null;
+            await _bars[to].FocusAsync();
+        }
+    }
+
+    private void Move(KeyboardEventArgs e, int i)
+    {
+        int? to = e.Key switch
+        {
+            "ArrowRight" => Math.Min(Days.Count - 1, i + 1),
+            "ArrowLeft" => Math.Max(0, i - 1),
+            "Home" => 0,
+            "End" => Days.Count - 1,
+            _ => null,
+        };
+        if (to is null) return;
+        _active = to.Value;
+        _focusNext = to.Value;
+    }
+}

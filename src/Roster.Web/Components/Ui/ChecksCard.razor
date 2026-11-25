@@ -1,0 +1,17 @@
+@* Port of src/components/ui/CheckList.tsx. *@
+@* A card holding a list of checks under its title. *@
+<Card Padded="false" Class="@Class">
+    <div class="px-5 pt-5 sm:px-6">
+        <SectionHeader Title="Title" Aside="Aside" />
+    </div>
+    <div class="border-t border-[var(--ui-line)]">
+        <CheckList Rows="Rows" />
+    </div>
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment? Title { get; set; }
+    [Parameter] public RenderFragment? Aside { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<CheckRow> Rows { get; set; } = [];
+    [Parameter] public string? Class { get; set; }
+}

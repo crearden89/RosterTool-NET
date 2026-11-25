@@ -1,3 +1,19 @@
+// The Blazor template's reconnect script, with one change for the kiosk pages (a
+// wall screen nobody touches): when reconnecting fails they keep trying every 15
+// seconds instead of waiting for the page to become visible again, so the screen
+// recovers by itself after a network drop. KioskLayout marks a kiosk page with
+// <meta name="roster-kiosk">.
+const isKiosk = () => document.querySelector('meta[name="roster-kiosk"]') !== null;
+const KIOSK_RETRY_MS = 15000;
+
+function waitToRetry() {
+    if (isKiosk()) {
+        setTimeout(retry, KIOSK_RETRY_MS);
+    } else {
+        document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
+    }
+}
+
 // Set up event handlers
 const reconnectModal = document.getElementById("components-reconnect-modal");
 reconnectModal.addEventListener("components-reconnect-state-changed", handleReconnectStateChanged);
@@ -14,7 +30,7 @@ function handleReconnectStateChanged(event) {
     } else if (event.detail.state === "hide") {
         reconnectModal.close();
     } else if (event.detail.state === "failed") {
-        document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
+        waitToRetry();
     } else if (event.detail.state === "rejected") {
         location.reload();
     }
@@ -41,7 +57,7 @@ async function retry() {
         }
     } catch (err) {
         // We got an exception, server is currently unavailable
-        document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
+        waitToRetry();
     }
 }
 

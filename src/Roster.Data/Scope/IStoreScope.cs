@@ -34,6 +34,15 @@ public interface IStoreScope
     /// </summary>
     Task<StoreAccess?> AccessForStoreAsync(Guid storeId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The peer gate of the peer-visible pages (Plan structure, Non-Op, Dashboard): any
+    /// signed-in user may read another store there, in trimmed form, and the page then reads
+    /// past the row filters (IgnoreQueryFilters) for that store only, as the TypeScript app
+    /// read it with the service-role client. False for anyone not signed in or an unknown store.
+    /// Private pages (Roster, Setup, Analysis, Sales, Weekends) never use it.
+    /// </summary>
+    Task<bool> CanPeerReadAsync(Guid storeId, CancellationToken cancellationToken = default);
+
     /// <summary>denyWrite: may this caller write at all? Null when allowed, else the message.</summary>
     string? DenyWrite();
 
@@ -98,4 +107,13 @@ public interface IStoreDirectory
 
     /// <summary>The store a kiosk token opens (Floor Display, Load Planner), or null.</summary>
     Task<StoreInfo?> FindByKioskTokenAsync(string token, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// The store the person last chose in any store picker (the TypeScript app's roster_store_id
+/// cookie). The web layer implements it; <see cref="StoreScope.ResolveStoreId"/> reads it.
+/// </summary>
+public interface IRememberedStore
+{
+    Guid? StoreId { get; }
 }

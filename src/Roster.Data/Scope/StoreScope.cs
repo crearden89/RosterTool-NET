@@ -41,6 +41,9 @@ public sealed class StoreScope(IAccessContextAccessor accessor, IRosterDbContext
         return AccessMatrix.StoreAccessFor(user, store.Id, store.AreaId);
     }
 
+    public async Task<bool> CanPeerReadAsync(Guid storeId, CancellationToken cancellationToken = default) =>
+        await AccessForStoreAsync(storeId, cancellationToken) is not null;
+
     // ─── authz.ts ──────────────────────────────────────────────────────────
 
     /// <summary>May this user write at all? (writer())</summary>

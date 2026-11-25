@@ -1,0 +1,844 @@
+/* Port of src/app/load/[token]/load.module.css: the Load Planner's own pieces,
+   loaded by Components/Layout/KioskLayout.razor only, beside floor.css (whose
+   floor-screen, floor-head, floor-pill and floor-btn the page shares). A CSS
+   module's class (k.main) is the same class here with the prefix load- (load-main). */
+
+/* The Load Planner kiosk, in the Floor Display's language: the same 1920 x
+   1080 canvas scaled to the screen through --u (floor.module.css's .screen
+   sets it, with the header, pills and buttons this page shares), no page
+   scroll, big type read from across the dock. Small text has a floor in real
+   pixels so it stays readable on a 1366 x 768 laptop or a 1280 x 800 tablet.
+   Under 1024 px wide the page uses its phone layout instead. */
+
+.load-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--u) * 470);
+  gap: calc(var(--u) * 40);
+  padding: calc(var(--u) * 18) calc(var(--u) * 44);
+}
+.load-mainOne {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.load-left {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.load-side {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 14);
+}
+
+/* ── The status pill in the header ── */
+.load-pillGo {
+  background: #dcf3e5;
+  color: var(--ui-good);
+}
+.load-pillWait {
+  background: var(--ui-gold);
+  color: var(--ink);
+}
+.load-pillEdit {
+  background: var(--ink);
+  color: #ffffff;
+}
+
+/* ── A banner across the top: assigning, or the load complete ── */
+.load-banner {
+  flex: none;
+  margin: calc(var(--u) * 14) calc(var(--u) * 44) 0;
+  border-radius: calc(var(--u) * 14);
+  padding: calc(var(--u) * 12) calc(var(--u) * 24);
+  font-size: max(14px, calc(var(--u) * 22));
+  font-weight: 650;
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: calc(var(--u) * 16);
+}
+.load-banner small {
+  font-size: max(12px, calc(var(--u) * 17));
+  font-weight: 500;
+  opacity: 0.88;
+}
+.load-banner svg {
+  width: calc(var(--u) * 30);
+  height: calc(var(--u) * 30);
+  flex: none;
+}
+.load-bannerDone {
+  background: var(--ui-good);
+  color: #ffffff;
+}
+.load-bannerEdit {
+  background: var(--wash);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px #efdf9a;
+}
+
+/* ── The timeline: a row per person ── */
+.load-tl {
+  --name: calc(var(--u) * 300);
+  --own: calc(var(--u) * 230);
+  --done: calc(var(--u) * 100);
+  --g: calc(var(--u) * 18);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.load-grid {
+  display: grid;
+  grid-template-columns: var(--name) var(--own) minmax(0, 1fr) var(--done);
+  column-gap: var(--g);
+  align-items: center;
+}
+/* The axis and the rows keep the same scrollbar gutter, so the hours stay
+   over the bars when a long crew list scrolls. */
+.load-axis {
+  flex: none;
+  height: calc(var(--u) * 52);
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.load-colhead {
+  align-self: end;
+  padding-bottom: calc(var(--u) * 8);
+  font-size: max(10px, calc(var(--u) * 14));
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.load-colheadEnd {
+  text-align: right;
+}
+.load-ticks {
+  position: relative;
+  height: 100%;
+}
+.load-tick {
+  position: absolute;
+  bottom: calc(var(--u) * 6);
+  transform: translateX(-50%);
+  font-size: max(11px, calc(var(--u) * 18));
+  font-weight: 650;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.load-minor {
+  font-size: max(10px, calc(var(--u) * 14));
+  font-weight: 500;
+  color: var(--faint);
+}
+.load-nowtag,
+.load-fintag {
+  position: absolute;
+  top: 0;
+  border-radius: calc(var(--u) * 7);
+  padding: calc(var(--u) * 1) calc(var(--u) * 9);
+  font-size: max(11px, calc(var(--u) * 15));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  z-index: 3;
+}
+.load-nowtag {
+  background: var(--ink);
+  color: #ffffff;
+}
+.load-fintag {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.load-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.load-rows {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.load-row {
+  flex: 1 1 0;
+  min-height: calc(var(--u) * 70);
+  max-height: calc(var(--u) * 132);
+  border-top: 1px solid var(--line);
+  position: relative;
+  z-index: 1;
+}
+.load-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+/* The row whose job chooser is open sits over the rows after it. */
+.load-rowOpen {
+  z-index: 6;
+}
+.load-changed {
+  background: var(--wash);
+}
+.load-name {
+  min-width: 0;
+  display: grid;
+  gap: calc(var(--u) * 4);
+  line-height: 1.1;
+}
+.load-name b {
+  font-size: max(14px, calc(var(--u) * 27));
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 10);
+  min-width: 0;
+}
+.load-name b > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-name small {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: max(11px, calc(var(--u) * 17));
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-newTag {
+  flex: none;
+  font-style: normal;
+  font-size: max(9px, calc(var(--u) * 14));
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  background: var(--wash);
+  box-shadow: inset 0 0 0 1px #efdf9a;
+  border-radius: calc(var(--u) * 6);
+  padding: calc(var(--u) * 2) calc(var(--u) * 8);
+  color: #6b5200;
+}
+.load-own {
+  min-width: 0;
+  display: grid;
+  gap: calc(var(--u) * 4);
+  justify-items: start;
+}
+.load-job {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  max-width: 100%;
+  height: calc(var(--u) * 44);
+  padding: 0 calc(var(--u) * 16);
+  border-radius: 999px;
+  border: 0;
+  background: var(--control);
+  color: #ffffff;
+  font: inherit;
+  font-size: max(12px, calc(var(--u) * 20));
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-job > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-job svg {
+  width: calc(var(--u) * 18);
+  height: calc(var(--u) * 18);
+  flex: none;
+}
+button.load-job {
+  min-height: 36px;
+  cursor: pointer;
+}
+button.load-job:focus-visible,
+.load-chip:focus-visible,
+.load-step:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.load-jobAuto {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--control);
+}
+.load-jobOpen {
+  box-shadow:
+    0 0 0 calc(var(--u) * 3) #ffffff,
+    0 0 0 calc(var(--u) * 6) var(--ink);
+}
+.load-jobAuto.load-jobOpen {
+  box-shadow:
+    inset 0 0 0 2px var(--control),
+    0 0 0 calc(var(--u) * 3) #ffffff,
+    0 0 0 calc(var(--u) * 6) var(--ink);
+}
+.load-why {
+  max-width: 100%;
+  font-size: max(10px, calc(var(--u) * 14));
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: calc(var(--u) * 4);
+}
+.load-lane {
+  position: relative;
+  height: 100%;
+}
+.load-lane::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--track);
+  border-radius: 2px;
+}
+.load-seg {
+  position: absolute;
+  top: 50%;
+  height: calc(var(--u) * 58);
+  transform: translateY(-50%);
+  border-radius: calc(var(--u) * 10);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  font-style: normal;
+  container-type: inline-size;
+}
+/* The bar's label: the job and its pallets when both fit, the pallets alone
+   when only they do (the job wraps onto a hidden second line), nothing on a
+   sliver. */
+.load-segLabel {
+  height: 100%;
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
+  column-gap: calc(var(--u) * 6);
+  padding: 0 calc(var(--u) * 12);
+  color: #ffffff;
+  font-size: max(11px, calc(var(--u) * 18));
+  font-weight: 700;
+  line-height: calc(var(--u) * 58);
+  white-space: nowrap;
+}
+.load-segLabel small {
+  font-size: inherit;
+  font-weight: 600;
+  opacity: 0.9;
+}
+@container (max-width: 40px) {
+  .load-segLabel {
+    visibility: hidden;
+  }
+}
+.load-stretch {
+  background: repeating-linear-gradient(
+    135deg,
+    #64748b 0 calc(var(--u) * 6),
+    #8a97ab calc(var(--u) * 6) calc(var(--u) * 12)
+  );
+}
+.load-faded .load-seg {
+  opacity: 0.38;
+}
+.load-done {
+  text-align: right;
+  display: grid;
+  gap: calc(var(--u) * 2);
+  line-height: 1.05;
+}
+.load-done b {
+  font-size: max(15px, calc(var(--u) * 28));
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.load-done span {
+  font-size: max(10px, calc(var(--u) * 14));
+  color: var(--muted);
+  white-space: nowrap;
+}
+.load-last b {
+  justify-self: end;
+  color: #ffffff;
+  background: var(--ink);
+  border-radius: calc(var(--u) * 8);
+  padding: calc(var(--u) * 2) calc(var(--u) * 8);
+}
+.load-under,
+.load-over {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--name) + var(--own) + 2 * var(--g));
+  right: calc(var(--done) + var(--g));
+  pointer-events: none;
+}
+.load-under {
+  z-index: 0;
+}
+.load-over {
+  z-index: 2;
+}
+.load-qline,
+.load-hline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.load-hline {
+  width: 2px;
+  background: #d4d6e4;
+}
+.load-past {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(243, 244, 249, 0.55);
+}
+.load-nowline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--u) * 3);
+  margin-left: calc(var(--u) * -1.5);
+  background: var(--ink);
+}
+.load-finline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: calc(var(--u) * 3) dashed var(--ink);
+  margin-left: calc(var(--u) * -1.5);
+}
+.load-doneTick {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(var(--u) * 40);
+  height: calc(var(--u) * 40);
+  margin-left: calc(var(--u) * 10);
+  border-radius: 999px;
+  background: var(--ui-good);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+}
+.load-doneTick svg {
+  width: 60%;
+  height: 60%;
+}
+.load-legend {
+  flex: none;
+  margin-top: calc(var(--u) * 12);
+  display: flex;
+  gap: calc(var(--u) * 26);
+  align-items: center;
+  font-size: max(11px, calc(var(--u) * 16));
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.load-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+}
+.load-legend i {
+  display: inline-block;
+  width: calc(var(--u) * 22);
+  height: calc(var(--u) * 16);
+  border-radius: calc(var(--u) * 4);
+}
+.load-legend i.load-keyNow {
+  width: calc(var(--u) * 3);
+  height: calc(var(--u) * 20);
+  background: var(--ink);
+}
+.load-legend i.load-keyFin {
+  width: 0;
+  height: calc(var(--u) * 20);
+  border-left: calc(var(--u) * 3) dashed var(--ink);
+  border-radius: 0;
+}
+
+/* ── The job chooser, over the row below (or above, near the bottom) ── */
+.load-chooser {
+  position: absolute;
+  z-index: 5;
+  left: calc(var(--name) + var(--g));
+  top: calc(100% - var(--u) * 8);
+  width: calc(var(--u) * 660);
+  background: #ffffff;
+  border-radius: calc(var(--u) * 18);
+  box-shadow:
+    0 calc(var(--u) * 14) calc(var(--u) * 40) rgba(0, 0, 95, 0.22),
+    0 0 0 1px var(--line);
+  padding: calc(var(--u) * 16);
+  display: grid;
+  gap: calc(var(--u) * 10);
+}
+.load-chooserUp {
+  top: auto;
+  bottom: calc(100% - var(--u) * 8);
+}
+.load-chooser p {
+  margin: 0;
+  font-size: max(11px, calc(var(--u) * 16));
+  color: var(--muted);
+}
+.load-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 10);
+}
+.load-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  height: max(40px, calc(var(--u) * 54));
+  padding: 0 calc(var(--u) * 18);
+  border-radius: 999px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: max(12px, calc(var(--u) * 19));
+  font-weight: 650;
+  cursor: pointer;
+}
+.load-chip i {
+  width: calc(var(--u) * 14);
+  height: calc(var(--u) * 14);
+  border-radius: calc(var(--u) * 4);
+}
+.load-chip[aria-pressed="true"] {
+  background: var(--ink);
+  color: #ffffff;
+}
+
+/* ── The right-hand column ── */
+.load-finish {
+  flex: none;
+  background: var(--ink);
+  color: #ffffff;
+  border-radius: calc(var(--u) * 18);
+  padding: calc(var(--u) * 20) calc(var(--u) * 26) calc(var(--u) * 22);
+  display: grid;
+  gap: calc(var(--u) * 4);
+}
+.load-finish p {
+  margin: 0;
+  font-size: max(10px, calc(var(--u) * 15));
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.load-finish b {
+  font-size: max(30px, calc(var(--u) * 84));
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.load-finish span {
+  font-size: max(12px, calc(var(--u) * 18));
+  opacity: 0.85;
+}
+.load-finishDone {
+  background: var(--ui-good);
+}
+/* Nothing counted yet: the time is a placeholder. */
+.load-finish b.load-dim {
+  opacity: 0.4;
+}
+.load-panel {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-radius: calc(var(--u) * 18);
+  padding: calc(var(--u) * 18) calc(var(--u) * 22);
+  display: grid;
+  align-content: start;
+  gap: calc(var(--u) * 10);
+}
+.load-panel h2 {
+  margin: 0;
+  font-size: max(15px, calc(var(--u) * 24));
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--u) * 12);
+  color: var(--ink);
+}
+.load-panel h2 small {
+  font-size: max(12px, calc(var(--u) * 16));
+  font-weight: 500;
+  color: var(--muted);
+}
+.load-sq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 5);
+}
+.load-sq i {
+  width: calc(var(--u) * var(--sq, 20));
+  height: calc(var(--u) * var(--sq, 20));
+  border-radius: calc(var(--u) * 5);
+}
+.load-sq i.load-gap {
+  width: calc(var(--u) * 8);
+}
+.load-truck {
+  display: grid;
+  gap: calc(var(--u) * 2);
+}
+.load-trow {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 16) minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: calc(var(--u) * 12);
+  padding: calc(var(--u) * 5) 0;
+  font-size: max(12px, calc(var(--u) * 18));
+  color: var(--ink);
+}
+.load-trow i {
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 16);
+  border-radius: calc(var(--u) * 4);
+}
+.load-trow span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-trow span small {
+  font-size: max(10px, calc(var(--u) * 14));
+  color: var(--muted);
+}
+.load-trow b {
+  font-size: max(14px, calc(var(--u) * 22));
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.load-trow em {
+  font-style: normal;
+  font-size: max(10px, calc(var(--u) * 14));
+  color: var(--muted);
+  min-width: calc(var(--u) * 92);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.load-crewList {
+  display: grid;
+  gap: calc(var(--u) * 6);
+}
+.load-crewList div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 12);
+  font-size: max(12px, calc(var(--u) * 19));
+  color: var(--ink);
+}
+.load-crewList b {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  font-weight: 600;
+  min-width: 0;
+}
+.load-crewList b > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.load-crewList div > span {
+  flex: none;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.load-actions {
+  margin-top: auto;
+  flex: none;
+  display: grid;
+  gap: calc(var(--u) * 10);
+}
+.load-big {
+  width: 100%;
+  min-height: max(44px, calc(var(--u) * 72));
+  font-size: max(15px, calc(var(--u) * 22));
+}
+.load-go {
+  background: var(--ui-good);
+  color: #ffffff;
+}
+.load-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--u) * 10);
+}
+.load-note {
+  margin: 0;
+  font-size: max(11px, calc(var(--u) * 15));
+  color: var(--muted);
+  line-height: 1.35;
+}
+.load-noteStrong {
+  font-weight: 650;
+  color: var(--ink);
+}
+.load-msgGood,
+.load-msgBad {
+  margin: 0;
+  font-size: max(12px, calc(var(--u) * 17));
+  font-weight: 650;
+}
+.load-msgGood {
+  color: var(--ui-good);
+}
+.load-msgBad {
+  color: var(--ui-bad);
+}
+
+/* ── Counting the truck ── */
+.load-countHead {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 20);
+  margin-bottom: calc(var(--u) * 14);
+  white-space: nowrap;
+  min-width: 0;
+}
+.load-countHead h2 {
+  margin: 0;
+  font-size: max(18px, calc(var(--u) * 32));
+  font-weight: 750;
+  color: var(--ink);
+}
+.load-countHead span {
+  font-size: max(12px, calc(var(--u) * 19));
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-cards {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: calc(var(--u) * 14);
+}
+.load-card {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: calc(var(--u) * 12) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: calc(var(--u) * 20);
+  background: var(--surface);
+  border-radius: calc(var(--u) * 18);
+  padding-right: calc(var(--u) * 20);
+  overflow: hidden;
+}
+.load-cardOn {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 calc(var(--u) * 3) var(--ink);
+}
+.load-card > i {
+  align-self: stretch;
+}
+.load-card h3 {
+  margin: 0;
+  font-size: max(15px, calc(var(--u) * 27));
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.load-card p {
+  margin: calc(var(--u) * 4) 0 0;
+  font-size: max(11px, calc(var(--u) * 16));
+  color: var(--muted);
+}
+.load-stepper {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 14);
+}
+.load-step {
+  width: max(44px, calc(var(--u) * 76));
+  height: max(44px, calc(var(--u) * 76));
+  border-radius: 999px;
+  border: 0;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 2px var(--control);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.load-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.load-plus {
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: none;
+}
+.load-step svg {
+  width: 45%;
+  height: 45%;
+}
+.load-count {
+  min-width: calc(var(--u) * 76);
+  text-align: center;
+  font-size: max(22px, calc(var(--u) * 52));
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.load-zero {
+  color: var(--control);
+}

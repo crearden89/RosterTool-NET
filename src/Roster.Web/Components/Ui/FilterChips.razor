@@ -1,0 +1,39 @@
+@* Port of src/components/ui/FilterChips.tsx. *@
+@typeparam TKey
+@* A row of rounded toggles that narrow a list ("All 23", "Errors 2"). One is on
+   at a time: navy when on, lavender when off, each with its count. Real
+   buttons with aria-pressed, in a labelled group. *@
+<div role="group" aria-label="@Label" class="flex flex-wrap gap-1.5">
+    @foreach (var o in Options)
+    {
+        var on = EqualityComparer<TKey>.Default.Equals(o.Key, Value);
+        <button @key="o.Key" type="button" aria-pressed="@(on ? "true" : "false")" @onclick="() => Choose(o.Key)"
+                class="@Ui.Cx("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition-colors", Ui.FocusRing, on ? "bg-[var(--ui-ink)] text-white" : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)]")">
+            @o.Label
+            @if (o.Count is { } count)
+            {
+                <span class="@Ui.Cx("tabular-nums", on ? "text-white/80" : "text-[var(--ui-muted)]")">@count</span>
+            }
+        </button>
+    }
+</div>
+
+@code {
+    /// <summary>What the chips choose, for screen readers ("Show").</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter, EditorRequired] public IReadOnlyList<FilterChip<TKey>> Options { get; set; } = [];
+
+    [Parameter] public TKey Value { get; set; } = default!;
+
+    [Parameter] public EventCallback<TKey> OnChange { get; set; }
+
+    /// <summary>For @bind-Value.</summary>
+    [Parameter] public EventCallback<TKey> ValueChanged { get; set; }
+
+    private async Task Choose(TKey key)
+    {
+        if (OnChange.HasDelegate) await OnChange.InvokeAsync(key);
+        if (ValueChanged.HasDelegate) await ValueChanged.InvokeAsync(key);
+    }
+}

@@ -17,6 +17,10 @@ No new projects; add folders inside these.
 ## Names
 
 - Namespace = project + folder: `Roster.Engine.Pay`, `Roster.Data.Feeds`, `Roster.Web.Features.Plan`.
+- No folder (so no namespace segment) may be called `Roster`: inside `Roster.Web.Features.*`, a namespace
+  `Roster.Web.Features.Roster` would capture every `Roster.` name, and Razor `@using Roster....` lines break.
+  Use `RosterPage`, `RosterOps` and so on. For the same reason a class never has the same name as its
+  namespace's last part (`PlanShaper` in `...Shaper`, not `Shaper`).
 - A file that ports a TypeScript file starts with `// Port of <path in the TS app>.`
   A file with no TypeScript counterpart starts with `// New: <why>.`
 - C# style (PascalCase types and members). A ported function keeps its TypeScript name
@@ -62,7 +66,7 @@ that app (version `a004032`).
 |---|---|---|
 | root (`Program.cs`, `appsettings*.json`), `Components/` (`App`, `Routes`, `Layout/`, `Ui/`), `Auth/`, `Kiosk/` (link checks), `Styles/`, `wwwroot/`, `Features/FeatureModules.cs`, `Features/Account/` | W | `app/layout`, `login`, `error`, `components/ui/*`, `components/nav/*`, `globals.css` |
 | `Features/Plan/` | P1 | `app/(app)/plan/generate`, `components/plan/*`, `lib/plan/pageFigures`, `generateParts` |
-| `Features/Roster/` (including the shared tile grid in `Features/Roster/Grid/`) | P2 | `app/(app)/plan/roster`, `components/roster/*`, `api/roster/held` |
+| `Features/RosterPage/` (including the shared tile grid in `Features/RosterPage/Grid/`) | P2 | `app/(app)/plan/roster`, `components/roster/*`, `api/roster/held` |
 | `Features/Review/`, `Features/Notifications/` | P3 | `app/(app)/plan/review`, `app/(app)/notifications` |
 | `Features/Overview/`, `Features/Analysis/` | P4 | `app/(app)/overview`, `app/(app)/analysis`, `analysis/notes`, `app/page` |
 | `Features/Team/`, `Features/Weekends/` | P5 | `app/(app)/setup/staff`, `setup/requests`, `setup/weekends` |

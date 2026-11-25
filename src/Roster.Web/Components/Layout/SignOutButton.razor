@@ -1,0 +1,7 @@
+@* Port of src/components/nav/SignOutButton.tsx. *@
+@* Sign out: a plain form post (with its antiforgery token) to /account/sign-out,
+   which ends the app's session and, with Entra ID, the single sign-on session. *@
+<form method="post" action="account/sign-out" data-enhance="false">
+    <AntiforgeryToken />
+    <button type="submit" class="@Ui.Cx("w-full", Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm))">Sign out</button>
+</form>
