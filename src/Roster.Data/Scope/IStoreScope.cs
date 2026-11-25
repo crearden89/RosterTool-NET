@@ -99,3 +99,12 @@ public interface IStoreDirectory
     /// <summary>The store a kiosk token opens (Floor Display, Load Planner), or null.</summary>
     Task<StoreInfo?> FindByKioskTokenAsync(string token, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// The store the person last chose in any store picker (the TypeScript app's roster_store_id
+/// cookie). The web layer implements it; <see cref="StoreScope.ResolveStoreId"/> reads it.
+/// </summary>
+public interface IRememberedStore
+{
+    Guid? StoreId { get; }
+}
