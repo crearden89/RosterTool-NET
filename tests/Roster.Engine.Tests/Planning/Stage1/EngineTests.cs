@@ -78,10 +78,10 @@ public class Stage1PlacementTests
         });
         var nonOp = S1.Alloc(r, "non_op");
         Assert.Equal(5, nonOp.BenchmarkHours);
-        Assert.Equal(5, nonOp.AllocatedHours, 6);
+        Vitest.CloseTo(5, nonOp.AllocatedHours, 6);
         // Total is benchmark reset (4h) + non-op (5h) = 9h, not 4 - 5.
-        Assert.Equal(9, r.TotalAllocated, 6);
-        Assert.Equal(9, r.TotalBenchmark, 6);
+        Vitest.CloseTo(9, r.TotalAllocated, 6);
+        Vitest.CloseTo(9, r.TotalBenchmark, 6);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class Stage1PlacementTests
             Windows = [S1.W("load_running", 6 * 60, 11 * 60), S1.W("admin", 7 * 60, 17 * 60)],
             Checkout = [new(9 * 60, 2), new(9 * 60 + 15, 3)],
         });
-        Assert.Equal(1.25, S1.Alloc(r, "checkout").AllocatedHours, 6);
+        Vitest.CloseTo(1.25, S1.Alloc(r, "checkout").AllocatedHours, 6);
         // benchmark rounds to whole blocks, so day variance stays within an hour.
         Assert.True(r.WithinTolerance);
         Assert.True(Math.Abs(r.Variance) <= 1);

@@ -21,7 +21,21 @@ using Roster.Engine.Rostering.Shaper;
 
 namespace Roster.Engine.Planning.Stage1;
 
-public sealed record PlanShift
+/// <summary>What the plan's row order reads of a shift (Pick&lt;PlanShift, "planRole" | "start" | "end"&gt;).</summary>
+public interface IPlanShiftTimes
+{
+    string PlanRole { get; }
+    double Start { get; }
+    double End { get; }
+}
+
+/// <summary>A shift the row order can find again by its slot (Pick&lt;PlanShift, "slotId" | ...&gt;).</summary>
+public interface IPlanShiftSlot : IPlanShiftTimes
+{
+    string SlotId { get; }
+}
+
+public sealed record PlanShift : IPlanShiftSlot
 {
     public string SlotId { get; init; } = "";
     /// <summary>"MGR", "SA" or "JSA" (RoleBadges).</summary>
