@@ -1,5 +1,7 @@
 // New: stage 1 day plan parity - runStage1 (src/lib/stage1/engine.ts) against
-// Stage1Engine.RunStage1 on every recorded call.
+// Stage1Engine.RunStage1, and computeStage1 (src/lib/stage1/compute.ts, with
+// the reads it made recorded as Stage1Sources) against
+// Stage1Compute.ComputeStage1, on every recorded call.
 
 using Roster.Engine.Planning.Stage1;
 using Xunit.Abstractions;
@@ -14,6 +16,8 @@ public sealed class Stage1ParityTests(ITestOutputHelper log)
         new Dictionary<string, Func<ParityCase, ParityResult>>
         {
             ["runStage1"] = c => new(ParityJson.ToNode(Stage1Engine.RunStage1(c.Arg<Stage1Input>("input")))),
+            // The whole day: everything computeStage1 read (Stage1Sources), and what it made of it.
+            ["computeStage1"] = c => new(ParityJson.ToNode(Stage1Compute.ComputeStage1(c.Arg<Stage1Sources>("sources")))),
         };
 
     [Fact]
