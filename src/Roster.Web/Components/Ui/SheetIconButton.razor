@@ -1,0 +1,13 @@
+@* Port of src/components/ui/SideSheet.tsx. *@
+@* A square icon button for a sheet's header: give it a Label (read out, and the hover text). *@
+<button type="button" aria-label="@Label" title="@Label" disabled="@Disabled" @onclick="OnClick"
+        class="@Ui.Cx("grid h-9 w-9 place-items-center rounded-xl border border-[var(--ui-control)] bg-white text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] disabled:cursor-not-allowed disabled:opacity-40", Ui.FocusRing)">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,212 @@
+/* The app's stylesheet: the Tailwind v4 input that compiles to wwwroot/css/app.css.
+
+   Ported from the TypeScript app's src/app/globals.css (version a004032), value
+   for value, with one rename: the brand palette's --aldi-* names are --brand-*
+   here (the code carries no company name). A class written there as
+   text-[var(--aldi-navy)] is text-[var(--brand-navy)] here; every --ui-* token
+   and every Tailwind class keeps its name.
+
+   How it is built: the Tailwind standalone CLI (tools/tailwind/install.sh or
+   install.ps1) compiles this file and the classes used in the .razor and .cs
+   files under Components/ into wwwroot/css/app.css, which is committed. The
+   build runs the CLI when it is installed and skips it otherwise, so a plain
+   `dotnet build` needs no Tailwind. Change a class, run the build with the CLI
+   installed, commit app.css with the change.
+
+   There is no dark theme: the TypeScript app has none, and the owner approved
+   the light design (docs/design.md, 14/11/2026). */
+
+@import "tailwindcss" source(none);
+
+/* Where the class names are: the shell and shared components (Components/,
+   with the shared class strings in Components/Ui/Ui.cs) and every page area
+   (Features/). Class names must be written out whole in the source - never
+   assembled from pieces - or the CLI cannot see them. */
+@source "../Components";
+@source "../Features";
+
+/* Geist, the clean geometric sans the design calls for (the TypeScript app
+   loads it through next/font). Self-hosted from wwwroot/fonts so the app needs
+   no outside font service on a closed network. SIL Open Font License,
+   wwwroot/fonts/Geist-OFL.txt. */
+@font-face {
+  font-family: "Geist";
+  src: url("../fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── Brand palette (spec Section 2) ───────────────────────────────────────────
+   Full-strength brand colours are reserved for compliance status indicators,
+   primary action buttons, and the labour-group legend. Everything else uses
+   soft pastel tints, with solid navy text throughout. */
+:root {
+  --brand-navy: #00005f;
+  --brand-light-blue: #5ac5f0;
+  --brand-red: #d70000;
+  --brand-orange: #ff7801;
+  --brand-yellow: #ffc800;
+  --brand-white: #ffffff;
+
+  /* Pastel tints (10% colour / 90% white blend of the brand values) */
+  --brand-navy-tint: #e6e6ef;
+  --brand-blue-tint: #eff9fe;
+  --brand-blue-mid: #a5d8f2; /* MTD summary row - clearly darker blue than WTD */
+  --brand-orange-tint: #fff2e6;
+  --brand-yellow-tint: #fffae6;
+  --brand-green: #1f9d55;
+  /* Deeper than --brand-yellow-tint on purpose: the roster now-band must read
+     against white tiles, where the pale tint disappears. */
+  --brand-yellow-wash: #fdf3c9;
+  --brand-red-tint: #fbe6e6;
+  --brand-surface: #f7f7fa;
+  --brand-border: #d9d9e7;
+
+  --background: var(--brand-white);
+  --foreground: var(--brand-navy);
+
+  /* ─── Page design tokens (docs/design.md) ─────────────────────────────────
+     Navy ink on white cards over a very light canvas, a lighter indigo-violet,
+     a warm yellow accent and amber for leave. Added beside the brand palette
+     above, never in place of it: the plan and roster grids read the --brand-*
+     values and must not change. */
+  --ui-ink: var(--brand-navy); /* titles, figures, body text */
+  --ui-muted: #55557f; /* secondary text - 7:1 on white */
+  --ui-faint: #6c6c90; /* small uppercase labels - 4.9:1 on white */
+  --ui-line: #e3e3ee; /* card and row borders */
+  --ui-control: #b6b7d0; /* input and outlined-button borders */
+  --ui-canvas: var(--brand-surface); /* page background */
+  --ui-lavender: #e8e8f4; /* active nav pill, soft fills, table heads */
+  --ui-lavender-strong: #d9d9ec; /* hover on lavender */
+  --ui-violet: #3c3ea6; /* weekend bars, focus ring, secondary accent */
+  --ui-gold: var(--brand-yellow); /* accent pill, the link on navy */
+  --ui-amber-bg: #fdecc8; /* leave pill */
+  --ui-amber-ink: #87470a; /* leave pill text - 5.9:1 on its fill */
+  --ui-good: #13703d; /* positive figures - 6.3:1 on white */
+  --ui-bad: var(--brand-red);
+
+  /* The fonts, under the names the TypeScript app's next/font gave them, so
+     its class strings (font-[family-name:var(--font-geist-mono)]) carry over. */
+  --font-geist-sans: "Geist";
+  --font-geist-mono: "Geist Mono";
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-navy: var(--brand-navy);
+  --color-light-blue: var(--brand-light-blue);
+  --color-brand-red: var(--brand-red);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-yellow: var(--brand-yellow);
+  --color-navy-tint: var(--brand-navy-tint);
+  --color-blue-tint: var(--brand-blue-tint);
+  --color-surface: var(--brand-surface);
+  --color-brand-border: var(--brand-border);
+  --color-ui-ink: var(--ui-ink);
+  --color-ui-muted: var(--ui-muted);
+  --color-ui-faint: var(--ui-faint);
+  --color-ui-line: var(--ui-line);
+  --color-ui-control: var(--ui-control);
+  --color-ui-canvas: var(--ui-canvas);
+  --color-ui-lavender: var(--ui-lavender);
+  --color-ui-lavender-strong: var(--ui-lavender-strong);
+  --color-ui-violet: var(--ui-violet);
+  --color-ui-gold: var(--ui-gold);
+  --color-ui-amber-bg: var(--ui-amber-bg);
+  --color-ui-amber-ink: var(--ui-amber-ink);
+  --color-ui-good: var(--ui-good);
+  --color-ui-bad: var(--ui-bad);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--brand-surface);
+  color: var(--brand-navy);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* The table head for pages that stay tabular (docs/design.md): small grey
+   capitals on a pale lavender band. A component-layer class, so a cell's own
+   utilities (alignment, padding, a sticky background) still apply. Use it
+   in place of the old navy head - never inside the plan and roster grids. */
+@layer components {
+  .ui-thead {
+    background-color: #f1f1f8;
+    color: var(--ui-muted);
+    text-align: left;
+  }
+  .ui-thead th {
+    font-size: 11px;
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ui-muted);
+  }
+}
+
+/* Roster status light helpers (spec 11.2) */
+.status-red {
+  background: var(--brand-red);
+}
+.status-amber {
+  background: var(--brand-orange);
+}
+.status-green {
+  background: var(--brand-green);
+}
+
+/* ─── Blazor's own pieces, in the app's language ─────────────────────────── */
+
+/* FocusOnNavigate moves focus to the page's h1 after a navigation, for screen
+   readers; the h1 is not a control, so it shows no ring. */
+h1:focus {
+  outline: none;
+}
+
+/* EditForm's validation states. */
+.valid.modified:not([type="checkbox"]) {
+  outline: 1px solid var(--ui-good);
+}
+.invalid {
+  outline: 1px solid var(--ui-bad);
+}
+.validation-message {
+  color: var(--ui-bad);
+  font-size: 0.875rem;
+}
+
+/* The bar Blazor shows when the server connection hits an unhandled error. */
+#blazor-error-ui {
+  display: none;
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 1000;
+  padding: 0.6rem 1.25rem 0.7rem;
+  background: var(--brand-yellow-wash);
+  color: var(--ui-ink);
+  box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+  font-size: 0.875rem;
+}
+#blazor-error-ui .reload {
+  font-weight: 600;
+  color: var(--ui-violet);
+  text-decoration: underline;
+}
+#blazor-error-ui .dismiss {
+  cursor: pointer;
+  position: absolute;
+  right: 0.75rem;
+  top: 0.5rem;
+}

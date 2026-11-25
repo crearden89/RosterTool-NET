@@ -1,0 +1,36 @@
+@* Port of src/components/ui/Bars.tsx. *@
+@* One whole split into parts: a 28 px bar of blocks with a 2 px gap between
+   them. Each block's share is printed inside it when the block is wide enough
+   for it at any screen width; a part at zero draws nothing. The legend beside
+   it names the parts. *@
+<div role="img" aria-label="@Label" class="flex h-7 w-full gap-0.5">
+    @foreach (var p in _shown)
+    {
+        var share = Css.Clamp01(p.Share);
+        var pct = (int)Math.Round(share * 100, MidpointRounding.AwayFromZero);
+        <span @key="p.Key" title="@p.Title"
+              class="@Ui.Cx("flex min-w-1 flex-none items-center rounded px-1.5 text-xs font-semibold whitespace-nowrap", p.Ink == SplitInk.White ? "text-white" : "text-[var(--ui-ink)]")"
+              style="@($"width: calc((100% - {_gaps}px) * {Css.N(share)}); background: {p.Colour}")">
+            @* Written only where it fits, on a phone too: an eighth of the bar. *@
+            @if (share >= 0.12)
+            {
+                <span aria-hidden="true">@(pct)%</span>
+            }
+        </span>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<SplitPart> _shown = [];
+    private int _gaps;
+
+    [Parameter, EditorRequired] public IReadOnlyList<SplitPart> Parts { get; set; } = [];
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    protected override void OnParametersSet()
+    {
+        _shown = Parts.Where(p => Css.Clamp01(p.Share) > 0).ToList();
+        // Widths are exact shares of the bar less its gaps (padding sits inside).
+        _gaps = 2 * Math.Max(0, _shown.Count - 1);
+    }
+}

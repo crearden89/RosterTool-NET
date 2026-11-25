@@ -1,0 +1,21 @@
+@* New: createPortal (see Portal.cs). *@
+@implements IDisposable
+@inject PortalService Portals
+@* Draws its content at the foot of the page (PortalService). *@
+@if (!Portals.HasOutlet)
+{
+    @ChildContent
+}
+
+@code {
+    private readonly string _id = $"portal-{Guid.NewGuid():N}";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Portals.HasOutlet && ChildContent is not null) Portals.Set(_id, ChildContent);
+    }
+
+    public void Dispose() => Portals.Remove(_id);
+}
