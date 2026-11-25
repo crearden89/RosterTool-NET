@@ -10,11 +10,17 @@
 
 using Roster.Engine.Core;
 using Roster.Engine.Planning;
+using Roster.Engine.Rostering.Fortnight;
 
 namespace Roster.Engine.RosterOps;
 
 /// <summary>What the status reads of a roster day (RosterComputation's shifts, flags, hasData and closed).</summary>
-public sealed record RosterDay(IReadOnlyList<Shift> Shifts, IReadOnlyList<string> Flags, bool HasData, bool Closed);
+public sealed record RosterDay(IReadOnlyList<Shift> Shifts, IReadOnlyList<string> Flags, bool HasData, bool Closed)
+{
+    public static RosterDay Of(RosterComputation c) => new(c.Shifts, c.Flags, c.HasData, c.Closed);
+
+    public static RosterDay? OrNull(RosterComputation? c) => c is null ? null : Of(c);
+}
 
 /// <summary>A day's flags split into errors (with the open shifts' "Why:" line) and warnings.</summary>
 public sealed record RosterFlagSplit(List<string> Errors, List<string> Warnings);
@@ -66,6 +72,19 @@ public static class DayStatus
     /// <inheritdoc cref="DaysNeedingCoverNote{T}(Func{T, RosterDay?}, IEnumerable{T})"/>
     public static List<T> DaysNeedingCoverNote<T>(JsMap<T, RosterDay> byDate, IEnumerable<T> dates) where T : notnull =>
         DaysNeedingCoverNote(d => byDate.Get(d), dates);
+
+    /// <inheritdoc cref="OpenShiftCount(RosterDay?)"/>
+    public static int OpenShiftCount(RosterComputation? day) => OpenShiftCount(RosterDay.OrNull(day));
+
+    /// <inheritdoc cref="RosterDayHasError(RosterDay?)"/>
+    public static bool RosterDayHasError(RosterComputation? day) => RosterDayHasError(RosterDay.OrNull(day));
+
+    /// <inheritdoc cref="RosterDayOk(RosterDay?)"/>
+    public static bool RosterDayOk(RosterComputation? day) => RosterDayOk(RosterDay.OrNull(day));
+
+    /// <summary>The days of the fortnight (a FortnightRoster's ByDate) whose errors need a note on cover.</summary>
+    public static List<DateOnly> DaysNeedingCoverNote(JsMap<DateOnly, RosterComputation> byDate, IEnumerable<DateOnly> dates) =>
+        DaysNeedingCoverNote(d => RosterDay.OrNull(byDate.Get(d)), dates);
 
     /// <summary>Plain words for why the note is asked for, naming the days (dd/mm).</summary>
     public static string CoverNoteReason(IReadOnlyList<DateOnly> days) => CoverNoteReason(days.Select(d => d.ToIso()).ToList());
