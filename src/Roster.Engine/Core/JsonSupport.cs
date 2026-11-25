@@ -8,7 +8,11 @@
 //   type is an array of [key, value] pairs, in insertion order (JSON.stringify
 //   writes {} for a JS Map, so the TypeScript side converts those to pairs).
 // - DateOnly is "yyyy-MM-dd" (System.Text.Json's own format).
+// - Strings are escaped as JSON.stringify escapes them - quotes, backslashes
+//   and control characters only - so "it's 07:00–09:00" is written as is,
+//   not as "it\u0027s 07:00\u201309:00" (the default encoder's HTML-safe form).
 
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -27,6 +31,7 @@ public static class RosterJson
             DictionaryKeyPolicy = null,
             DefaultIgnoreCondition = JsonIgnoreCondition.Never,
             WriteIndented = false,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
         o.Converters.Add(new JsMapJsonConverterFactory());
         o.Converters.Add(new JsSetJsonConverterFactory());

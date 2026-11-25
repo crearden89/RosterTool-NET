@@ -1,0 +1,82 @@
+@* Port of src/app/floor/[token]/WalkNotesPanel.tsx.
+   Open store walk notes in the wall screen's right-hand column, each with the
+   same Complete button as the notes view. The point is not to have to switch
+   views to tick something off - so this is the full open list (it scrolls in
+   its column), not a preview. "Walk note" opens the notes view to raise one. *@
+@using global::Roster.Engine.Walk
+@inject IFloorService Floor
+
+<div class="floor-notesHead">
+    <h2>
+        Walk notes
+        <small>@open.Count open</small>
+    </h2>
+    <a href="@NotesHref" class="floor-btn floor-ghost">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+            <rect x="3.5" y="2.5" width="13" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+            <path d="M7 7.5h6M7 10.5h6M7 13.5h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        Walk note
+    </a>
+</div>
+@if (error is not null)
+{
+    <p class="floor-error">@error</p>
+}
+<div class="floor-notes">
+    @if (open.Count == 0)
+    {
+        <p class="floor-quiet">Nothing outstanding. Raise a note with Walk note.</p>
+    }
+    else
+    {
+        @foreach (var n in open)
+        {
+            <div @key="n.Id" class="floor-note">
+                <div>
+                    <b>@n.Note</b>
+                    <span>Raised @Notes.AgeLabel(n.RaisedDate, Today) · @(n.AssignedName ?? "unallocated")</span>
+                </div>
+                <button type="button" @onclick="() => CompleteAsync(n.Id)" disabled="@busy" class="floor-btn floor-solid">
+                    Complete
+                </button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Token { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<WalkNote> Items { get; set; } = [];
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter, EditorRequired] public string NotesHref { get; set; } = "";
+
+    /// <summary>Reads the page again (the TypeScript's router.refresh()).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool busy;
+    private string? error;
+    private List<WalkNote> open = [];
+
+    protected override void OnParametersSet() => open = Notes.SortOpen(Items);
+
+    private async Task CompleteAsync(string id)
+    {
+        error = null;
+        busy = true;
+        try
+        {
+            var res = await Floor.CompleteWalkNoteAsync(Token, id);
+            if (!res.Ok)
+            {
+                error = res.Error ?? "Could not complete that note.";
+                return;
+            }
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}
