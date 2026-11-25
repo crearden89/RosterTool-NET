@@ -81,6 +81,10 @@ public class JsTests
         var nel = new string([(char)0x85]);
         Assert.Equal(nel + "a", Js.Trim(nel + "a")); // U+0085 is not JavaScript white space
         Assert.Equal(0, Js.Number(ws));
+        var zs = new string([(char)0x1680, (char)0x2005, (char)0x202F, (char)0x205F, (char)0x3000]);
+        Assert.Equal(12.5, Js.ParseFloat(zs + "12.5px"));
+        Assert.Equal(12, Js.ParseInt(zs + "12px"));
+        Assert.Equal(7, Js.Number(zs + "7" + zs));
     }
 
     [Fact]

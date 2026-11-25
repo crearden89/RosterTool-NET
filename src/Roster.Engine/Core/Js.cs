@@ -130,7 +130,7 @@ public static class Js
     public static double ParseFloat(string? s)
     {
         if (s is null) return double.NaN;
-        var t = s.TrimStart(' ', '\t', '\n', '\v', '\f', '\r', '\u00A0', '\uFEFF', '\u2028', '\u2029');
+        var t = TrimStart(s);
         var j = 0;
         if (j < t.Length && (t[j] == '+' || t[j] == '-')) j++;
         if (string.CompareOrdinal(t, j, "Infinity", 0, 8) == 0) return t[0] == '-' ? double.NegativeInfinity : double.PositiveInfinity;
@@ -163,7 +163,7 @@ public static class Js
     public static double ParseInt(string? s, int radix = 0)
     {
         if (s is null) return double.NaN;
-        var t = s.TrimStart(' ', '\t', '\n', '\v', '\f', '\r', '\u00A0', '\uFEFF', '\u2028', '\u2029');
+        var t = TrimStart(s);
         var j = 0;
         var sign = 1;
         if (j < t.Length && (t[j] == '+' || t[j] == '-'))
