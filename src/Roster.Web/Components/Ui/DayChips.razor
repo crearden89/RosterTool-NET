@@ -1,0 +1,80 @@
+@* Port of src/components/ui/DayChips.tsx. *@
+@using Roster.Engine.Core
+@* A fortnight's days, week by week: one chip per day with the weekday, the date
+   and a dot saying whether the day is OK, and a short figure under it (the
+   day's hours variance on the Plan page, its shift count on the Roster page).
+   Each chip links to its day; the chosen day is navy. *@
+<nav aria-label="@Label" class="grid gap-x-6 gap-y-4 xl:grid-cols-2">
+    @* Weeks side by side only where seven chips each still have room for their
+       figure (about 56 px a chip). *@
+    @for (var i = 0; i < _weeks.Count; i++)
+    {
+        var wk = _weeks[i];
+        var week = i + 1; // a copy: the Eyebrow draws its content after the loop has moved on
+        <div @key="wk[0].Date" class="min-w-0">
+            <Eyebrow Class="mb-2">Week @week · @Dates.AuRange(wk[0].Date, wk[^1].Date)</Eyebrow>
+            <ul class="grid grid-cols-7 gap-1 sm:gap-1.5">
+                @for (var j = 0; j < wk.Count; j++)
+                {
+                    var d = wk[j];
+                    var on = d.Date == Selected;
+                    var weekday = Dates.AuDayLabel(d.Date)[..3];
+                    <li @key="d.Date" class="min-w-0" style="@(j == 0 ? $"grid-column-start: {Period.DowMon0(d.Date) + 1}" : null)">
+                        <a href="@ShellPaths.Href(d.Href)" aria-current="@(on ? "date" : null)"
+                           aria-label="@($"{Dates.AuDayLabel(d.Date)}{(d.Status is null ? "" : $": {d.Status}")}")" title="@d.Status"
+                           class="@Ui.Cx("relative flex flex-col items-center rounded-xl border px-0.5 pt-1.5 pb-1 text-center transition-colors", Ui.FocusRing, on ? "border-[var(--ui-ink)] bg-[var(--ui-ink)] text-white" : "border-[var(--ui-line)] bg-white text-[var(--ui-ink)] hover:border-[var(--ui-control)] hover:bg-[var(--ui-lavender)]")">
+                            <span class="@Ui.Cx("text-[10px] font-semibold tracking-wide uppercase", on ? "text-white/80" : "text-[var(--ui-faint)]")">@weekday</span>
+                            <span class="text-base leading-tight font-bold">@d.Date.Day</span>
+                            <span class="mt-0.5 flex max-w-full items-center gap-1 text-[10px] font-semibold whitespace-nowrap">
+                                <span aria-hidden="true" class="@Ui.Cx("h-1.5 w-1.5 shrink-0 rounded-full", Dot(d.Tone))"></span>
+                                @if (!string.IsNullOrEmpty(d.Note))
+                                {
+                                    <span class="@Ui.Cx("truncate tabular-nums", on ? "text-white/85" : d.Tone == DayTone.Error ? "text-[var(--ui-bad)]" : "text-[var(--ui-muted)]")">
+                                        @if (!string.IsNullOrEmpty(d.NoteWide))
+                                        {
+                                            <span class="xl:hidden">@d.Note</span>
+                                            <span class="hidden xl:inline">@d.NoteWide</span>
+                                        }
+                                        else
+                                        {
+                                            @d.Note
+                                        }
+                                    </span>
+                                }
+                            </span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</nav>
+
+@code {
+    private List<List<DayChip>> _weeks = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<DayChip> Days { get; set; } = [];
+
+    /// <summary>The chosen day, drawn navy.</summary>
+    [Parameter] public DateOnly? Selected { get; set; }
+
+    [Parameter] public string Label { get; set; } = "Days of the fortnight";
+
+    protected override void OnParametersSet()
+    {
+        // Monday-to-Sunday weeks, each in its own row of seven.
+        _weeks = [];
+        foreach (var d in Days)
+        {
+            if (_weeks.Count == 0 || Period.DowMon0(d.Date) == 0) _weeks.Add([]);
+            _weeks[^1].Add(d);
+        }
+    }
+
+    private static string Dot(DayTone tone) => tone switch
+    {
+        DayTone.Ok => "bg-[var(--brand-green)]",
+        DayTone.Error => "bg-[var(--ui-bad)]",
+        _ => "bg-[var(--ui-control)]",
+    };
+}

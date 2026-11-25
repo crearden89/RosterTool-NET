@@ -1,0 +1,19 @@
+@* New: lucide-react's icon, drawn from lucide-static paths (LucideIcons.cs). *@
+@using System.Globalization
+@* A lucide icon, drawn as lucide-react draws it: a 24 x 24 stroke icon in the
+   current text colour, hidden from screen readers (the control or text beside
+   it carries the meaning). Size it with classes: <Icon Name="IconName.Check" Class="h-3.5 w-3.5" StrokeWidth="3" />. *@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+     stroke-width="@StrokeWidth.ToString(CultureInfo.InvariantCulture)" stroke-linecap="round" stroke-linejoin="round"
+     class="@Ui.Cx("lucide", $"lucide-{_icon.Slug}", Class)" aria-hidden="true" @attributes="AdditionalAttributes">@((MarkupString)_icon.Body)</svg>
+
+@code {
+    private (string Slug, string Body) _icon;
+
+    [Parameter, EditorRequired] public IconName Name { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public double StrokeWidth { get; set; } = 2;
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    protected override void OnParametersSet() => _icon = LucideIcons.For(Name);
+}

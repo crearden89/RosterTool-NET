@@ -1,0 +1,14 @@
+@* Port of src/components/ui/SaveBar.tsx (useLeaveGuard). *@
+@implements IDisposable
+@* An edit kept by a row's own Save (useLeaveGuard): while Dirty is true,
+   leaving the page asks first. *@
+
+@code {
+    [CascadingParameter] public SaveScope? Scope { get; set; }
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter] public bool Dirty { get; set; }
+
+    protected override void OnParametersSet() => Scope?.SetLoose(Id, Dirty);
+
+    public void Dispose() => Scope?.SetLoose(Id, false);
+}

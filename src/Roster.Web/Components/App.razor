@@ -1,23 +1,45 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+@* Port of src/app/layout.tsx: the document, its fonts and stylesheet, and the app. *@
+@inject IOptions<BrandingOptions> Branding
+<!DOCTYPE html>
+<html lang="en-AU" class="h-full antialiased">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
+    <meta name="description" content="Fortnightly roster planning &amp; execution" />
+    <base href="@BaseHref" />
     <ResourcePreloader />
-    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
-    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="preload" href="@Assets["fonts/Geist-Variable.woff2"]" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="@Assets["css/app.css"]" />
     <link rel="stylesheet" href="@Assets["Roster.Web.styles.css"]" />
     <ImportMap />
-    <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet />
+    <link rel="icon" href="@Branding.Value.IconUrl" />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
-<body>
-    <Routes />
+<body class="min-h-full flex flex-col">
+    <Routes @rendermode="PageRenderMode" RememberedStore="@RememberedStore" />
     <ReconnectModal />
+    <div id="blazor-error-ui" data-nosnippet>
+        Something went wrong with the connection to the server.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss" aria-label="Dismiss">×</span>
+    </div>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // Pages that need the request itself (the sign-in pages) render statically;
+    // every other page runs interactively on the server.
+    private IComponentRenderMode? PageRenderMode => HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+
+    // Under a virtual directory (IIS) the app's addresses start there.
+    private string BaseHref => $"{HttpContext.Request.PathBase}/";
+
+    // The store last chosen in a store picker, for the connection that follows.
+    private string? RememberedStore => HttpContext.Request.Cookies[StoreSelection.CookieName];
+}

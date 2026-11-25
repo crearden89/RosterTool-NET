@@ -1,0 +1,13 @@
+@* New: an address that is not a page (the TypeScript app used Next.js's default 404). *@
+@page "/not-found"
+@attribute [AllowAnonymous]
+@inject IOptions<BrandingOptions> Branding
+
+<PageTitle>Page not found · @Branding.Value.AppName</PageTitle>
+<div class="flex min-h-[60vh] items-center justify-center p-6">
+    <div class="w-full max-w-md rounded-xl border border-[var(--brand-border)] bg-white p-6 text-center">
+        <p class="text-lg font-semibold text-[var(--brand-navy)]">Page not found</p>
+        <p class="mt-2 text-sm text-[var(--brand-navy)]/70">That address isn't a page in @Branding.Value.AppName. Check the link, or start again from the Dashboard.</p>
+        <a href="overview" class="@($"mt-4 {Ui.ButtonClass(ButtonKind.Secondary)}")">Go to the Dashboard</a>
+    </div>
+</div>
