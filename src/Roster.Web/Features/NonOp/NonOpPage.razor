@@ -1,0 +1,245 @@
+@page "/plan/non-op"
+@* Port of src/app/(app)/plan/non-op/page.tsx and NonOpClient.tsx. *@
+@using global::Roster.Engine.Core
+@inject IServiceProvider Services
+@inject NavigationManager Navigation
+@inject RosterJs Browser
+@* ─── Non-Op: the fortnight as a calendar ─────────────────────────────────────
+   The header the Plan and Roster pages have (store, fortnight arrows, Add),
+   the fortnight in figures, chips that bring one category forward, and the
+   fourteen days as cards, each entry a small card edged in its category's
+   colour. Adding opens a side sheet. Every action is the one the page had:
+   add an entry, remove one, clear a day (with the same confirm), switch
+   store, step a fortnight. *@
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    var data = _data;
+    var range = data.Dates.Count > 0 ? Dates.AuRange(data.Dates[0], data.Dates[^1]) : "";
+    var weeks = new[] { data.Dates.Take(7).ToList(), data.Dates.Skip(7).Take(7).ToList() };
+    <div>
+        <PageHeader Title="Non-Op">
+            <Badge>
+                @if (data.ReadOnly)
+                {
+                    <Pill Tone="PillTone.Soft" Class="!px-3 !py-1 text-[13px]"><Icon Name="IconName.Lock" Class="h-3.5 w-3.5" StrokeWidth="2.5" /> Read-only</Pill>
+                }
+            </Badge>
+            <Subtitle>@($"{(data.StoreName.Length > 0 ? $"{data.StoreName} · " : "")}{range} · training, meetings and other off-floor time, added to the plan")</Subtitle>
+            <Actions>
+                <StorePicker Stores="_stores" Value="data.StoreId" Disabled="_pending" HrefFor="@(id => $"/plan/non-op?store={id}")" />
+                <FortnightArrows Start="data.StartDate" Disabled="_pending" HrefFor="@(d => $"/plan/non-op?store={data.StoreId}&start={d.ToIso()}")" />
+                @if (!data.ReadOnly)
+                {
+                    <button type="button" @onclick="() => OpenAdd(null)" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Secondary)">
+                        <Icon Name="IconName.Plus" Class="h-4 w-4" StrokeWidth="2.5" /> Add Non-Op hours
+                    </button>
+                }
+            </Actions>
+        </PageHeader>
+
+        @if (data.ReadOnly)
+        {
+            <div class="mb-5 flex items-start gap-3 rounded-2xl bg-[var(--ui-lavender)] px-4 py-3 text-[13px] leading-relaxed text-[var(--ui-ink)]">
+                <Icon Name="IconName.Lock" Class="mt-0.5 h-4 w-4 shrink-0" StrokeWidth="2.5" />
+                <p class="min-w-0">
+                    @if (data.Peer)
+                    {
+                        <b class="font-semibold">@data.StoreName&apos;s Non-Op, to compare with your own.</b> @($"Every store can see each other's Non-Op; only the logins that look after {data.StoreName} can add or remove it.")
+                    }
+                    else
+                    {
+                        <b class="font-semibold">@data.StoreName&apos;s Non-Op, read-only for your login.</b> @($"Your login can look at every store's Non-Op; the logins that look after {data.StoreName} add and remove it.")
+                    }
+                </p>
+            </div>
+        }
+        else
+        {
+            <p class="mb-5 flex items-start gap-2 text-sm text-[var(--ui-muted)]">
+                <Icon Name="IconName.Info" Class="mt-0.5 h-4 w-4 shrink-0 text-[var(--ui-violet)]" />
+                <span>Hours added here reach the plan the next time it is generated.</span>
+            </p>
+        }
+
+        @* The fortnight in figures: its hours, each week's, and the split by category. *@
+        @{
+            var total = NonOpShared.MinutesOf(data.Entries);
+            var people = data.Entries.Select(e => e.EmployeeId).Distinct().Count();
+            var cats = data.Categories
+                .Select(c => (Cat: c, Minutes: NonOpShared.MinutesOf(data.Entries.Where(e => CategoryOf(e) == c.Id))))
+                .Where(c => c.Minutes > 0).ToList();
+        }
+        <div class="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <StatCard Class="col-span-2 xl:col-span-1">
+                <Label>This fortnight</Label>
+                <Value>@($"{NonOpShared.HoursText(total)} h")</Value>
+                <Sub>@($"{NonOpShared.Plural(data.Entries.Count, "entry", "entries")} · {NonOpShared.Plural(people, "team member", "team members")}")</Sub>
+            </StatCard>
+            @for (var i = 0; i < weeks.Length; i++)
+            {
+                var wk = weeks[i];
+                var es = data.Entries.Where(e => wk.Contains(e.Date)).ToList();
+                <StatCard @key="i">
+                    <Label>@($"Week {i + 1} · {(wk.Count > 0 ? Dates.AuRange(wk[0], wk[^1]) : "")}")</Label>
+                    <Value>@($"{NonOpShared.HoursText(NonOpShared.MinutesOf(es))} h")</Value>
+                    <Sub>@(es.Count > 0 ? $"{NonOpShared.Plural(es.Count, "entry", "entries")} on {NonOpShared.Plural(es.Select(e => e.Date).Distinct().Count(), "day", "days")}" : "Nothing booked")</Sub>
+                </StatCard>
+            }
+            <div class="col-span-2 flex flex-col rounded-2xl border border-[var(--ui-line)] bg-white p-5 xl:col-span-1">
+                <Eyebrow>By category</Eyebrow>
+                @if (cats.Count == 0)
+                {
+                    <p class="mt-2 text-xs text-[var(--ui-muted)]">Nothing booked this fortnight</p>
+                }
+                else
+                {
+                    <div class="mt-3">
+                        <SplitBar Label="@($"Non-Op hours by category: {string.Join(", ", cats.Select(c => $"{c.Cat.Name} {NonOpShared.HoursText(c.Minutes)} h"))}")"
+                                  Parts="@cats.Select(c => new SplitPart(c.Cat.Id.ToString(), c.Cat.Name, total > 0 ? (double)c.Minutes / total : 0, NonOpShared.CategoryColour(data.Categories, c.Cat.Id), SplitInk.White, $"{c.Cat.Name} {NonOpShared.HoursText(c.Minutes)} h")).ToList()" />
+                    </div>
+                    <ul class="mt-3 space-y-1 text-xs">
+                        @foreach (var c in cats)
+                        {
+                            <li @key="c.Cat.Id" class="flex items-center gap-2 text-[var(--ui-ink)]">
+                                <span aria-hidden="true" class="h-2.5 w-2.5 rounded-full" style="@($"background: {NonOpShared.CategoryColour(data.Categories, c.Cat.Id)}")"></span>
+                                <span class="min-w-0 flex-1 truncate">@c.Cat.Name</span>
+                                <b class="font-semibold tabular-nums">@NonOpShared.HoursText(c.Minutes) h</b>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+
+        <div class="@($"transition-opacity {(_pending ? "opacity-60" : "")}")">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <FilterChips TKey="string" Label="Show" Value="_filter" OnChange="v => _filter = v" Options="FilterOptions(data)" />
+                <p class="text-xs text-[var(--ui-muted)]">Each card: the item, who, minutes and what it was for</p>
+            </div>
+            @if (_err is not null)
+            {
+                <p role="alert" class="mb-4 text-sm text-[var(--ui-bad)]">@_err</p>
+            }
+
+            <div class="space-y-5">
+                @for (var i = 0; i < weeks.Length; i++)
+                {
+                    var wk = weeks[i];
+                    var es = data.Entries.Where(e => wk.Contains(e.Date)).ToList();
+                    <section @key="i" aria-label="@($"Week {i + 1}")">
+                        <div class="mb-2 flex items-baseline justify-between gap-3">
+                            <Eyebrow>@($"Week {i + 1} · {(wk.Count > 0 ? Dates.AuRange(wk[0], wk[^1]) : "")}")</Eyebrow>
+                            <p class="text-xs text-[var(--ui-muted)]">
+                                <b class="font-semibold text-[var(--ui-ink)]">@NonOpShared.HoursText(NonOpShared.MinutesOf(es)) h</b> · @NonOpShared.Plural(es.Count, "entry", "entries")
+                            </p>
+                        </div>
+                        <ul class="grid gap-2 xl:grid-cols-7">
+                            @foreach (var date in wk)
+                            {
+                                var dayEntries = data.Entries.Where(e => e.Date == date).ToList();
+                                <NonOpDayCard @key="date" Date="date" Entries="dayEntries" ReadOnly="data.ReadOnly" Busy="_pending"
+                                              OnAdd="() => OpenAdd(date)" OnClear="() => ClearDayAsync(date, dayEntries.Count)">
+                                    <EntryTemplate Context="e">
+                                        @{
+                                            var s = data.Subs.FirstOrDefault(x => x.Id == e.SubcategoryId);
+                                            var p = data.Employees.FirstOrDefault(x => x.Id == e.EmployeeId);
+                                        }
+                                        <NonOpEntryCard @key="e.Id" Item="@(s?.Name ?? "-")" Person="p" Entry="e"
+                                                        Colour="@NonOpShared.CategoryColour(data.Categories, CategoryOf(e))"
+                                                        Dim="@(_filter != "all" && CategoryOf(e)?.ToString() != _filter)"
+                                                        CanRemove="!data.ReadOnly" OnRemove="() => RunAsync(() => Service.DeleteNonOpEntryAsync(e.Id))" Busy="_pending" />
+                                    </EntryTemplate>
+                                </NonOpDayCard>
+                            }
+                        </ul>
+                    </section>
+                }
+            </div>
+        </div>
+
+        @if (_adding is { } adding && !data.ReadOnly && data.StoreId is { } storeId)
+        {
+            <AddNonOpSheet @key="adding" StoreId="storeId" StoreName="@data.StoreName" FortnightDates="data.Dates" InitialDate="adding"
+                           Categories="data.Categories" Subs="data.Subs" Employees="data.Employees" Entries="data.Entries"
+                           OnClose="() => _adding = null" OnSaved="SavedAsync" />
+        }
+    </div>
+}
+
+@code {
+    private INonOpService? _service;
+    private NonOpPageData? _data;
+    private IReadOnlyList<StoreOption> _stores = [];
+    private string _filter = "all";
+    private DateOnly? _adding;
+    private string? _err;
+    private bool _pending;
+
+    // Resolved on the interactive render, which is where the data loads.
+    private INonOpService Service => _service ??= Services.GetRequiredService<INonOpService>();
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public string? Start { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The data loads once, on the interactive render: the prerender shows the
+        // loading state rather than reading everything twice.
+        if (!RendererInfo.IsInteractive) return;
+        _pending = true;
+        await LoadAsync();
+        _pending = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        Guid? store = Guid.TryParse(Store, out var s) ? s : null;
+        DateOnly? start = DateOnly.TryParseExact(Start, "yyyy-MM-dd", out var d) ? d : null;
+        _data = await Service.LoadAsync(store, start);
+        _stores = _data.Stores.Select(x => new StoreOption(x.Id, x.Code, x.Name)).ToList();
+    }
+
+    private Guid? CategoryOf(NonOpEntryRow e) => _data?.Subs.FirstOrDefault(x => x.Id == e.SubcategoryId)?.CategoryId;
+
+    private IReadOnlyList<FilterChip<string>> FilterOptions(NonOpPageData data) =>
+        [
+            new("all", "All", data.Entries.Count),
+            .. data.Categories.Select(c => new FilterChip<string>(c.Id.ToString(), c.Name, data.Entries.Count(e => CategoryOf(e) == c.Id))),
+        ];
+
+    // The header's Add opens on today when it is in the fortnight.
+    private void OpenAdd(DateOnly? date)
+    {
+        if (_data is null) return;
+        var today = Dates.TodayAu();
+        _adding = date ?? (_data.Dates.Contains(today) ? today : _data.Dates[0]);
+    }
+
+    // A removal or a clear, then the page again; a refusal is shown, not lost.
+    private async Task RunAsync(Func<Task<NonOpResult>> fn)
+    {
+        _pending = true;
+        _err = null;
+        var res = await fn();
+        if (!res.Ok) _err = res.Error ?? "That didn't save.";
+        await LoadAsync();
+        _pending = false;
+    }
+
+    private async Task ClearDayAsync(DateOnly date, int n)
+    {
+        if (_data?.StoreId is not { } storeId) return;
+        if (!await Browser.ConfirmAsync($"Clear all {n} Non-Op entr{(n == 1 ? "y" : "ies")} for {Dates.AuShort(date)}?")) return;
+        await RunAsync(() => Service.ClearNonOpEntriesForDateAsync(storeId, date));
+    }
+
+    private async Task SavedAsync()
+    {
+        _adding = null;
+        await LoadAsync();
+    }
+}

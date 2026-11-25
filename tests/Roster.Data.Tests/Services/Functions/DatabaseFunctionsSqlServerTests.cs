@@ -3,20 +3,27 @@
 
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
+using Roster.Data.Scope;
 using Roster.Data.Services.Functions;
+using Roster.Data.Tests.Infrastructure;
 
 namespace Roster.Data.Tests.Services.Functions;
 
 [Trait("Category", "SqlServer")]
-public sealed class DatabaseFunctionsSqlServerTests(SqlServerDatabase sql) : IClassFixture<SqlServerDatabase>
+public sealed class DatabaseFunctionsSqlServerTests(SqlServerDatabaseFixture sql) : IClassFixture<SqlServerDatabaseFixture>, IAsyncLifetime
 {
     private static readonly DateOnly Day = new(2026, 9, 3);
     private static readonly DateTimeOffset Now = new(2026, 11, 25, 1, 0, 0, TimeSpan.Zero);
 
-    private DatabaseFunctionsService Fn(out SqlServerContexts contexts)
+    public Task InitializeAsync() => sql.ResetAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
+    private DatabaseFunctionsService Fn()
     {
-        contexts = new SqlServerContexts(sql);
-        return new DatabaseFunctionsService(contexts, contexts.Scope(), new FixedClock(Now));
+        var access = new AccessContextAccessor { Current = AccessContext.System("test caller") };
+        var contexts = sql.Factory(access.Current);
+        return new DatabaseFunctionsService(contexts, new StoreScope(access, contexts), new FixedClock(Now));
     }
 
     private async Task<(Guid Store, Guid Emp)> StoreWithEmployeeAsync()
@@ -35,10 +42,10 @@ public sealed class DatabaseFunctionsSqlServerTests(SqlServerDatabase sql) : ICl
         return (store.Id, emp.Id);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task Approve_roster_day_is_one_transaction()
     {
-        var fn = Fn(out _);
+        var fn = Fn();
         var (store, emp) = await StoreWithEmployeeAsync();
         RosterDayShift Shift(string role, int from) =>
             new(emp, "1-Able, Ann", role, new TimeOnly(from, 0), new TimeOnly(from + 6, 0), 30, false, [new RosterDayTile(new TimeOnly(from, 0), "load_running", "ambient")]);
@@ -54,10 +61,10 @@ public sealed class DatabaseFunctionsSqlServerTests(SqlServerDatabase sql) : ICl
         Assert.Equal(DayStatuses.Approved, (await db.DayPlans.SingleAsync(d => d.StoreId == store && d.Date == Day)).RosterStatus);
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task Overview_rollup_in_tsql_sums_exactly_and_joins_every_date()
     {
-        var fn = Fn(out _);
+        var fn = Fn();
         var (a, _) = await StoreWithEmployeeAsync();
         var (b, _) = await StoreWithEmployeeAsync();
         await using (var db = sql.System())

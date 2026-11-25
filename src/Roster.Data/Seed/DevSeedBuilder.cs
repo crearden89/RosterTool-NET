@@ -44,7 +44,8 @@ internal sealed class DevSeedBuilder(RosterDbContext db, DateOnly today, FirstSu
         public required bool HasSco { get; init; }
         public List<Employee> Team { get; } = [];
         public HashSet<(Guid, DateOnly)> Away { get; } = [];
-        public Dictionary<(Guid, int), (int Start, int End)> Fixed { get; } = [];
+        public Dictionary<(Guid Id, int Dow, int Week), (int Start, int End)> Fixed { get; } = [];
+        public Dictionary<Guid, int> CycleWeeks { get; } = [];
         public Dictionary<(Guid, int), (bool Available, int? From, int? To)> Availability { get; } = [];
         public int Number => int.Parse(Def.Code[1..]);
     }
@@ -492,15 +493,21 @@ internal sealed class DevSeedBuilder(RosterDbContext db, DateOnly today, FirstSu
                 s.Away.Add((e.Id, sat.AddDays(1)));
             }
 
-            // A fixed roster: Monday and Tuesday opens and a Thursday close, every week.
-            var fixedPerson = t[5];
-            var open = s.Open[0] - 60;
-            foreach (var (dow, start, end) in new[] { (0, open, open + 9 * 60), (1, open, open + 9 * 60), (3, s.Close[3] + 30 - 9 * 60, s.Close[3] + 30) })
+            // Fixed rosters: an assistant on Monday and Tuesday opens and a Thursday close every
+            // week, and a DSM on a two-week cycle (a Wednesday close, then a Saturday open).
+            void Fix(Employee e, int cycleWeeks, params (int Week, int Dow, int Start, int End)[] days)
             {
-                fixedRosters.Add(new FixedRoster { EmployeeId = fixedPerson.Id, DayOfWeek = dow, StartTime = T(start), EndTime = T(end), WeekIndex = 0 });
-                s.Fixed[(fixedPerson.Id, dow)] = (start, end);
+                foreach (var (week, dow, start, end) in days)
+                {
+                    fixedRosters.Add(new FixedRoster { EmployeeId = e.Id, DayOfWeek = dow, StartTime = T(start), EndTime = T(end), WeekIndex = week });
+                    s.Fixed[(e.Id, dow, week)] = (start, end);
+                }
+                cycles.Add(new FixedRosterCycle { EmployeeId = e.Id, CycleWeeks = cycleWeeks, StartDate = Previous });
+                s.CycleWeeks[e.Id] = cycleWeeks;
             }
-            cycles.Add(new FixedRosterCycle { EmployeeId = fixedPerson.Id, CycleWeeks = 1, StartDate = Previous });
+            var open = s.Open[0] - 60;
+            Fix(t[5], 1, (0, 0, open, open + 9 * 60), (0, 1, open, open + 9 * 60), (0, 3, s.Close[3] + 30 - 9 * 60, s.Close[3] + 30));
+            Fix(t[2], 2, (0, 2, s.Close[2] + 30 - 8 * 60, s.Close[2] + 30), (1, 5, s.Open[5] - 60, s.Open[5] - 60 + 8 * 60));
         }
         await SaveAsync("employee_availability", availability, ct);
         await SaveAsync("employee_restricted_tasks", restricted, ct);
@@ -778,10 +785,13 @@ internal sealed class DevSeedBuilder(RosterDbContext db, DateOnly today, FirstSu
         }
 
         // Fixed rosters first, as the engine honours them.
-        foreach (var ((id, dow), (start, end)) in s.Fixed)
+        foreach (var ((id, dow, week), (start, end)) in s.Fixed)
         {
             var e = s.Team.Single(x => x.Id == id);
-            if (dow == d && Free(e)) { used.Add(id); shifts.Add(new SeedShift(e, start, end, start < s.Open[d] ? "open" : "close")); }
+            var cycleWeek = ((date.DayNumber - Previous.DayNumber) / 7 % s.CycleWeeks[id] + s.CycleWeeks[id]) % s.CycleWeeks[id];
+            if (dow != d || week != cycleWeek || !Free(e) || used.Contains(id)) continue;
+            used.Add(id);
+            shifts.Add(new SeedShift(e, start, end, Roles.Managers.Contains(e.Role) ? "manager" : start < s.Open[d] ? "open" : "close"));
         }
         var managers = s.Team.Where(e => Roles.Managers.Contains(e.Role)).ToList();
         var assistants = s.Team.Where(e => e.Role == Roles.Sa).ToList();
