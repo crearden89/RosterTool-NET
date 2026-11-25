@@ -1,0 +1,21 @@
+@* One value against the largest of its kind: a thin rounded bar on a lavender
+   track. It sits beside the figure it draws (the number is always written too). *@
+<span role="img" aria-label="@Label" class="block h-2.5 w-full overflow-hidden rounded-full bg-[var(--ui-lavender)]">
+    @if (_v > 0)
+    {
+        @* A part too small to see still shows as a dot. *@
+        <span class="block h-full min-w-2.5 rounded-full" style="@($"width: {Css.N(_v * 100)}%; background: {Colour}")"></span>
+    }
+</span>
+
+@code {
+    private double _v;
+
+    /// <summary>The length, as a fraction (0-1) the page's helpers work out.</summary>
+    [Parameter] public double Value { get; set; }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string Colour { get; set; } = "var(--ui-ink)";
+
+    protected override void OnParametersSet() => _v = Css.Clamp01(Value);
+}

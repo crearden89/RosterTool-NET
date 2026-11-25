@@ -1,0 +1,127 @@
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject IOptions<BrandingOptions> Branding
+@inject RosterJs Js
+@* The menu (the TypeScript app's components/nav/Sidebar.tsx): white, section
+   names in small grey capitals, plain items, the page you are on as a lavender
+   pill in bold. It stays in view down a long page on a desk; below 1024 px it
+   is a slide-over behind a fixed top bar (240 px of a 390 px phone left the
+   content an 86 px gutter). *@
+
+@* The phone bar. Fixed, so it never becomes a flex item in the shell's row;
+   the content area clears it with pt-14. *@
+<header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-[var(--ui-line)] bg-white px-4 lg:hidden">
+    <button type="button" @onclick="OpenAsync" aria-label="Open navigation" aria-expanded="@(_open ? "true" : "false")"
+            class="@Ui.Cx("-ml-2 rounded-xl p-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)]", Ui.FocusRing)">
+        <svg viewBox="0 0 20 20" aria-hidden="true" class="h-6 w-6 fill-current">
+            <rect x="2" y="4.25" width="16" height="1.9" rx="0.95" />
+            <rect x="2" y="9.05" width="16" height="1.9" rx="0.95" />
+            <rect x="2" y="13.85" width="16" height="1.9" rx="0.95" />
+        </svg>
+    </button>
+    <BrandLogo Class="h-7 w-auto rounded-md" />
+    <span class="font-bold tracking-tight text-[var(--ui-ink)]">@Branding.Value.AppName</span>
+    <NotificationsBell Count="UnreadCount" />
+</header>
+
+@if (_open)
+{
+    <div @onclick="CloseAsync" aria-hidden="true" class="fixed inset-0 z-40 bg-[var(--ui-ink)]/40 lg:hidden"></div>
+}
+
+<aside class="@Ui.Cx("fixed inset-y-0 left-0 z-50 flex h-dvh w-60 shrink-0 flex-col border-r border-[var(--ui-line)] bg-white transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0", _open ? "translate-x-0" : "-translate-x-full")">
+    <div class="flex items-center gap-2.5 px-5 pt-5 pb-4">
+        <BrandLogo Class="h-8 w-auto rounded-md" />
+        <span class="font-bold tracking-tight text-[var(--ui-ink)]">@Branding.Value.AppName</span>
+        <button type="button" @onclick="CloseAsync" aria-label="Close navigation"
+                class="@Ui.Cx("ml-auto rounded-lg p-1 text-xl leading-none text-[var(--ui-muted)] hover:bg-[var(--ui-lavender)] lg:hidden", Ui.FocusRing)">×</button>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-3 pt-1 pb-4" aria-label="Main">
+        <div class="mb-5">
+            @{ var notificationsActive = _path == "/notifications"; }
+            <a href="notifications" @onclick="CloseAsync" aria-current="@(notificationsActive ? "page" : null)" class="@ItemClass(notificationsActive)">
+                <span>Notifications</span>
+                @if (UnreadCount > 0)
+                {
+                    <span class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--brand-red)] px-1.5 py-0.5 text-xs font-semibold leading-none text-white">@UnreadCount</span>
+                }
+            </a>
+        </div>
+        @foreach (var s in NavConfig.ForTier(User.Tier))
+        {
+            <div @key="s.Section" class="mb-5">
+                <p class="px-3 pb-1.5 text-[10.5px] font-semibold tracking-[0.1em] text-[var(--ui-faint)] uppercase">@s.Section</p>
+                @foreach (var item in s.Items)
+                {
+                    var active = NavConfig.IsActive(_path, item.Href);
+                    <a @key="item.Href" href="@ShellPaths.Href(item.Href)" @onclick="CloseAsync" aria-current="@(active ? "page" : null)" class="@ItemClass(active)">
+                        <span>@item.Label</span>
+                    </a>
+                }
+            </div>
+        }
+    </nav>
+
+    <div class="border-t border-[var(--ui-line)] px-5 py-4">
+        <p class="truncate text-sm font-semibold text-[var(--ui-ink)]">@User.Name</p>
+        <p class="mb-2.5 text-xs text-[var(--ui-muted)]">@User.Tier.Label()</p>
+        <SignOutButton />
+    </div>
+</aside>
+
+@code {
+    private bool _open;
+    private string _path = "/";
+    private DotNetObjectReference<Sidebar>? _self;
+    private IJSObjectReference? _escape;
+
+    [Parameter, EditorRequired] public AppUser User { get; set; } = default!;
+    [Parameter] public int UnreadCount { get; set; }
+
+    // A menu item: plain text, and the page you are on as a soft lavender pill in bold.
+    private static string ItemClass(bool active) => Ui.Cx(
+        "flex items-center gap-2 rounded-xl px-3 py-[7px] text-sm transition-colors", Ui.FocusRing,
+        active ? "bg-[var(--ui-lavender)] font-semibold text-[var(--ui-ink)]" : "text-[var(--ui-ink)]/80 hover:bg-[var(--ui-canvas)] hover:text-[var(--ui-ink)]");
+
+    protected override void OnInitialized()
+    {
+        _path = ShellPaths.PathOf(Navigation);
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _path = ShellPaths.PathOf(Navigation);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenAsync()
+    {
+        _open = true;
+        // Escape closes it, the way any other modal surface behaves.
+        _self ??= DotNetObjectReference.Create(this);
+        _escape ??= await Js.OnKeyAsync("Escape", _self, nameof(CloseFromScript));
+    }
+
+    private async Task CloseAsync()
+    {
+        _open = false;
+        await _escape.DisposeQuietlyAsync();
+        _escape = null;
+    }
+
+    [JSInvokable]
+    public async Task CloseFromScript()
+    {
+        await CloseAsync();
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        await _escape.DisposeQuietlyAsync();
+        _self?.Dispose();
+    }
+}

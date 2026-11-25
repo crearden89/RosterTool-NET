@@ -1,0 +1,58 @@
+@inject NavigationManager Navigation
+@* The page under a SettingsHeader: the "On this page" index beside the section
+   cards on a wide screen (a fold-out list above them on a narrow one), inside
+   the save scope. SaveNote is the save bar's line ("Changes apply from the
+   next Generate"). *@
+<SaveScope Note="SaveNote">
+    @if (Sections.Count > 1)
+    {
+        <details class="mb-4 rounded-2xl border border-[var(--ui-line)] bg-white px-4 py-3 lg:hidden">
+            <summary class="@Ui.Cx("cursor-pointer rounded-sm text-sm font-semibold text-[var(--ui-ink)]", Ui.FocusRing)">On this page</summary>
+            <div class="mt-2">@Index</div>
+        </details>
+    }
+    <div class="@(Sections.Count > 1 ? "grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)]" : null)">
+        @if (Sections.Count > 1)
+        {
+            <nav aria-label="On this page" class="hidden lg:block">
+                <Eyebrow Class="mb-2 pl-3.5">On this page</Eyebrow>
+                @Index
+            </nav>
+        }
+        <div class="min-w-0 space-y-4">@ChildContent</div>
+    </div>
+</SaveScope>
+
+@code {
+    // The section last jumped to (the first until then). The content column
+    // scrolls with the window, so the index sits at the top of the page rather
+    // than following it down.
+    private string _current = "";
+
+    [Parameter, EditorRequired] public IReadOnlyList<SettingsSectionRef> Sections { get; set; } = [];
+    [Parameter] public RenderFragment? SaveNote { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Sections.All(s => s.Id != _current)) _current = Sections.Count > 0 ? Sections[0].Id : "";
+    }
+
+    // A jump within the page, written against the page's own path (a bare "#id"
+    // would resolve against the base address, not this page).
+    private string Jump(string id) => $"{ShellPaths.Href(ShellPaths.PathOf(Navigation))}#{id}";
+
+    private RenderFragment Index => __builder =>
+    {
+        <ol class="space-y-0.5 border-l-2 border-[var(--ui-line)]">
+            @foreach (var s in Sections)
+            {
+                var on = s.Id == _current;
+                <li @key="s.Id">
+                    <a href="@Jump(s.Id)" @onclick="() => _current = s.Id" aria-current="@(on ? "location" : null)"
+                       class="@Ui.Cx("-ml-0.5 block rounded-r-md border-l-2 px-3 py-1.5 text-sm", Ui.FocusRing, on ? "border-[var(--ui-ink)] font-semibold text-[var(--ui-ink)]" : "border-transparent text-[var(--ui-muted)] hover:text-[var(--ui-ink)]")">@s.Title</a>
+                </li>
+            }
+        </ol>
+    };
+}

@@ -1,0 +1,76 @@
+@implements IAsyncDisposable
+@inject RosterJs Js
+@* A dialog that slides in from the right over a dimmed page: a white header (a
+   small line above the title, the title, pills, icon buttons), a body of cards
+   on the light canvas that scrolls on its own, and a footer of actions. Full
+   width on a phone. Escape or a click on the dimmed page closes it; focus
+   moves into the sheet when it opens, Tab stays inside it, and focus goes back
+   to where it was when it closes. Render it while it is open:
+   @if (open) { <SideSheet TitleId="sheet-title" OnClose="() => open = false">...</SideSheet> } *@
+<div class="fixed inset-0 z-40 bg-[var(--ui-ink)]/35" @onclick="CloseAsync" aria-hidden="true"></div>
+<aside @ref="_sheet" role="dialog" aria-modal="true" aria-labelledby="@TitleId" tabindex="-1"
+       class="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-[var(--ui-line)] bg-[var(--ui-canvas)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-[-14px_0_36px_rgba(0,0,95,0.18)] outline-none sm:max-w-[34rem]">
+    <div class="flex items-start gap-3 border-b border-[var(--ui-line)] bg-white px-4 py-4 sm:px-6 sm:py-5">
+        <div class="min-w-0 flex-1">
+            @if (Eyebrow is not null)
+            {
+                <p class="text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase">@Eyebrow</p>
+            }
+            <h2 id="@TitleId" class="mt-0.5 text-xl font-bold tracking-tight text-[var(--ui-ink)] sm:text-2xl">@Title</h2>
+            @if (Badges is not null)
+            {
+                <div class="mt-2 flex flex-wrap gap-1.5">@Badges</div>
+            }
+        </div>
+        @if (Actions is not null)
+        {
+            <div class="flex shrink-0 gap-1.5">@Actions</div>
+        }
+    </div>
+    <div class="flex-1 overflow-y-auto px-4 py-5 sm:px-6">@ChildContent</div>
+    @if (Footer is not null)
+    {
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--ui-line)] bg-white px-4 py-3 sm:px-6 sm:py-4">@Footer</div>
+    }
+</aside>
+
+@code {
+    private ElementReference _sheet;
+    private DotNetObjectReference<SideSheet>? _self;
+    private IJSObjectReference? _trap;
+
+    /// <summary>The id the title carries, for aria-labelledby.</summary>
+    [Parameter, EditorRequired] public string TitleId { get; set; } = "";
+
+    [Parameter] public RenderFragment? Eyebrow { get; set; }
+    [Parameter, EditorRequired] public RenderFragment? Title { get; set; }
+
+    /// <summary>Pills under the title.</summary>
+    [Parameter] public RenderFragment? Badges { get; set; }
+
+    /// <summary>Icon buttons on the right of the header (previous, next, close): SheetIconButton.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public RenderFragment? Footer { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _self = DotNetObjectReference.Create(this);
+        _trap = await Js.SideSheetAsync(_sheet, _self);
+    }
+
+    /// <summary>Escape, from the focus trap.</summary>
+    [JSInvokable]
+    public Task CloseFromScript() => CloseAsync();
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        await _trap.DisposeQuietlyAsync();
+        _self?.Dispose();
+    }
+}

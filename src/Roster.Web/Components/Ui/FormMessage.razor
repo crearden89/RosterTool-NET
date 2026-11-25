@@ -1,0 +1,8 @@
+@* A short line under a form: "Saved.", or the reason a save was refused. *@
+<p role="@(Tone == FormMessageTone.Error ? "alert" : "status")"
+   class="@(Tone == FormMessageTone.Error ? "text-sm font-medium text-[var(--ui-bad)]" : "text-sm text-[var(--ui-good)]")">@ChildContent</p>
+
+@code {
+    [Parameter, EditorRequired] public FormMessageTone Tone { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

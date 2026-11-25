@@ -1,0 +1,88 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject INotificationService Notifications
+@inject ShellEvents Events
+@inject NavigationManager Navigation
+@inject RosterJs Js
+@* The signed-in shell (the TypeScript app's app/(app)/layout.tsx): the menu, a
+   read-only line for PA and DSO, and the page. *@
+@if (_user is null)
+{
+    <main class="px-4 py-5 sm:px-6 lg:p-8">@Body</main>
+}
+else
+{
+    <div class="flex min-h-dvh">
+        <Sidebar User="_user" UnreadCount="_unread" />
+        @* pt-14 clears the fixed phone bar the Sidebar draws below lg, where it
+           sits out of flow so the content can use the full width. *@
+        <div class="flex-1 overflow-x-hidden pt-14 lg:pt-0">
+            @if (_user.IsReadOnly)
+            {
+                <div class="border-b border-[var(--ui-line)] bg-[var(--ui-lavender)] px-4 py-1.5 text-center text-xs font-medium text-[var(--ui-ink)] lg:px-8">
+                    Read-only access - you can view data across your scope but cannot make changes.
+                </div>
+            }
+            <main class="px-4 py-5 sm:px-6 lg:p-8">
+                <ErrorBoundary @ref="_errors">
+                    <ChildContent>@Body</ChildContent>
+                    <ErrorContent>
+                        <AppError OnRetry="Retry" />
+                    </ErrorContent>
+                </ErrorBoundary>
+            </main>
+        </div>
+    </div>
+}
+<PortalOutlet />
+
+@code {
+    private AppUser? _user;
+    private int _unread;
+    private ErrorBoundary? _errors;
+
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = AuthenticationState is null ? null : AppUser.FromPrincipal((await AuthenticationState).User);
+        await LoadUnreadAsync();
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Events.UnreadChanged += OnUnreadChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Loads the browser helpers (and their key handling) once per connection.
+        if (firstRender) await Js.ReadyAsync();
+    }
+
+    private async Task LoadUnreadAsync() => _unread = _user is null ? 0 : await Notifications.UnreadCountAsync(_user);
+
+    // Every page is a fresh look: the count is read again, and a page that
+    // failed gets another chance once you go somewhere else.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(async () =>
+    {
+        _errors?.Recover();
+        await LoadUnreadAsync();
+        StateHasChanged();
+    });
+
+    private void OnUnreadChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadUnreadAsync();
+        StateHasChanged();
+    });
+
+    private void Retry() => _errors?.Recover();
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        Events.UnreadChanged -= OnUnreadChanged;
+    }
+}

@@ -1,0 +1,24 @@
+@* A label in small capitals, one big figure, a grey line under it, and an optional link at the foot. *@
+<div class="@Ui.Cx("flex flex-col rounded-2xl border border-[var(--ui-line)] bg-white p-5", Class)">
+    <Eyebrow>@Label</Eyebrow>
+    <div class="mt-2 text-2xl font-bold leading-tight tracking-tight text-[var(--ui-ink)]">@Value</div>
+    @if (Sub is not null)
+    {
+        <div class="mt-1 text-xs text-[var(--ui-muted)]">@Sub</div>
+    }
+    @if (Footer is not null)
+    {
+        <div class="mt-auto pt-3 text-xs">@Footer</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment? Label { get; set; }
+    [Parameter, EditorRequired] public RenderFragment? Value { get; set; }
+    [Parameter] public RenderFragment? Sub { get; set; }
+
+    /// <summary>A link or note at the foot of the card.</summary>
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+}

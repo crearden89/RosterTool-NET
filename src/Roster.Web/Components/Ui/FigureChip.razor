@@ -1,0 +1,18 @@
+@* One of a day's figures beside its title ("51.00 h planned"). *@
+<span class="inline-flex items-baseline gap-1 rounded-xl border border-[var(--ui-line)] bg-white px-3 py-1.5 text-sm whitespace-nowrap">
+    <b class="@Ui.Cx("font-semibold tabular-nums", Ink)">@Value</b>
+    <span class="text-[var(--ui-muted)]">@Label</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment? Value { get; set; }
+    [Parameter, EditorRequired] public RenderFragment? Label { get; set; }
+    [Parameter] public FigureTone Tone { get; set; } = FigureTone.Plain;
+
+    private string Ink => Tone switch
+    {
+        FigureTone.Bad => "text-[var(--ui-bad)]",
+        FigureTone.Good => "text-[var(--ui-good)]",
+        _ => "text-[var(--ui-ink)]",
+    };
+}

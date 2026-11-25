@@ -1,0 +1,37 @@
+@implements IDisposable
+@implements ISaveSlot
+@* A form that the page's save bar saves (useSaveSlot). Changes is how many of
+   its values differ from what is saved; Save runs its own action and returns
+   whether it was accepted (showing any refusal itself); Discard goes back to
+   what is saved. Put it inside the form's own component, within a SaveScope. *@
+
+@code {
+    private string? _registered;
+
+    [CascadingParameter] public SaveScope? Scope { get; set; }
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter] public int Changes { get; set; }
+    [Parameter, EditorRequired] public Func<Task<bool>> Save { get; set; } = () => Task.FromResult(true);
+    [Parameter, EditorRequired] public EventCallback Discard { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Scope is null) return;
+        if (_registered != Id)
+        {
+            if (_registered is not null) Scope.Unregister(_registered);
+            Scope.Register(Id, this);
+            _registered = Id;
+        }
+        Scope.SetChanges(Id, Changes);
+    }
+
+    Task<bool> ISaveSlot.SaveAsync() => Save();
+
+    Task ISaveSlot.DiscardAsync() => Discard.InvokeAsync();
+
+    public void Dispose()
+    {
+        if (_registered is not null) Scope?.Unregister(_registered);
+    }
+}

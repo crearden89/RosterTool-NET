@@ -1,0 +1,27 @@
+@* A day's title: a small "Day" over the day in words, the day's own controls
+   beside it and its figures on the right. *@
+<div class="@Ui.Cx("flex flex-wrap items-end justify-between gap-x-6 gap-y-3", Class)">
+    <div class="min-w-0">
+        <Eyebrow>Day</Eyebrow>
+        <div class="mt-0.5 flex flex-wrap items-center gap-3">
+            <h2 class="text-2xl leading-tight font-bold tracking-tight text-[var(--ui-ink)]">@Title</h2>
+            @Beside
+        </div>
+    </div>
+    @if (Figures is not null)
+    {
+        <div class="flex flex-wrap items-center gap-2">@Figures</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>The day's own controls and notes, beside its title.</summary>
+    [Parameter] public RenderFragment? Beside { get; set; }
+
+    /// <summary>The day's figures, on the right.</summary>
+    [Parameter] public RenderFragment? Figures { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+}

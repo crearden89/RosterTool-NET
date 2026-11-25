@@ -1,0 +1,173 @@
+@implements IAsyncDisposable
+@inject RosterJs Js
+@* Type-ahead picker for long team lists: start typing any part of a name and
+   the list narrows to it. With an empty query it shows everyone, so it still
+   behaves like an ordinary dropdown at a small store. A native <select> can't
+   filter, and this has to sit inside a table cell without disturbing the
+   grid's row height.
+
+   The open list is drawn at the foot of the page (Portal) and placed from the
+   input's position on screen: inside the roster grid the input sits in a
+   horizontally scrolling box and a sticky first column, which would clip and
+   bury a list drawn in place. *@
+<div @ref="_box" class="@Ui.Cx("relative", Class)">
+    <input type="text" role="combobox" aria-expanded="@(_open ? "true" : "false")" aria-controls="@_listId"
+           aria-activedescendant="@(_open && _active < _matches.Count ? OptionId(_active) : null)"
+           autocomplete="off" disabled="@Disabled"
+           value="@(_open ? _query : Selected?.Label ?? "")" placeholder="@(Selected?.Label ?? Placeholder)"
+           data-prevent-keys="ArrowDown ArrowUp Enter Escape"
+           @oninput="OnInput" @onfocus="OpenList" @onkeydown="OnKeyDownAsync"
+           class="w-full rounded border border-[var(--brand-border)] bg-white px-2 py-1 text-sm font-medium text-[var(--brand-navy)] disabled:opacity-50" />
+</div>
+@if (_open)
+{
+    <Portal>
+        <ul id="@_listId" role="listbox" style="position: fixed; visibility: hidden"
+            class="z-50 max-h-56 overflow-auto rounded-lg border border-[var(--brand-border)] bg-white py-1 shadow-lg">
+            @if (_matches.Count == 0)
+            {
+                <li class="px-3 py-2 text-xs text-[var(--brand-navy)]/50">No one matches “@_query”</li>
+            }
+            else
+            {
+                @for (var i = 0; i < _matches.Count; i++)
+                {
+                    var index = i;
+                    var o = _matches[i];
+                    <li @key="o.Id">
+                        <button type="button" id="@OptionId(index)" role="option" aria-selected="@(o.Id == Value ? "true" : "false")"
+                                disabled="@o.Disabled" title="@(o.Disabled ? o.DisabledReason : null)"
+                                @onmouseenter="() => _active = index" @onclick="() => PickAsync(o)"
+                                class="@Ui.Cx("flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm", o.Disabled ? "cursor-not-allowed text-[var(--brand-navy)]/30" : index == _active ? "bg-[var(--brand-navy-tint)] text-[var(--brand-navy)]" : "text-[var(--brand-navy)]")">
+                            <span class="@(o.Id == Value ? "font-semibold" : null)">@o.Label</span>
+                            @if (o.Hint is not null)
+                            {
+                                <span class="text-xs text-[var(--brand-navy)]/45">@o.Hint</span>
+                            }
+                        </button>
+                    </li>
+                }
+            }
+        </ul>
+    </Portal>
+}
+
+@code {
+    // Unique per instance: a roster grid draws a dozen of these.
+    private readonly string _listId = $"combo-{Guid.NewGuid():N}";
+    private ElementReference _box;
+    private DotNetObjectReference<NameCombobox>? _self;
+    private IJSObjectReference? _anchor;
+    private bool _open;
+    private bool _wasOpen;
+    private string _query = "";
+    private int _active;
+    private int? _scrollTo;
+    private IReadOnlyList<ComboOption> _matches = [];
+
+    /// <summary>The chosen option's id.</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter, EditorRequired] public IReadOnlyList<ComboOption> Options { get; set; } = [];
+
+    /// <summary>Called with the chosen option's id.</summary>
+    [Parameter] public EventCallback<string> OnChange { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Select…";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private ComboOption? Selected => Options.FirstOrDefault(o => o.Id == Value);
+
+    private string OptionId(int i) => $"{_listId}-{i}";
+
+    protected override void OnParametersSet() => Filter();
+
+    private void Filter()
+    {
+        var q = _query.Trim();
+        _matches = q.Length == 0 ? Options : Options.Where(o => o.Label.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private void OpenList() => _open = true;
+
+    private void Close()
+    {
+        _open = false;
+        _query = "";
+        Filter();
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? "";
+        _active = 0;
+        _open = true;
+        Filter();
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown" or "ArrowUp":
+                if (!_open)
+                {
+                    OpenList();
+                    return;
+                }
+                _active = Math.Max(0, Math.Min(_matches.Count - 1, _active + (e.Key == "ArrowDown" ? 1 : -1)));
+                _scrollTo = _active;
+                return;
+            case "Enter":
+                if (_open && _active < _matches.Count) await PickAsync(_matches[_active]);
+                else OpenList();
+                return;
+            case "Escape":
+                Close();
+                return;
+        }
+    }
+
+    private async Task PickAsync(ComboOption o)
+    {
+        if (o.Disabled) return;
+        await OnChange.InvokeAsync(o.Id);
+        Close();
+    }
+
+    /// <summary>A press outside the input and the list.</summary>
+    [JSInvokable]
+    public Task CloseFromScript()
+    {
+        Close();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Js.ReadyAsync();
+        if (_open && !_wasOpen)
+        {
+            _self ??= DotNetObjectReference.Create(this);
+            _anchor = await Js.ComboListAsync(_box, _listId, _self);
+        }
+        else if (!_open && _wasOpen)
+        {
+            await _anchor.DisposeQuietlyAsync();
+            _anchor = null;
+        }
+        _wasOpen = _open;
+        if (_scrollTo is { } i)
+        {
+            _scrollTo = null;
+            await Js.ScrollIntoViewAsync(OptionId(i));
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _anchor.DisposeQuietlyAsync();
+        _self?.Dispose();
+    }
+}

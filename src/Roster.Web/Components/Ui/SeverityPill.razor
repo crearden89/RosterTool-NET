@@ -1,0 +1,21 @@
+@* A check's severity as a pill: Error, Warning, OK or Note. *@
+<Pill Tone="@_pill">
+    <Icon Name="@_icon" Class="h-3 w-3" StrokeWidth="2.5" />
+    @_label
+</Pill>
+
+@code {
+    private PillTone _pill;
+    private IconName _icon;
+    private string _label = "";
+
+    [Parameter, EditorRequired] public CheckTone Tone { get; set; }
+
+    protected override void OnParametersSet() => (_pill, _label, _icon) = Tone switch
+    {
+        CheckTone.Error => (PillTone.Red, "Error", IconName.CircleAlert),
+        CheckTone.Warning => (PillTone.Amber, "Warning", IconName.TriangleAlert),
+        CheckTone.Ok => (PillTone.Green, "OK", IconName.Check),
+        _ => (PillTone.Soft, "Note", IconName.Info),
+    };
+}

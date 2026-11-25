@@ -1,0 +1,23 @@
+@implements IDisposable
+@inject PortalService Portals
+@* Where Portal content is drawn: once, at the end of each layout. *@
+@foreach (var (id, content) in Portals.Items)
+{
+    <div @key="id">@content</div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Portals.Outlets++;
+        Portals.Changed += OnChanged;
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Portals.Outlets--;
+        Portals.Changed -= OnChanged;
+    }
+}

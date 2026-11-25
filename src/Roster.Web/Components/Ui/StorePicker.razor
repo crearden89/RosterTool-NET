@@ -1,0 +1,60 @@
+@inject NavigationManager Navigation
+@inject StoreSelection Selection
+@inject RosterJs Js
+@* The store choice in a page header, for people who see more than one store
+   (EMSO, PA, DSO, super user); nothing for someone with one store. Choosing a
+   store opens the page on it (?store=) and remembers it, so every other page
+   then opens on it too. Inside a SaveScope it asks before leaving unsaved
+   changes. *@
+@if (Stores.Count > 1)
+{
+    <select @key="_version" aria-label="Store" value="@Value?.ToString()" disabled="@Disabled" @onchange="OnChangeAsync"
+            class="@Ui.Cx(Ui.FieldClass, "max-w-[16rem]")">
+        @foreach (var s in Stores)
+        {
+            <option @key="s.Id" value="@s.Id">@s.Label</option>
+        }
+    </select>
+}
+
+@code {
+    // Bumped to draw the select afresh when a change is called off, so it shows
+    // the store the page is still on.
+    private int _version;
+
+    [CascadingParameter] public SaveScope? SaveScope { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<StoreInfo> Stores { get; set; } = [];
+
+    /// <summary>The store the page is on.</summary>
+    [Parameter] public Guid? Value { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Where a choice goes. By default the same page with ?store= replaced and its
+    /// other query values kept.
+    /// </summary>
+    [Parameter] public Func<Guid, string>? HrefFor { get; set; }
+
+    /// <summary>Called instead of navigating, for a page that switches store in place.</summary>
+    [Parameter] public EventCallback<Guid> OnChange { get; set; }
+
+    private async Task OnChangeAsync(ChangeEventArgs e)
+    {
+        if (!Guid.TryParse(e.Value?.ToString(), out var id) || id == Value) return;
+        if (SaveScope is not null && !await SaveScope.ConfirmLeaveAsync())
+        {
+            _version++;
+            return;
+        }
+        Selection.Remember(id);
+        await Js.SetCookieAsync(StoreSelection.CookieName, id.ToString(), TimeSpan.FromDays(365));
+        if (OnChange.HasDelegate)
+        {
+            await OnChange.InvokeAsync(id);
+            return;
+        }
+        Navigation.NavigateTo(HrefFor?.Invoke(id) ?? Navigation.GetUriWithQueryParameter("store", id.ToString()));
+    }
+}

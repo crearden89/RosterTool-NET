@@ -1,0 +1,24 @@
+@* A day's checks as one list: each with its severity pill and the check in
+   words, any explanation under it. The callers grade the checks; this only
+   draws them, errors first as they are given. *@
+<ul class="divide-y divide-[var(--ui-line)]">
+    @foreach (var r in Rows)
+    {
+        <li @key="r.Key" class="flex items-start gap-3 px-5 py-3 sm:px-6">
+            <span class="w-[5.5rem] shrink-0">
+                <SeverityPill Tone="r.Tone" />
+            </span>
+            <div class="min-w-0 text-sm text-[var(--ui-ink)]">
+                <p>@r.Message</p>
+                @if (r.Detail is not null)
+                {
+                    <p class="mt-1 text-xs text-[var(--ui-muted)]">@r.Detail</p>
+                }
+            </div>
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CheckRow> Rows { get; set; } = [];
+}

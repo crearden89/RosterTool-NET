@@ -1,0 +1,27 @@
+@inject IOptions<BrandingOptions> Branding
+@* The sign-in pages' frame (the TypeScript app's login page): the logo, the
+   app's name and line, a card, and the kiosk hint under it. The kiosk links
+   are deliberately not linked from here: that would leak a store's token. *@
+<PageTitle>@(Title is null ? Branding.Value.AppName : $"{Title} · {Branding.Value.AppName}")</PageTitle>
+<div class="flex min-h-screen items-center justify-center bg-[var(--brand-surface)] px-4">
+    <div class="w-full max-w-[380px]">
+        <div class="mb-7 flex flex-col items-center text-center">
+            <BrandLogo Class="mb-4 h-14 w-auto" />
+            <h1 class="text-[28px] font-bold leading-tight tracking-tight text-[var(--ui-ink)]">@Branding.Value.AppName</h1>
+            <p class="mt-1.5 text-sm text-[var(--ui-muted)]">@Branding.Value.Tagline</p>
+        </div>
+        <div class="rounded-2xl border border-[var(--ui-line)] bg-white p-6 sm:p-7">
+            @ChildContent
+        </div>
+        <p class="mt-5 text-center text-sm text-[var(--ui-muted)]">
+            Store tablet? Open the kiosk link pinned for your store.
+        </p>
+    </div>
+</div>
+
+@code {
+    /// <summary>The browser tab's title before the app's name.</summary>
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,12 @@
+@* The unread count in the phone bar: a red pill that opens Notifications,
+   shown only while something is unread (the desk menu shows the same count on
+   its Notifications item). The count comes from INotificationService. *@
+@if (Count > 0)
+{
+    <a href="notifications" aria-label="@($"{Count} unread notifications")"
+       class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--brand-red)] px-1.5 py-0.5 text-xs font-semibold leading-none text-white">@Count</a>
+}
+
+@code {
+    [Parameter] public int Count { get; set; }
+}

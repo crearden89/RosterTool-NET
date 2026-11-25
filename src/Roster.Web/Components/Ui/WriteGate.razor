@@ -1,0 +1,33 @@
+@* Read-only tiers see no write controls. Wrap a page's write controls in it:
+   <WriteGate Page="_page"><button ...>Save</button></WriteGate>. With Page (a
+   StoreScope result) the write must also be in the person's scope for that
+   store; without it, only the tier counts (PA and DSO never write). ReadOnly
+   is shown instead, when given. *@
+@if (_canWrite)
+{
+    @ChildContent
+}
+else
+{
+    @ReadOnly
+}
+
+@code {
+    private bool _canWrite;
+
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    /// <summary>The page's store and access, from <see cref="StoreScope.ResolveAsync"/>.</summary>
+    [Parameter] public StorePage? Page { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>What a person who cannot write sees instead (nothing when not given).</summary>
+    [Parameter] public RenderFragment? ReadOnly { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = AuthenticationState is null ? null : AppUser.FromPrincipal((await AuthenticationState).User);
+        _canWrite = user is { IsReadOnly: false } && (Page is null || Page.CanWrite);
+    }
+}
