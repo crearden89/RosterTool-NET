@@ -1,0 +1,213 @@
+@* Port of KnownRules in src/app/(app)/admin/rules/rostering/RulesClient.tsx.
+   The built-in rules. Each row saves with SetRuleOverrideAsync, as its own Save
+   button did; the page's save bar saves every changed row in turn. A row is
+   checked against its allowed range first and keeps its edit, with the reason
+   under it, if it is refused. Reset to default still acts at once
+   (ClearRuleOverrideAsync). *@
+@inject IRosteringRulesService Service
+
+<SaveSlot Id="known-rules" Changes="DirtyMetas.Count" Save="SaveAsync" Discard="Discard" />
+@foreach (var cat in RuleValueText.Categories)
+{
+    <SettingsSection @key="cat" Id="@RuleValueText.Slug(cat)" Flush="true">
+        <Title>@cat</Title>
+        <Purpose>@RuleValueText.Purpose.GetValueOrDefault(cat)</Purpose>
+        <ChildContent>
+            <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                <table class="@($"{Ui.Table.Element} min-w-[720px]")">
+                    <thead class="@Ui.Table.Head">
+                        <tr>
+                            <th class="@Ui.Table.Th">Rule</th>
+                            <th class="@Ui.Table.Th">Kind</th>
+                            <th class="@Ui.Table.Th">Value</th>
+                            <th class="@Ui.Table.Th">Default</th>
+                            <th class="@Ui.Table.Th">Status</th>
+                            <th class="@Ui.Table.Th"><span class="sr-only">Reset</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var meta in RuleMetas.All.Where(m => m.Category == cat))
+                        {
+                            var m = meta;
+                            var hasOverride = _byKey.ContainsKey(m.Key);
+                            var text = _texts[m.Key];
+                            var dirty = RuleValueText.IsDirty(m, text, _base[m.Key]);
+                            var err = _errors.GetValueOrDefault(m.Key);
+                            <tr @key="m.Key" class="@Ui.Cx(Ui.Table.Row, "align-top", dirty ? "bg-[var(--ui-lavender)]/50" : null)">
+                                <td class="px-3 py-2.5">
+                                    <p class="font-medium">@m.Label</p>
+                                    <p class="text-xs text-[var(--ui-muted)]">@m.Description</p>
+                                    @if (err is not null)
+                                    {
+                                        <p role="alert" class="mt-1 text-xs font-medium text-[var(--ui-bad)]">@err</p>
+                                    }
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Pill Tone="@(m.Kind == "legal" ? PillTone.Red : PillTone.Soft)">@(m.Kind == "legal" ? "Legal" : "Policy")</Pill>
+                                </td>
+                                <td class="px-3 py-2.5 whitespace-nowrap">
+                                    @if (m.Unit == "time")
+                                    {
+                                        <input type="time" aria-label="@m.Label" value="@text" @oninput="e => SetText(m.Key, e)" class="@Ui.CompactField" />
+                                    }
+                                    else
+                                    {
+                                        <span class="inline-flex items-center gap-1.5">
+                                            <input type="number" inputmode="decimal" aria-label="@m.Label" step="@Js.NumberToString(RuleValueText.Step(m))"
+                                                   value="@text" @oninput="e => SetText(m.Key, e)" class="@($"w-24 {Ui.CompactField}")" />
+                                            <span class="text-xs text-[var(--ui-muted)]">@RuleValueText.UnitLabel(m)</span>
+                                        </span>
+                                    }
+                                </td>
+                                <td class="px-3 py-2.5 text-sm whitespace-nowrap text-[var(--ui-muted)]">@RuleValueText.FormatValue(m, Default(m.Key))</td>
+                                <td class="px-3 py-2.5 whitespace-nowrap">
+                                    <span class="flex flex-wrap gap-1">
+                                        @if (hasOverride)
+                                        {
+                                            <Pill Tone="PillTone.Amber">Customised</Pill>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-xs text-[var(--ui-muted)]">Default</span>
+                                        }
+                                        @if (dirty)
+                                        {
+                                            <Pill Tone="PillTone.Navy">Unsaved</Pill>
+                                        }
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                                    @if (hasOverride)
+                                    {
+                                        <button type="button" @onclick="() => ResetAsync(m)" disabled="@_resetting"
+                                                title="Remove the override: the engine goes back to the default" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">
+                                            Reset
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </ChildContent>
+    </SettingsSection>
+}
+
+@code {
+    // What each box shows, and the value it was edited from. When the page's data
+    // comes back after a save, a row with no edit takes the new value; a row with
+    // one keeps it.
+    private IReadOnlyList<RuleOverrideRow>? _seen;
+    private Dictionary<string, RuleOverrideRow> _byKey = [];
+    private Dictionary<string, double> _base = [];
+    private Dictionary<string, string> _texts = [];
+    private readonly Dictionary<string, string> _errors = [];
+    private bool _resetting;
+
+    [Parameter, EditorRequired] public IReadOnlyList<RuleOverrideRow> Overrides { get; set; } = [];
+
+    /// <summary>After a change is saved: the page reads the rules again.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<RuleMeta> DirtyMetas => RuleMetas.All.Where(m => RuleValueText.IsDirty(m, _texts[m.Key], _base[m.Key])).ToList();
+
+    private static double Default(string key) => RosteringRules.Default.Get(key)!.Value;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(Overrides, _seen)) return;
+        _byKey = [];
+        foreach (var o in Overrides) _byKey[o.Key] = o;
+        var saved = RuleMetas.All.ToDictionary(m => m.Key, m => _byKey.TryGetValue(m.Key, out var o) ? o.Value : Default(m.Key));
+        if (_seen is null)
+        {
+            _base = saved;
+            _texts = RuleMetas.All.ToDictionary(m => m.Key, m => RuleValueText.TextOf(m, saved[m.Key]));
+        }
+        else
+        {
+            foreach (var m in RuleMetas.All)
+            {
+                if (RuleValueText.IsDirty(m, _texts[m.Key], _base[m.Key])) continue;
+                _base[m.Key] = saved[m.Key];
+                _texts[m.Key] = RuleValueText.TextOf(m, saved[m.Key]);
+            }
+        }
+        _seen = Overrides;
+    }
+
+    private void SetText(string key, ChangeEventArgs e) => _texts[key] = e.Value?.ToString() ?? "";
+
+    private void Settle(string key, double value, string text)
+    {
+        _base[key] = value;
+        _texts[key] = text;
+    }
+
+    private void SetError(string key, string? message)
+    {
+        if (message is null) _errors.Remove(key);
+        else _errors[key] = message;
+    }
+
+    private async Task<bool> SaveAsync()
+    {
+        var ok = true;
+        foreach (var meta in DirtyMetas)
+        {
+            var text = _texts[meta.Key];
+            var v = RuleValueText.ValueOf(meta, text);
+            if (!double.IsFinite(v))
+            {
+                SetError(meta.Key, "Enter a value.");
+                ok = false;
+                continue;
+            }
+            if (v < meta.Min || v > meta.Max)
+            {
+                SetError(meta.Key, RuleValueText.RangeMessage(meta));
+                ok = false;
+                continue;
+            }
+            var res = await Service.SetRuleOverrideAsync(meta.Key, v);
+            if (!res.Ok)
+            {
+                SetError(meta.Key, res.Error ?? "Save failed.");
+                ok = false;
+                continue;
+            }
+            SetError(meta.Key, null);
+            Settle(meta.Key, v, text);
+        }
+        await OnChanged.InvokeAsync();
+        StateHasChanged();
+        return ok;
+    }
+
+    private void Discard()
+    {
+        foreach (var m in RuleMetas.All) _texts[m.Key] = RuleValueText.TextOf(m, _base[m.Key]);
+        _errors.Clear();
+    }
+
+    private async Task ResetAsync(RuleMeta meta)
+    {
+        SetError(meta.Key, null);
+        _resetting = true;
+        try
+        {
+            var res = await Service.ClearRuleOverrideAsync(meta.Key);
+            if (!res.Ok) SetError(meta.Key, res.Error ?? "Reset failed.");
+            else
+            {
+                Settle(meta.Key, Default(meta.Key), RuleValueText.TextOf(meta, Default(meta.Key)));
+                await OnChanged.InvokeAsync();
+            }
+        }
+        finally
+        {
+            _resetting = false;
+        }
+    }
+}
