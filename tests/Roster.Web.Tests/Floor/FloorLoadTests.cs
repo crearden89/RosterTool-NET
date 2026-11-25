@@ -49,7 +49,7 @@ public class FloorLoadTests
     public void Plans_the_truck_as_the_Load_page_does_same_crew_bands_and_allocator()
     {
         var s = FloorLoad.SummariseLoad(Base);
-        var plan = LoadAllocator.AllocateLoad(PlanCrew, PlanItems);
+        var plan = Allocate.AllocateLoad(PlanCrew, PlanItems);
         Assert.True(s.Entered);
         Assert.Equal(8, s.Total);
         Assert.Equal([new LoadStripItem("Ambient", "#111", 6), new LoadStripItem("Freezer", "#222", 2)], s.Items);
@@ -68,7 +68,7 @@ public class FloorLoadTests
             new(new DateOnly(2026, 11, 19), "e1", "Freezer", false),
         };
         var s = FloorLoad.SummariseLoad(Base with { History = history });
-        var plan = LoadAllocator.AllocateLoad(PlanCrew, PlanItems, new AllocateOptions
+        var plan = Allocate.AllocateLoad(PlanCrew, PlanItems, new AllocateOptions
         {
             Pinned = new JsMap<string, string>([("e2", "Freezer")]),
             TypeCounts = new JsMap<string, double>([("e1:Freezer", 1.0)]),

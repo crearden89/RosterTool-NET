@@ -64,7 +64,7 @@ public static class LoadModel
 
     /// <summary>The plan for these pins (and these counts, while the truck is counted).</summary>
     public static LoadPlan PlanFor(PlanInputs i, IEnumerable<KeyValuePair<string, string>> pins, IReadOnlyDictionary<string, double>? qty = null) =>
-        LoadAllocator.AllocateLoad(
+        Allocate.AllocateLoad(
             i.Crew.Select(c => new LoadCrewMember(c.Key, c.Name, c.StartMin, c.TenureBand)).ToList(),
             LoadItemsFor(i.Types, qty),
             new AllocateOptions

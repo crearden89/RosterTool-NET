@@ -53,7 +53,7 @@ public class LoadModelTests
     {
         var pins = new Dictionary<string, string> { ["e2"] = "Short Life" };
         var plan = PlanFor(Inputs, pins);
-        var direct = LoadAllocator.AllocateLoad(
+        var direct = Allocate.AllocateLoad(
             Crew.Select(c => new LoadCrewMember(c.Key, c.Name, c.StartMin, c.TenureBand)).ToList(),
             LoadItemsFor(Types),
             new AllocateOptions { Pinned = new JsMap<string, string>(pins), TypeCounts = new JsMap<string, double>(TypeCounts) });

@@ -104,7 +104,7 @@ public static class FloorLoad
 
         var entered = i.Loads.Count > 0;
         var plan = entered && crew.Count > 0
-            ? LoadAllocator.AllocateLoad(crew, items, new AllocateOptions { Pinned = pinned, TypeCounts = typeCounts })
+            ? Allocate.AllocateLoad(crew, items, new AllocateOptions { Pinned = pinned, TypeCounts = typeCounts })
             : null;
         var total = plan is not null ? plan.TotalPallets : items.Sum(t => t.Qty);
         return new LoadSummary(
