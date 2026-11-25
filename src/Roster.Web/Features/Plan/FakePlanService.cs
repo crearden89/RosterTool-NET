@@ -3,14 +3,17 @@
 // real service (PlanService) replaces it in PlanModule.
 
 using System.Collections.Concurrent;
+using Roster.Data.Services.Held;
 using Roster.Engine.Core;
+using Roster.Engine.Planning.Plan;
 
 namespace Roster.Web.Features.Plan;
 
 /// <summary>
 /// FAKE: invented stores, an invented signed-in store manager (of the first store) and an
-/// in-memory held plan per store and fortnight. Generate runs in steps, as the real one
-/// does, sealing invented days. Nothing is saved anywhere.
+/// in-memory held plan per store and fortnight (FakePlanDays). Generate runs in steps, as
+/// the real one does, sealing invented days; an edit is checked and re-checked by the same
+/// code as the real one (PlanDayEdits). Nothing is saved anywhere.
 /// </summary>
 public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IPlanService
 {
@@ -39,13 +42,9 @@ public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IP
     private static readonly HashSet<DateOnly> Holidays =
         [new(2026, 12, 25), new(2026, 12, 26), new(2026, 12, 28), new(2027, 1, 1), new(2027, 1, 26)];
 
-    private sealed record FakeDay(DateOnly Date, bool Closed, double Benchmark, double Worked, int Shifts, int Errors, int Warnings, double NonOp);
-
     private sealed class Held
     {
-        public required List<FakeDay> Days { get; set; }
-        public DateTimeOffset GeneratedAt { get; set; }
-        public int Version { get; set; }
+        public required PlanSnapshot Plan { get; set; }
         public DateTimeOffset? RosterAt { get; set; }
     }
 
@@ -54,6 +53,16 @@ public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IP
     private readonly ConcurrentDictionary<(Guid, DateOnly), bool> _planApproved = new();
 
     private static string? Deny(Guid storeId) => storeId == ViewerStore ? null : DeniedScope;
+
+    // An invented trade curve: a morning rise, a lunchtime peak and a late-afternoon one.
+    private static readonly IReadOnlyList<CurveRow> Curve = Enumerable.Range(0, 7).SelectMany(d =>
+        Enumerable.Range(0, (20 * 60 - 8 * 60 - 30) / 15).Select(i =>
+        {
+            var t = 8 * 60 + 30 + i * 15;
+            var h = t / 60.0;
+            var share = 1 + 2.2 * Math.Exp(-Math.Pow(h - 12.5, 2) / 2.5) + 1.6 * Math.Exp(-Math.Pow(h - 17, 2) / 1.6) + (d >= 5 ? 0.4 : 0);
+            return new CurveRow(d, Grid.MinToTime(t), share);
+        })).ToList();
 
     public Task<PlanPageModel> LoadPageAsync(PlanPageQuery query, CancellationToken cancellationToken = default)
     {
@@ -73,81 +82,31 @@ public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IP
         var requested = Parse(query.Period) ?? Parse(query.Date);
         var periodStart = requested is { } r ? Period.PeriodStartFor(r) : Period.PlanningPeriodStart(today);
         var selectedDate = Parse(query.Date) ?? periodStart;
-        var isPast = periodStart < Period.CurrentPeriodStart(today);
         _held.TryGetValue((store.Id, periodStart), out var held);
-        var locked = !peer && _planApproved.GetValueOrDefault((store.Id, periodStart));
+        var snapshot = held?.Plan;
+        var selectedDay = snapshot?.Days.FirstOrDefault(d => d.Date == selectedDate);
 
-        PlanFortnightFigures? figures = null;
-        var chips = new List<PlanDayChip>();
-        if (held is not null)
-        {
-            var days = held.Days.Select(d => new PlanDayFigures
-            {
-                Date = d.Date,
-                Closed = d.Closed,
-                Planned = !d.Closed,
-                Ok = d.Closed || (d.Errors == 0 && Math.Abs(d.Worked - d.Benchmark) <= 1 + 1e-9),
-                Benchmark = d.Benchmark,
-                Worked = d.Worked,
-                Variance = d.Worked - d.Benchmark,
-                Shifts = d.Shifts,
-                Errors = d.Errors,
-                Warnings = d.Warnings,
-            }).ToList();
-            var planned = days.Where(d => d.Planned).ToList();
-            if (!peer)
-            {
-                figures = new PlanFortnightFigures
-                {
-                    Days = days,
-                    OkDays = days.Count(d => d.Ok),
-                    ErrorDays = days.Count(d => !d.Ok),
-                    PlannedDays = planned.Count,
-                    WithinDays = planned.Count(d => Math.Abs(d.Variance) <= 1 + 1e-9),
-                    Benchmark = days.Sum(d => d.Benchmark),
-                    Worked = days.Sum(d => d.Worked),
-                    NonOp = held.Days.Sum(d => d.NonOp),
-                    Shifts = days.Sum(d => d.Shifts),
-                    Errors = days.Sum(d => d.Errors),
-                    Warnings = days.Sum(d => d.Warnings),
-                };
-            }
-            foreach (var d in days)
-            {
-                var f = figures?.Days.FirstOrDefault(x => x.Date == d.Date);
-                var tone = f is null || f.Closed ? PlanChipTone.Neutral : d.Ok ? PlanChipTone.Ok : PlanChipTone.Error;
-                var note = f is null ? null : f.Closed ? "Closed" : f.Planned ? PageFigures.Signed(f.Variance) : "No plan";
-                var status = f is null
-                    ? null
-                    : f.Closed
-                        ? "closed"
-                        : $"{(d.Ok ? "OK" : "has an error")}{(f.Planned ? $", {PageFigures.Signed(f.Variance)} h against the benchmark" : ", no plan")}";
-                chips.Add(new PlanDayChip(d.Date, $"/plan/generate?store={store.Id}&date={d.Date.ToIso()}", tone, note, status));
-            }
-        }
-
-        return Task.FromResult(new PlanPageModel
+        return Task.FromResult(PlanPageComposer.Compose(new PlanPageReads
         {
             Stores = Stores,
             SelectedStore = store.Id,
-            StoreRow = store,
             Peer = peer,
-            IsReadOnly = peer,
+            ReadOnlyTier = false,
             IsStoreTier = true,
             PeriodStart = periodStart,
             SelectedDate = selectedDate,
-            IsPastPeriod = isPast,
+            IsPastPeriod = periodStart < Period.CurrentPeriodStart(today),
             OverduePeriods = [],
-            Locked = locked,
-            HasSnapshot = held is not null,
-            GeneratedAt = held?.GeneratedAt,
-            GeneratorName = held is not null && !peer ? ViewerName : null,
-            Figures = figures,
-            DayChips = chips,
-            IsPublicHolidayDay = !peer && Holidays.Contains(selectedDate),
+            Snapshot = snapshot,
+            SelectedDay = selectedDay,
             PhReallocated = _phOn.GetValueOrDefault((store.Id, selectedDate)),
+            IsPublicHolidayDay = Holidays.Contains(selectedDate),
+            ReviewState = _planApproved.GetValueOrDefault((store.Id, periodStart)) ? Review.PlanReviewState.Approved : Review.PlanReviewState.NotSubmitted,
+            Cover = FakePlanDays.Cover,
+            CurveRows = Curve,
             NightFill = store.Code == "G102",
-        });
+            GeneratorName = snapshot is not null ? ViewerName : null,
+        }));
     }
 
     private string? GenerationRefusal(Guid storeId, DateOnly periodStart) =>
@@ -168,7 +127,7 @@ public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IP
             return new PlanStepResult(false, "Those days are not part of this fortnight.");
         // A moment per day, so the progress shows as it would.
         await Task.Delay(TimeSpan.FromMilliseconds(250 * dates.Count), time);
-        var days = dates.Select(d => Invent(storeId, d)).ToList();
+        var days = dates.Select(d => FakePlanDays.Invent(storeId, d, _phOn.GetValueOrDefault((storeId, d)))).ToList();
         var stamp = new PartStamp(storeId, periodStart, runId, ViewerId);
         return new PlanStepResult(true, Part: GenerateParts.SealPlanPart(partKey.Key, stamp, days, time.GetUtcNow().ToUnixTimeMilliseconds()));
     }
@@ -177,32 +136,16 @@ public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IP
     {
         if (GenerationRefusal(storeId, periodStart) is { } refused) return Task.FromResult(PlanResult.Refused(refused));
         var dates = Period.PeriodDatesFrom(periodStart);
-        var opened = GenerateParts.OpenPlanParts<FakeDay>(
+        var opened = GenerateParts.OpenPlanParts<PlanSnapshotDay>(
             partKey.Key, [.. parts], new PartStamp(storeId, periodStart, runId, ViewerId), dates, d => d.Date, time.GetUtcNow().ToUnixTimeMilliseconds());
         if (!opened.Ok) return Task.FromResult(PlanResult.Refused(opened.Error!));
+        PlanSnapshot Snapshot(int version) =>
+            new() { Days = [.. opened.Days!], GeneratedAt = time.GetUtcNow(), GeneratedBy = ViewerId, Version = version };
         _held.AddOrUpdate(
             (storeId, periodStart),
-            _ => new Held { Days = [.. opened.Days!], GeneratedAt = time.GetUtcNow(), Version = 1 },
-            (_, prior) => new Held { Days = [.. opened.Days!], GeneratedAt = time.GetUtcNow(), Version = prior.Version + 1, RosterAt = prior.RosterAt });
+            _ => new Held { Plan = Snapshot(1) },
+            (_, prior) => new Held { Plan = Snapshot(prior.Plan.Version + 1), RosterAt = prior.RosterAt });
         return Task.FromResult(PlanResult.Done);
-    }
-
-    // Invented figures, the same for a store and date every time.
-    private FakeDay Invent(Guid storeId, DateOnly date)
-    {
-        var seed = HashCode.Combine(storeId, date.DayNumber) & 0x7fffffff;
-        var rng = new Random(seed);
-        var closed = date is { Month: 12, Day: 25 };
-        if (closed) return new FakeDay(date, true, 0, 0, 0, 0, 0, 0);
-        var weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-        var benchmark = Math.Round((weekend ? 58 : 46) + rng.NextDouble() * 8, 2);
-        var gap = (rng.Next(0, 9) - 4) * 0.25; // -1.00 .. +1.00 h
-        if (rng.Next(0, 6) == 0) gap += 1.5; // now and then, outside the tolerance
-        var worked = benchmark + gap;
-        var ph = _phOn.GetValueOrDefault((storeId, date));
-        if (ph) worked -= 2;
-        var errors = Math.Abs(worked - benchmark) > 1 ? 1 : 0;
-        return new FakeDay(date, false, benchmark, worked, weekend ? 12 : 10, errors, rng.Next(0, 3), rng.Next(0, 3) * 0.75);
     }
 
     public Task<PlanResult> GenerateRosterAsync(Guid storeId, DateOnly periodStart)
@@ -222,8 +165,18 @@ public sealed class FakePlanService(PlanPartKey partKey, TimeProvider time) : IP
         if (Deny(storeId) is { } denied) return Task.FromResult(PlanResult.Refused(denied));
         if (_planApproved.GetValueOrDefault((storeId, periodStart))) return Task.FromResult(PlanResult.Refused(PlanLocked));
         if (!_held.TryGetValue((storeId, periodStart), out var held)) return Task.FromResult(PlanResult.Refused("No held plan to edit - generate first."));
-        if (edits.Count == 0) return Task.FromResult(PlanResult.Refused("A day needs at least one shift."));
-        held.Version++;
+        var day = held.Plan.Days.FirstOrDefault(d => d.Date == date);
+        if (day?.Plan is null) return Task.FromResult(PlanResult.Refused("No plan for this date."));
+        var (error, rebuilt) = PlanDayEdits.Rebuild(day, edits);
+        if (error is not null) return Task.FromResult(PlanResult.Refused(error));
+        // (The real service labels the tiles here; the fake keeps the labels it was sent.)
+        if (PlanDayEdits.BreakError(rebuilt!.Shifts) is { } breaks) return Task.FromResult(PlanResult.Refused(breaks));
+        var edited = PlanDayEdits.Recheck(day, rebuilt.Shifts, new DayCheckOptions { Cover = FakePlanDays.Cover });
+        held.Plan = held.Plan with
+        {
+            Days = held.Plan.Days.Select(d => d.Date == date ? edited : d).ToList(),
+            Version = held.Plan.Version + 1,
+        };
         return Task.FromResult(PlanResult.Done);
     }
 
