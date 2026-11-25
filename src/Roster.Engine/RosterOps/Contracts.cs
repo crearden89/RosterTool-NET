@@ -13,6 +13,7 @@
 
 using System.Text.RegularExpressions;
 using Roster.Engine.Core;
+using Roster.Engine.Rostering.Fortnight;
 
 namespace Roster.Engine.RosterOps;
 
@@ -55,6 +56,61 @@ public static partial class Contracts
 
     [GeneratedRegex(@"^(?:The team's contracts hold [0-9]+(?:\.[0-9]+)?h more than the plans need this fortnight|The plans need more hours than the team's contracts hold): ")]
     private static partial Regex TeamLine();
+
+    /// <summary>Where the team landed against contract, from the engine's own contract outcomes.</summary>
+    public static ContractFigures ContractFigures(IEnumerable<ContractOutcome> outcomes)
+    {
+        var people = new List<ContractGap>();
+        var lines = new JsSet<string>();
+        double contract = 0;
+        double given = 0;
+        double overSum = 0;
+        double overPeople = 0;
+        double shortPeople = 0;
+        foreach (var o in outcomes)
+        {
+            if (!HeldToContract.Contains(o.Role)) continue;
+            // Paid hours plus paid leave and public holidays not worked, as the
+            // engine's ledger counts them.
+            var got = o.PaidHours + o.CreditedHours;
+            contract += o.ContractPeriodHours;
+            given += got;
+            var diff = got - o.ContractPeriodHours;
+            if (o.ShortfallHours > MarginH)
+            {
+                people.Add(new ContractGap(o.EmployeeId, o.Name, o.Role, "under", o.ShortfallHours));
+                lines.Add($"{o.Name} is {Js.ToFixed(o.ShortfallHours, 2)}h under contract this fortnight");
+            }
+            if (diff > MarginH)
+            {
+                people.Add(new ContractGap(o.EmployeeId, o.Name, o.Role, "over", diff));
+                lines.Add($"{o.Name} is {Js.ToFixed(diff, 2)}h above contract this fortnight");
+                overSum += diff;
+                overPeople++;
+            }
+            else if (diff < -MarginH) shortPeople++;
+        }
+        static string Are(double n) => $"{Js.NumberToString(n)} {(n == 1 ? "person is" : "people are")}";
+        var team =
+            overPeople > 0 && given > contract + MarginH
+                ? $"The plans need more hours than the team's contracts hold: {Are(overPeople)} rostered {Js.ToFixed(overSum, 2)}h above contract this fortnight"
+                : shortPeople > 0 && contract > given + MarginH
+                    ? $"The team's contracts hold {Js.ToFixed(contract - given, 2)}h more than the plans need this fortnight: {Are(shortPeople)} short of contract and paid the difference"
+                    : null;
+        if (team is not null) lines.Add(team);
+        Js.Sort(people, (a, b) => (b.Hours - a.Hours).Or(Js.LocaleCompare(a.Name, b.Name)));
+        double Sum(string kind) => people.Where(p => p.Kind == kind).Aggregate(0.0, (n, p) => n + Js.Round(p.Hours * 100)) / 100;
+        return new ContractFigures
+        {
+            People = people,
+            Under = people.Count(p => p.Kind == "under"),
+            Over = overPeople,
+            UnderHours = Sum("under"),
+            OverHours = Sum("over"),
+            Team = team,
+            Lines = lines,
+        };
+    }
 
     /// <summary>
     /// The fortnight flags the figures do not show: run lengths, anything new the

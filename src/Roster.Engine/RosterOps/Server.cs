@@ -4,6 +4,7 @@
 
 using Roster.Engine.Core;
 using Roster.Engine.Pay;
+using Roster.Engine.Rostering.Fortnight;
 using Roster.Engine.Till;
 
 namespace Roster.Engine.RosterOps;
@@ -64,6 +65,10 @@ public static class Server
             // Open shifts can't be locked/edited - fill them via Add.
             roster.Shifts.Where(s => !s.Unfilled).Select(s => new LockRow(s.EmployeeId, s.Name, s.Role, s.Start, s.End, s.Locked)).ToList());
     }
+
+    /// <inheritdoc cref="ComputeRosterRows(RosterDay, TillComputation?, ShiftCosts?, double)"/>
+    public static RosterRows ComputeRosterRows(RosterComputation roster, TillComputation? till, ShiftCosts? costs, double idealCost) =>
+        ComputeRosterRows(RosterDay.Of(roster), till, costs, idealCost);
 
     /// <summary>
     /// The fortnight's ideal floor against its actual cost, summed across the

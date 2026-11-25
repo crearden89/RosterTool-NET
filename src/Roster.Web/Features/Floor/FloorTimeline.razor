@@ -1,0 +1,133 @@
+@* Port of Timeline in src/app/floor/[token]/FloorScreen.tsx: the staffed day as
+   task bars, a row per person, with premium time, the next-2-hours band and the
+   line at the time now. *@
+
+<div class="floor-grid floor-axis">
+    <div class="floor-colhead">Team member</div>
+    @if (!OtherDay)
+    {
+        <div class="floor-colhead">Now / next</div>
+    }
+    <div class="floor-ticks">
+        @Shading
+        @foreach (var h in hours)
+        {
+            <span @key="h" class="floor-tick" style="@At(h)">@FloorTiles.N(h / 60)</span>
+        }
+        @if (band is { } b)
+        {
+            <span class="floor-bandtag" style="@At(b.From)">Next 2 hours</span>
+        }
+        @if (showNow)
+        {
+            <span class="floor-nowtag" style="@At(Now!.Value)">@Grid.MinToTime(Now!.Value)</span>
+            <span class="floor-axisnow" style="@At(Now!.Value)"></span>
+        }
+    </div>
+</div>
+<div class="floor-body">
+    <div class="floor-scroll">
+        <div class="floor-rows">
+            <div class="floor-under">
+                @Shading
+                @foreach (var h in hours.Skip(1).SkipLast(1))
+                {
+                    <div @key="h" class="floor-hour" style="@At(h)"></div>
+                }
+            </div>
+            @foreach (var r in Rows)
+            {
+                <div @key="r.Key" class="floor-grid floor-row">
+                    <div class="floor-name">
+                        <b>
+                            <span>@r.Name</span>
+                            @if (r.Badge == RoleBadges.Mgr)
+                            {
+                                <em>MGR</em>
+                            }
+                        </b>
+                        <small>@Grid.MinToTime(r.Start)–@Grid.MinToTime(r.End)</small>
+                    </div>
+                    @if (r.State is { } state)
+                    {
+                        <NowCell State="state" />
+                    }
+                    <div class="floor-line">
+                        @foreach (var u in r.Runs)
+                        {
+                            <i @key="u.From" class="floor-bar"
+                               title="@($"{FloorTiles.Label(u.Group)} {Grid.MinToTime(u.From)}–{Grid.MinToTime(u.To)}")"
+                               style="left: calc(@FloorTiles.Pct(P(u.From)) + 1px); width: calc(@FloorTiles.Pct(P(u.To) - P(u.From)) - 2px); background: @FloorTiles.Color(u.Group)"></i>
+                        }
+                    </div>
+                </div>
+            }
+            @if (showNow)
+            {
+                <div class="floor-over">
+                    <div class="floor-nowline" style="@At(Now!.Value)"></div>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="floor-legend">
+        @foreach (var (key, label) in FloorTiles.Legend)
+        {
+            <span @key="key"><i style="background: @FloorTiles.Color(key)"></i>@label</span>
+        }
+        @if (tint.Count > 0)
+        {
+            <span><i class="floor-keyPremium"></i>Premium time (Pay Rates)</span>
+        }
+        @if (showNow)
+        {
+            <span><i class="floor-keyNow"></i>Now</span>
+        }
+        @if (band is not null)
+        {
+            <span><i class="floor-keyBand"></i>Next 2 hours</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ScreenRow> Rows { get; set; } = [];
+    [Parameter, EditorRequired] public DayWindow Span { get; set; } = default!;
+    [Parameter] public double? Now { get; set; }
+    [Parameter] public IReadOnlyList<PremiumBand> Premium { get; set; } = [];
+    [Parameter] public bool OtherDay { get; set; }
+
+    private List<PremiumBand> tint = [];
+    private bool showNow;
+    private (double From, double To)? band;
+    private List<double> hours = [];
+
+    protected override void OnParametersSet()
+    {
+        var (lo, hi) = (Span.Lo, Span.Hi);
+        // Premium time and the next-2-hours band, clipped to the staffed day.
+        tint = Premium.Where(b => b.End > lo && b.Start < hi).ToList();
+        showNow = Now is { } n && n >= lo && n <= hi;
+        band = Now is { } m && m < hi && m + FloorModel.LookAhead > lo ? (Math.Max(m, lo), Math.Min(m + FloorModel.LookAhead, hi)) : null;
+        hours = [];
+        for (var h = lo; h <= hi; h += 60) hours.Add(h);
+    }
+
+    private double P(double t) => (Math.Min(Math.Max(t, Span.Lo), Span.Hi) - Span.Lo) / (Span.Hi - Span.Lo) * 100;
+
+    private string At(double t) => $"left: {FloorTiles.Pct(P(t))}";
+
+    private string Between(double from, double to) => $"left: {FloorTiles.Pct(P(from))}; width: {FloorTiles.Pct(P(to) - P(from))}";
+
+    private RenderFragment Shading => __builder =>
+    {
+        foreach (var b in tint)
+        {
+            <div @key="b.Start" class="floor-premium" style="@Between(b.Start, b.End)"></div>
+        }
+        if (band is { } nb)
+        {
+            <div class="floor-band" style="@Between(nb.From, nb.To)"></div>
+        }
+    };
+}
