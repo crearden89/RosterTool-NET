@@ -1,5 +1,6 @@
-// New: the SELECT policies (visible_store_ids() and the per-table policies of 0001-0045),
-// as global query filters, checked tier by tier.
+// New: the SELECT policies (visible_store_ids() and the per-table policies of 0001-0045,
+// with plan_snapshots and daily_loads tightened to the visible stores by the owner), as
+// global query filters, checked tier by tier.
 using Microsoft.EntityFrameworkCore;
 using Roster.Data.Entities;
 using Roster.Data.Scope;
@@ -56,6 +57,47 @@ public sealed class ReadPolicyTests : IDisposable
         Assert.Equal(expected, ctx.GeneratedShifts.Select(s => s.StoreId).AsEnumerable().OrderBy(x => x).ToArray());
         Assert.Equal(expected, ctx.DayPlans.Select(s => s.StoreId).AsEnumerable().OrderBy(x => x).ToArray());
         Assert.Equal(expected, ctx.StoreWalkNotes.Select(s => s.StoreId).AsEnumerable().OrderBy(x => x).ToArray());
+    }
+
+    /// <summary>A held plan, a held roster and a day's truck for every store.</summary>
+    private void SeedHeldSnapshotsAndDailyLoads()
+    {
+        using var sys = _db.System();
+        var ambient = sys.LoadTypes.Single(l => l.Name == "Ambient").Id;
+        var period = new DateOnly(2026, 8, 3);
+        foreach (var s in _org.AllStores)
+        {
+            sys.PlanSnapshots.Add(new PlanSnapshot { StoreId = s, PeriodStart = period, Kind = SnapshotKinds.Plan, Payload = "{\"days\":[]}" });
+            sys.PlanSnapshots.Add(new PlanSnapshot { StoreId = s, PeriodStart = period, Kind = SnapshotKinds.Roster, Payload = "{\"byDate\":[]}" });
+            sys.DailyLoads.Add(new DailyLoad { StoreId = s, Date = period, LoadTypeId = ambient, Qty = 6 });
+        }
+        sys.SaveChanges();
+    }
+
+    // The owner tightened plan_snapshots and daily_loads from "any signed-in user" to the
+    // visible stores, super users keeping every store: a store login no longer reads another
+    // store's held plans, rosters or truck directly, and a kiosk reads its own store's.
+    [Theory]
+    [MemberData(nameof(Identities))]
+    public void Held_plans_rosters_and_daily_loads_show_the_visible_stores_only(string who)
+    {
+        SeedHeldSnapshotsAndDailyLoads();
+        using var ctx = _db.As(Who(who));
+        var expected = Visible(who).OrderBy(x => x).ToArray();
+        Assert.Equal(expected, ctx.PlanSnapshots.Where(p => p.Kind == SnapshotKinds.Plan).Select(p => p.StoreId).AsEnumerable().OrderBy(x => x).ToArray());
+        Assert.Equal(expected, ctx.PlanSnapshots.Where(p => p.Kind == SnapshotKinds.Roster).Select(p => p.StoreId).AsEnumerable().OrderBy(x => x).ToArray());
+        Assert.Equal(expected, ctx.DailyLoads.Select(l => l.StoreId).AsEnumerable().OrderBy(x => x).ToArray());
+    }
+
+    [Fact]
+    public void A_store_login_asking_for_another_stores_held_plan_or_truck_by_id_gets_nothing()
+    {
+        SeedHeldSnapshotsAndDailyLoads();
+        using var ctx = _db.As(Who("store"));
+        Assert.Empty(ctx.PlanSnapshots.Where(p => p.StoreId == _org.S2));
+        Assert.Empty(ctx.DailyLoads.Where(l => l.StoreId == _org.S2));
+        Assert.Equal(2, ctx.PlanSnapshots.Count(p => p.StoreId == _org.S1));
+        Assert.Single(ctx.DailyLoads.Where(l => l.StoreId == _org.S1));
     }
 
     [Theory]

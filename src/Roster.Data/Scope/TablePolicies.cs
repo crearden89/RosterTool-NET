@@ -115,9 +115,11 @@ public static class TablePolicies
         [typeof(SalesOverride)] = C("0006 so_all, 0044"),
         [typeof(LeaveLiabilitySnapshot)] = C("0028 lls_all, 0044"),
         [typeof(LeaveRequestUkg)] = C("0028 lru_all, 0044"),
-        // Read policy "to authenticated using (true)"; written by the Plan page's actions
-        // behind denyStoreWrite.
-        [typeof(PlanSnapshot)] = new(ReadRule.AnySignedIn, WriteRule.WritableStore, Source: "0003 plan_snapshots_read"),
+        // Read by the visible stores, as every other store table (0050: the owner tightened
+        // 0003's "to authenticated using (true)"); written by the Plan page's actions behind
+        // denyStoreWrite. Another store's held plan is read only through the peer gate
+        // (IPlanSnapshotStore.ReadPeerPlanAsync), as the system.
+        [typeof(PlanSnapshot)] = new(ReadRule.VisibleStore, WriteRule.WritableStore, Source: "0003, 0050 plan_snapshots_read"),
         // Reviews: scoped read; written by the review actions behind denyStoreWrite.
         [typeof(RosterReview)] = C("0045 roster_reviews_read"),
         [typeof(RosterReviewCheck)] = C("0045 roster_review_checks_read"),
@@ -135,7 +137,9 @@ public static class TablePolicies
         [typeof(ShiftTaskBlock)] = new(ReadRule.VisibleStoreViaShift, WriteRule.WritableStoreViaShift, Source: "live database, as gs_all"),
 
         // ── Kiosk tables: scoped read; written by the token-checked kiosk actions ──
-        [typeof(DailyLoad)] = new(ReadRule.AnySignedIn, WriteRule.KioskStore, Source: "0002 daily_loads_read"),
+        // Read by the visible stores (0050: the owner tightened 0002's "to authenticated using
+        // (true)"): a kiosk reads its own store's, as its context's one visible store.
+        [typeof(DailyLoad)] = new(ReadRule.VisibleStore, WriteRule.KioskStore, Source: "0002, 0050 daily_loads_read"),
         [typeof(StoreWalkNote)] = new(ReadRule.VisibleStore, WriteRule.KioskStore, Source: "0034 swn_read"),
         [typeof(AdminTaskCheck)] = new(ReadRule.VisibleStore, WriteRule.KioskStore, Source: "0035 atc_read"),
         [typeof(LoadAssignment)] = new(ReadRule.KioskStoreOrServer, WriteRule.KioskStore, Source: "0017 (no policies)"),
