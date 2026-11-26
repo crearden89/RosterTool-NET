@@ -12,6 +12,7 @@ using Roster.Data.Services.Held;
 using Roster.Data.Services.Pay;
 using Roster.Data.Services.Planning;
 using Roster.Data.Services.RefData;
+using Roster.Data.Services.Rostering;
 using Roster.Engine.Analysis;
 using Roster.Engine.Core;
 using Roster.Engine.Planning.Plan;
@@ -20,23 +21,6 @@ using Roster.Engine.Walk;
 using HeldPlanDay = Roster.Engine.Planning.Plan.HeldPlanDay;
 
 namespace Roster.Web.Features.Analysis;
-
-/// <summary>
-/// computeRosterFortnight (lib/stage2/compute) for the Analysis page: the fortnight's roster
-/// by date and where each person landed against contract. A seam until the data layer's
-/// loader is on main (PROGRESS: P4 NEED D2), then that loader is called directly.
-/// </summary>
-public interface IAnalysisRosters
-{
-    Task<FortnightRoster> ComputeRosterFortnightAsync(Guid storeId, DateOnly periodStart, CancellationToken ct = default);
-}
-
-/// <summary>Until the data layer's fortnight loader lands: the Analysis page says it couldn't be read.</summary>
-public sealed class PendingAnalysisRosters : IAnalysisRosters
-{
-    public Task<FortnightRoster> ComputeRosterFortnightAsync(Guid storeId, DateOnly periodStart, CancellationToken ct = default) =>
-        throw new NotImplementedException("computeRosterFortnight needs the data layer's fortnight loader (lib/stage2/compute).");
-}
 
 public sealed class AnalysisService(
     IRosterDbContextFactory contexts,
@@ -47,7 +31,7 @@ public sealed class AnalysisService(
     IPayCosts payCosts,
     IStage1Loader stage1,
     IHeldPlans heldPlans,
-    IAnalysisRosters rosters,
+    IRosterLoader rosters,
     TimeProvider clock) : IAnalysisService
 {
     private async Task<(ScopedUser User, List<AnalysisStore> Stores, Guid? StoreId)?> StoreAsync(string? store, CancellationToken ct)
@@ -121,7 +105,7 @@ public sealed class AnalysisService(
         async Task<FortnightRoster> FortnightAsync(DateOnly periodStart)
         {
             if (!fortnights.TryGetValue(periodStart, out var f))
-                fortnights[periodStart] = f = await rosters.ComputeRosterFortnightAsync(storeId, periodStart, ct);
+                fortnights[periodStart] = f = await rosters.ComputeRosterFortnightAsync(storeId, periodStart, null, ct);
             return f;
         }
 
