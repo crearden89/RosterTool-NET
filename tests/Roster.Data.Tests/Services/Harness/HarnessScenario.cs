@@ -44,7 +44,7 @@ internal sealed class HarnessScenario
             .ToList();
     }
 
-    /// <summary>"g999" (the G999 31/08-13/09 fortnight, realG999Params), "gen3", "gen11" (genParams(3), genParams(11)).</summary>
+    /// <summary>"g999" (the G999 31/08-13/09 fortnight, realG999Params) or "gen1" ... "gen20" (genParams(1 ... 20)).</summary>
     public static HarnessScenario Load(string name) => new(name, All.Value.GetProperty(name));
 
     public string Name { get; }
@@ -52,6 +52,12 @@ internal sealed class HarnessScenario
     public Guid StoreId { get; }
     public IReadOnlyDictionary<int, IReadOnlyList<QuarterHourRow>> CurveWeek { get; }
     public IReadOnlyList<PosCustomerRow> PosCustomers { get; }
+
+    /// <summary>The scenario's ScenarioParams, as rosterScenario.ts generated them.</summary>
+    public ScenarioParams Params => new(_s.GetProperty("params"));
+
+    /// <summary>A table's rows as the TypeScript harness's database held them.</summary>
+    public IReadOnlyList<JsonElement> Table(string table) => Rows(table);
 
     private static JsonElement LoadAll()
     {
@@ -211,6 +217,16 @@ internal sealed class HarnessScenario
             foreach (var r in nonOp)
                 db.NonOpEntries.Add(new NonOpEntry { Id = Guid.NewGuid(), StoreId = StoreId, Date = Date(r, "date"), SubcategoryId = sub.Id, Minutes = (int)Num(r, "minutes")!, CreatedAt = t0.AddSeconds(i++) });
         }
+        // Public holidays (the store's calendar) and the day plans that mark a
+        // public holiday's load moved to its eve (ph_load_reallocated).
+        foreach (var r in Rows("public_holidays_national"))
+            db.PublicHolidaysNational.Add(new PublicHolidayNational { Id = Guid.NewGuid(), Date = Date(r, "date"), Name = Str(r, "name") ?? "Public holiday" });
+        foreach (var r in Rows("public_holidays_state"))
+            db.PublicHolidaysState.Add(new PublicHolidayState { Id = Guid.NewGuid(), State = Str(r, "state")!, Date = Date(r, "date"), Name = Str(r, "name") ?? "Public holiday" });
+        foreach (var r in Rows("public_holidays_local"))
+            db.PublicHolidaysLocal.Add(new PublicHolidayLocal { Id = Guid.NewGuid(), StoreId = StoreId, Date = Date(r, "date"), Name = Str(r, "name") ?? "Public holiday" });
+        foreach (var r in Rows("day_plans"))
+            db.DayPlans.Add(new DayPlan { StoreId = StoreId, Date = Date(r, "date"), PhLoadReallocated = Bool(r, "ph_load_reallocated") });
         foreach (var r in Rows("fixed_rosters"))
             db.FixedRosters.Add(new FixedRoster
             {
