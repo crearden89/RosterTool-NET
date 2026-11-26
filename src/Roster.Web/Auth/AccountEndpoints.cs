@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Roster.Data.Scope;
 using Roster.Data.Users;
@@ -84,9 +85,13 @@ public static class AccountEndpoints
             var name = string.IsNullOrWhiteSpace(form.Name) ? $"Dev {TierKeys.Label(tier)}" : form.Name.Trim();
             var username = new string(name.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
             if (username.Length == 0) username = "dev";
+            var userId = await EnsureDevUserRowAsync(http, DevUserId($"{username}|{tier}|{store?.Code}"), username, name, tier,
+                tier == Roster.Engine.Core.Tiers.Store ? store?.Id : null,
+                tier == Roster.Engine.Core.Tiers.Emso ? store?.AreaId : null,
+                store?.RegionId);
             var user = new SignedInUser
             {
-                Id = DevUserId($"{username}|{tier}|{store?.Code}"),
+                Id = userId,
                 Username = username,
                 DisplayName = name,
                 Tier = tier,
@@ -105,6 +110,46 @@ public static class AccountEndpoints
             return Results.LocalRedirect(back == $"{http.Request.PathBase}/" ? $"{http.Request.PathBase}/overview" : back);
         }).AllowAnonymous();
         return app;
+    }
+
+    // The development user must be a real app_users row: everything that records who acted
+    // (generated_by, approved_by, the audit rows) has a foreign key to it. Creates or updates the
+    // row for this choice of name, tier and store. Without a reachable database the sign-in goes
+    // ahead without a row, as the pages themselves stay up without one.
+    private static async Task<Guid> EnsureDevUserRowAsync(HttpContext http, Guid id, string username, string displayName,
+        string tierKey, Guid? storeId, Guid? areaId, Guid? regionId)
+    {
+        try
+        {
+            var factory = http.RequestServices.GetRequiredService<Roster.Data.IRosterDbContextFactory>();
+            await using var db = factory.Create(AccessContext.System("development sign-in"));
+            var row = await db.AppUsers.FirstOrDefaultAsync(u => u.Id == id, http.RequestAborted);
+            if (row is null)
+            {
+                // A seeded user may already have this username (it is unique): keep theirs.
+                var taken = await db.AppUsers.AnyAsync(u => u.Username == username, http.RequestAborted);
+                row = new Roster.Data.Entities.AppUser
+                {
+                    Id = id,
+                    Username = taken ? $"{username}-{id.ToString("N")[..6]}" : username,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                db.AppUsers.Add(row);
+            }
+            row.Tier = Roster.Data.Entities.Tiers.FromKey(tierKey);
+            row.StoreId = storeId;
+            row.AreaId = areaId;
+            row.RegionId = regionId;
+            row.DisplayName = displayName;
+            row.LastSignInAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(http.RequestAborted);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Roster.DevSignIn").LogWarning(ex,
+                "Development sign-in without an app_users row: writes that record who acted will fail.");
+        }
+        return id;
     }
 
     // The same choices always give the same user, so a development session can come back.
