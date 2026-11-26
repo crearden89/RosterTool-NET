@@ -97,7 +97,10 @@
     private int Changes => _draft.Value.Count(kv => !_draft.Base.TryGetValue(kv.Key, out var b) || b != kv.Value);
 
     protected override async Task OnInitializedAsync() =>
-        _draft = new FormDraft<Dictionary<string, bool>>(ViewsMatrix.Saved(Tabs, await Service.LoadAsync()));
+        _draft = new FormDraft<Dictionary<string, bool>>(ViewsMatrix.Saved(Tabs, await LoadAsync()));
+
+    private Task<IReadOnlyDictionary<string, bool>> LoadAsync() =>
+        AdminLoad.OrAsync(() => Service.LoadAsync(), (IReadOnlyDictionary<string, bool>)new Dictionary<string, bool>());
 
     private void Toggle(string key) =>
         _draft.Set(s => new Dictionary<string, bool>(s) { [key] = !(s.TryGetValue(key, out var v) ? v : true) });
@@ -114,7 +117,7 @@
         }
         _error = null;
         _draft.Commit(sent);
-        _draft.Sync(ViewsMatrix.Saved(Tabs, await Service.LoadAsync()));
+        _draft.Sync(ViewsMatrix.Saved(Tabs, await LoadAsync()));
         StateHasChanged();
         return true;
     }

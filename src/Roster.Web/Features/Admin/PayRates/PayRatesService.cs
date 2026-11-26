@@ -38,8 +38,15 @@ public interface IPayRatesService
     Task<AdminResult> SavePaySettingsAsync(PaySettings settings, IReadOnlyDictionary<string, double> taxRates, CancellationToken ct = default);
 }
 
-internal sealed class PayRatesService(IRosterDbContextFactory contexts, IStoreScope scope, IPayData pay, IRefData refData) : IPayRatesService
+internal sealed class PayRatesService(IServiceProvider services) : IPayRatesService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+    private IPayData pay => services.GetRequiredService<IPayData>();
+    private IRefData refData => services.GetRequiredService<IRefData>();
+
     public async Task<PayRatesView> LoadAsync(CancellationToken ct = default)
     {
         scope.RequireSuperUser();

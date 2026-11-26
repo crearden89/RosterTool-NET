@@ -46,8 +46,13 @@ public interface ILoadTypesService
     Task<AdminResult> DeleteLoadTypeAsync(Guid id, CancellationToken ct = default);
 }
 
-internal sealed partial class LoadTypesService(IRosterDbContextFactory contexts, IStoreScope scope) : ILoadTypesService
+internal sealed partial class LoadTypesService(IServiceProvider services) : ILoadTypesService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex Hex();
 

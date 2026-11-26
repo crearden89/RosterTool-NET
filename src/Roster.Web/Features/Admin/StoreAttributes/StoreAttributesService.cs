@@ -97,9 +97,14 @@ public static partial class StoreCsv
     }
 }
 
-internal sealed partial class StoreAttributesService(IRosterDbContextFactory contexts, IStoreScope scope, TimeProvider clock)
+internal sealed partial class StoreAttributesService(IServiceProvider services, TimeProvider clock)
     : IStoreAttributesService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     public async Task<StoreAttributesView> LoadAsync(Guid? requestedStore, Guid? rememberedStore, CancellationToken ct = default)
     {
         scope.RequireSuperUser();

@@ -154,14 +154,14 @@
 
     private static string Dt(DateTimeOffset? at) => at is { } t ? Dates.AuDateTime(t) : "never";
 
-    protected override async Task OnInitializedAsync() => _view = await Service.LoadAsync();
+    protected override async Task OnInitializedAsync() => _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), new DataFeedView([], []));
 
     private async Task RunAsync(Func<Task<AdminResult>> fn, string okMsg)
     {
         _pending = true;
         var res = await fn();
         _msg = res.Ok ? okMsg : $"Error: {res.Error}";
-        if (res.Ok) _view = await Service.LoadAsync();
+        if (res.Ok) _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), new DataFeedView([], []));
         _pending = false;
     }
 

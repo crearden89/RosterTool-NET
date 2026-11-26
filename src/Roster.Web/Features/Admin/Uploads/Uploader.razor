@@ -1,0 +1,208 @@
+@* Port of src/app/(app)/admin/uploads/Uploader.tsx. An upload saves at once, as before.
+   A file chosen and not yet imported counts as an unsaved change when leaving the page. *@
+@using global::Roster.Data.Feeds
+@inject IUploadsService Service
+
+<LeaveGuard Id="upload" Dirty="@(_file is not null && _result?.Committed != true)" />
+<div>
+    <div class="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="File type">
+        @foreach (var t in Types)
+        {
+            <button @key="t" type="button" aria-pressed="@(_type == t ? "true" : "false")" @onclick="() => ChooseType(t)"
+                    class="@Ui.Cx("rounded-full px-3 py-1 text-xs font-semibold", Ui.FocusRing, _type == t ? "bg-[var(--ui-ink)] text-white" : "bg-[var(--ui-lavender)] text-[var(--ui-ink)] hover:bg-[var(--ui-lavender-strong)]")">
+                @UploadTypes.Labels[t]
+            </button>
+        }
+    </div>
+
+    <p class="mb-3 text-xs text-[var(--ui-muted)]">@TypeHints[_type]</p>
+
+    @if (NeedsPeriod)
+    {
+        <label class="mb-3 flex flex-wrap items-center gap-2 text-sm text-[var(--ui-ink)]">
+            <span class="font-semibold">Pay period end</span>
+            <input type="date" value="@_periodEnd" @oninput="@(e => _periodEnd = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+            <span class="text-xs text-[var(--ui-muted)]">The snapshot is filed against this period. Re-uploading the same period replaces it.</span>
+        </label>
+    }
+
+    <div class="flex flex-wrap items-center gap-3">
+        <InputFile @key="_inputVersion" accept=".csv,text/csv" aria-label="File to upload" OnChange="OnFileChosen"
+                   class="@Ui.Cx("text-sm text-[var(--ui-ink)] file:mr-3 file:cursor-pointer file:rounded-xl file:border file:border-[var(--ui-control)] file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--ui-ink)] hover:file:bg-[var(--ui-lavender)]", Ui.FocusRing)" />
+        <button type="button" @onclick="@(() => SendAsync("validate"))" disabled="@(!CanValidate)" class="@Ui.ButtonClass(ButtonKind.Primary)">@(_busy ? "Working…" : "Validate")</button>
+        @if (CanCommitAll)
+        {
+            <button type="button" @onclick="@(() => SendAsync("commit", false))" disabled="@_busy" class="@Ui.ButtonClass(ButtonKind.Accent)">Import all rows</button>
+        }
+        @if (CanCommitPartial)
+        {
+            <button type="button" @onclick="@(() => SendAsync("commit", true))" disabled="@_busy" class="@Ui.ButtonClass(ButtonKind.Accent)">@($"Import {_result!.ValidCount} valid rows (skip {_result.Errors.Count})")</button>
+        }
+    </div>
+
+    @if (_note is not null)
+    {
+        <p role="status" class="mt-3 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-800">@_note</p>
+    }
+
+    @if (_result?.Error is { } error)
+    {
+        <p role="alert" class="mt-3 rounded-xl bg-[var(--brand-red-tint)] px-3 py-2 text-sm text-[var(--ui-bad)]">@error</p>
+    }
+
+    @if (_result is { Error: null } result)
+    {
+        <div class="mt-4">
+            <p class="text-sm text-[var(--ui-ink)]">
+                @($"{result.TotalRows} row(s) parsed · {result.ValidCount} valid · {result.Errors.Count} with errors")@(result.DuplicatesCollapsed is > 0 and var d ? $" · {d} exact {(d == 1 ? "copy" : "copies")} of another row (loaded once)" : "")
+            </p>
+
+            @if (HasFileErrors)
+            {
+                <ul class="mt-2 list-disc rounded-xl bg-[var(--brand-red-tint)] px-6 py-2 text-sm text-[var(--ui-bad)]">
+                    @foreach (var f in result.FileErrors)
+                    {
+                        <li>@f</li>
+                    }
+                </ul>
+            }
+
+            @if (HasRowErrors)
+            {
+                <div class="mt-3 max-h-72 overflow-y-auto rounded-xl border border-[var(--ui-line)]">
+                    <table class="@Ui.Table.Element">
+                        <thead class="@($"{Ui.Table.Head} sticky top-0")">
+                            <tr>
+                                <th class="@Ui.Table.Th">Row</th>
+                                <th class="@Ui.Table.Th">Store</th>
+                                <th class="@Ui.Table.Th">Field</th>
+                                <th class="@Ui.Table.Th">Problem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var e in result.Errors)
+                            {
+                                <tr class="@Ui.Table.Row">
+                                    <td class="px-3 py-1.5">@e.Row</td>
+                                    <td class="px-3 py-1.5">@(e.StoreCode ?? "-")</td>
+                                    <td class="px-3 py-1.5">@(e.Field ?? "-")</td>
+                                    <td class="px-3 py-1.5 text-[var(--ui-bad)]">@e.Message</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] Types = ["benchmark", "actuals", "leave_liability", "leave_requests", "contacts", "pos_quarter_hour"];
+
+    // A one-line reminder of what each file is, so the wrong export can't be dropped into
+    // the wrong tab without a hint.
+    private static readonly Dictionary<string, string> TypeHints = new()
+    {
+        ["benchmark"] = "One row per store per day for the fortnight.",
+        ["actuals"] = "One row per store per day, with Kronos hours and the six labour groups.",
+        ["pos_quarter_hour"] = "Hourly and Quarterly POS Statistics: four weeks of customers and items per 15 minutes, split manned vs self-checkout. The trade curve and the Load Running customer figure derive from it at read time - this file IS the curve's source.",
+        ["leave_liability"] = "UKG Leave Liability export - balances as at a pay period. Network-wide: one file covers every store. Re-uploading a period supersedes it.",
+        ["leave_requests"] = "UKG Leave Request Dataview - the full-year booking ledger. Each store in the file has its bookings replaced.",
+        ["contacts"] = "UKG Contact Details export - creates or updates Team Members: name (kept in UKG's prefix format), position, fortnightly contract, notional hours and start date. SM/ASM year bands aren't in the export, so set those by hand after importing. The store must already exist under Store Attributes.",
+    };
+
+    /// <summary>Called after an import, so the page's recent uploads refresh.</summary>
+    [Parameter] public EventCallback Committed { get; set; }
+
+    private string _type = "benchmark", _periodEnd = "";
+    private IBrowserFile? _file;
+    private UploadOutcome? _result;
+    private bool _busy;
+    private string? _note;
+    private int _inputVersion;
+
+    // Leave Liability carries no period of its own, so the pay period it belongs to must
+    // be chosen before it can be filed.
+    private bool NeedsPeriod => _type == "leave_liability";
+    private bool HasPeriod => !NeedsPeriod || System.Text.RegularExpressions.Regex.IsMatch(_periodEnd, @"^\d{4}-\d{2}-\d{2}$");
+    private bool CanValidate => _file is not null && !_busy;
+    private bool HasFileErrors => (_result?.FileErrors.Count ?? 0) > 0;
+    private bool HasRowErrors => (_result?.Errors.Count ?? 0) > 0;
+    private bool CanCommitAll => _result is { Error: null } r && !HasFileErrors && !HasRowErrors && r.ValidCount > 0 && HasPeriod;
+    private bool CanCommitPartial => _result is { Error: null } r && !HasFileErrors && HasRowErrors && r.ValidCount > 0 && HasPeriod;
+
+    private void ChooseType(string t)
+    {
+        _type = t;
+        _file = null;
+        _result = null;
+        _note = null;
+        _inputVersion++;
+    }
+
+    private void OnFileChosen(InputFileChangeEventArgs e)
+    {
+        _file = e.FileCount > 0 ? e.File : null;
+        _result = null;
+        _note = null;
+    }
+
+    private async Task SendAsync(string mode, bool acceptPartial = false)
+    {
+        if (_file is null) return;
+        _busy = true;
+        _note = null;
+        try
+        {
+            string text;
+            await using (var stream = _file.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024))
+            using (var reader = new StreamReader(stream))
+                text = await reader.ReadToEndAsync();
+            var data = await Service.SendAsync(_type, mode, acceptPartial, NeedsPeriod ? _periodEnd : null, text, _file.Name);
+            _result = data;
+            if (data.Committed)
+            {
+                _note = CommitNote(_type, data);
+                await Committed.InvokeAsync();
+            }
+        }
+        catch (IOException)
+        {
+            // A dropped connection or a file that can no longer be read: without this the
+            // button stayed greyed out with no explanation.
+            _note = "The upload could not be sent - check your connection and try again.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // Say so when duplicates were folded together: the row count will not match the file's
+    // line count, and an unexplained gap looks like data loss. The POS file BUILDS the trade
+    // curve rather than carrying it, so say what each store's curve was actually built from.
+    private static string CommitNote(string type, UploadOutcome data)
+    {
+        var dupes = data.DuplicatesCollapsed ?? 0;
+        var created = data.CreatedRows ?? 0;
+        var updated = data.UpdatedRows ?? 0;
+        var note = $"Imported {data.AcceptedRows} row(s) successfully.";
+        if (created + updated > 0) note += $" {created} team member(s) created, {updated} updated.";
+        if (dupes > 0)
+            note += type == "leave_requests"
+                ? $" {dupes} duplicate booking(s) were listed more than once in the file and loaded once each."
+                : $" {dupes} row(s) were exact copies of another row and loaded once.";
+        if (data.PosReports is { Count: > 0 } reports)
+            note += " " + string.Join(" ", reports.Select(p =>
+            {
+                var bits = new List<string> { $"{p.DatesUsed} trading day(s)" };
+                if (p.ExcludedPublicHoliday > 0) bits.Add($"{p.ExcludedPublicHoliday} public holiday(s) excluded");
+                if (p.ExcludedNoTrade > 0) bits.Add($"{p.ExcludedNoTrade} no-trade day(s) excluded");
+                if (p.WeekdaysWithoutData.Count > 0)
+                    bits.Add($"NO DATA for {string.Join(", ", p.WeekdaysWithoutData.Select(d => Period.DayLabels[d]))} - those days keep their previous curve");
+                return $"{p.StoreCode} ({(p.HasSco ? "SCO" : "manned-only")} weighting): {string.Join(", ", bits)}.";
+            }));
+        return note;
+    }
+}

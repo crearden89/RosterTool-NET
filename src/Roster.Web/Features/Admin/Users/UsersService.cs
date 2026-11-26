@@ -54,8 +54,14 @@ public static class UserScope
     }
 }
 
-internal sealed class UsersService(IRosterDbContextFactory contexts, IStoreScope scope, IUserAdmin users) : IUsersService
+internal sealed class UsersService(IServiceProvider services) : IUsersService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+    private IUserAdmin users => services.GetRequiredService<IUserAdmin>();
+
     public async Task<UsersView> LoadAsync(CancellationToken ct = default)
     {
         var me = scope.RequireSuperUser();

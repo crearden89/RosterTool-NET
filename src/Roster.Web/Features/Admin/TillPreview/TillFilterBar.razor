@@ -1,0 +1,52 @@
+@* Port of src/app/(app)/admin/till-preview/FilterBar.tsx. *@
+@inject StoreSelection Selection
+@inject RosterJs RosterJs
+@inject NavigationManager Navigation
+
+<form @onsubmit="SubmitAsync" class="flex flex-wrap items-end gap-3">
+    <label class="text-sm text-[var(--ui-ink)]">
+        <span class="@Ui.FieldLabelClass">Store</span>
+        <select name="store" @bind="_store" class="@Ui.FieldClass">
+            @foreach (var s in Stores)
+            {
+                <option @key="s.Id" value="@s.Id">@s.Label</option>
+            }
+        </select>
+    </label>
+    <label class="text-sm text-[var(--ui-ink)]">
+        <span class="@Ui.FieldLabelClass">Date</span>
+        <input type="date" name="date" value="@_date" @onchange="@(e => _date = e.Value?.ToString() ?? "")" class="@Ui.FieldClass" />
+    </label>
+    <button type="submit" disabled="@_pending" class="@Ui.ButtonClass(ButtonKind.Primary)">@(_pending ? "Loading…" : "Run engine")</button>
+    @if (_pending)
+    {
+        <span class="self-center text-sm text-[var(--ui-muted)]">Loading…</span>
+    }
+</form>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StoreChoice> Stores { get; set; } = [];
+    [Parameter] public Guid? SelectedStore { get; set; }
+    [Parameter] public string SelectedDate { get; set; } = "";
+
+    private string _store = "", _date = "";
+    private bool _pending;
+
+    protected override void OnInitialized()
+    {
+        _store = SelectedStore?.ToString() ?? "";
+        _date = SelectedDate;
+    }
+
+    private async Task SubmitAsync()
+    {
+        _pending = true;
+        if (Guid.TryParse(_store, out var id))
+        {
+            Selection.Remember(id);
+            await RosterJs.SetCookieAsync(StoreSelection.CookieName, id.ToString(), TimeSpan.FromDays(365));
+        }
+        Navigation.NavigateTo($"/admin/till-preview?store={_store}&date={_date}");
+        _pending = false;
+    }
+}

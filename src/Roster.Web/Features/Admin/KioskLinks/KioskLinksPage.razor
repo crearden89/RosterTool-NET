@@ -68,7 +68,7 @@
 
     private static string Key(char kind, KioskLinkRow s) => $"{kind}-{s.Id}";
 
-    protected override async Task OnInitializedAsync() => _stores = await Service.LoadAsync();
+    protected override async Task OnInitializedAsync() => _stores = await AdminLoad.OrAsync(() => Service.LoadAsync(), []);
 
     // Absolute URLs are built from the address the browser has open, so the same
     // code works on any deployment domain.
@@ -96,7 +96,7 @@
         _pending = true;
         var res = await Service.RotateKioskTokenAsync(store.Id);
         _msg = res.Ok ? $"{store.Code} links rotated - re-pin the tablet." : $"Error: {res.Error}";
-        if (res.Ok) _stores = await Service.LoadAsync();
+        if (res.Ok) _stores = await AdminLoad.OrAsync(() => Service.LoadAsync(), []);
         _pending = false;
     }
 
