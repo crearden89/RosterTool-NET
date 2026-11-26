@@ -65,6 +65,7 @@ public sealed class ReviewTestDb : IDisposable
             new StoreScope(sp.GetRequiredService<IAccessContextAccessor>(), sp.GetRequiredService<IRosterDbContextFactory>()), this)));
         services.AddScoped<IRememberedStore, NoRememberedStore>();
         new ReviewModule().Register(services, configuration);
+        new Roster.Web.Features.Notifications.NotificationsModule().Register(services, configuration);
         _root = services.BuildServiceProvider();
         _scope = _root.CreateAsyncScope();
 
@@ -87,6 +88,8 @@ public sealed class ReviewTestDb : IDisposable
     public IReviewService Service => Services.GetRequiredService<IReviewService>();
     public IReviewReader Reader => Services.GetRequiredService<IReviewReader>();
     public IReviewGate Gate => Services.GetRequiredService<IReviewGate>();
+    public Roster.Web.Features.Notifications.INotificationService Notifications =>
+        Services.GetRequiredService<Roster.Web.Features.Notifications.INotificationService>();
 
     /// <summary>Signs a user in (the TypeScript test's <c>as(u)</c>).</summary>
     public void As(ScopedUser user) => Services.GetRequiredService<AccessContextAccessor>().Current = AccessContext.ForUser(user);
