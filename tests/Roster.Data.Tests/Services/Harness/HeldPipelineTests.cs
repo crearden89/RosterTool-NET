@@ -1,11 +1,15 @@
 // Port of src/lib/roster/contracts.held.test.ts and src/lib/subtasks/carry.held.test.ts:
 // the whole pipeline - the plan generated and held, the roster built from the held
-// plan and held, both read back - through the data services on SQL Server, on the
-// TypeScript harness's own store-fortnights.
+// plan and held, both read back, a roster read or printed from before sub-tasks -
+// through the data services on SQL Server, on the TypeScript harness's own
+// store-fortnights.
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Roster.Data.Entities;
 using Roster.Data.Services.Held;
 using Roster.Data.Services.SubTasks;
 using Roster.Data.Tests.Infrastructure;
@@ -76,7 +80,8 @@ public sealed partial class HeldPipelineTests(SqlServerDatabaseFixture db) : ICl
     }
 
     // ─── carry.held.test.ts ──────────────────────────────────────────────────
-    // The plan's sub-tasks on the roster (G999 fortnight).
+    // The plan's sub-tasks on the roster (G999 fortnight). The owner: sub-tasks set
+    // on the plan carry to the roster (15/11/2026), on every day (26/11/2026).
 
     private static List<object> TilesOf(JsMap<DateOnly, RosterComputation> byDate) =>
         byDate.Select(kv => (object)new { d = kv.Key, shifts = kv.Value.Shifts.Select(s => new { s.EmployeeId, s.Start, s.End, tiles = string.Join(",", s.Blocks.Select(b => $"{Js.NumberToString(b.Time)}:{b.Group}")) }).ToList() }).ToList();
@@ -100,8 +105,14 @@ public sealed partial class HeldPipelineTests(SqlServerDatabaseFixture db) : ICl
     private static string Other(DisplayBlock b) =>
         Catalogue.Subtasks.First(g => g.Group == b.Group).Subtasks.First(s => s.Key != b.Sub).Key;
 
+    /// <summary>The owner's rule for a roster day's tiles: the plan's label on every tile the roster kept, the rules' share-out for the rest.</summary>
+    private static List<Shift> Carried(LabelContext ctx, IReadOnlyList<CarryShift> plan, IReadOnlyList<Shift> shifts) =>
+        Label.LabelShifts(Carry.CarryLabels(plan, Carry.WithoutLabels(shifts)), ctx);
+
+    private static List<CarryShift> PlanShiftsOf(PlanSnapshotDay? held) => (held?.Plan?.Shifts ?? []).Select(CarryShift.Of).ToList();
+
     [SqlServerFact]
-    public async Task Labels_a_roster_from_a_plan_the_rules_labelled_exactly_as_the_rules_label_it()
+    public async Task Gives_every_tile_the_roster_keeps_from_a_plan_the_rules_labelled_the_plans_label_on_every_day()
     {
         var (scenario, sp) = await ScenarioAsync("g999");
         await using var _ = sp;
@@ -112,14 +123,106 @@ public sealed partial class HeldPipelineTests(SqlServerDatabaseFixture db) : ICl
         await plans.ComputeAndStorePlanSnapshotAsync(scenario.StoreId, scenario.PeriodStart, User1);
         var built = await rosters.ComputeAndStoreRosterSnapshotAsync(scenario.StoreId, scenario.PeriodStart, User1);
         var plan = (await rosters.ReadSnapshotsAsync(scenario.StoreId, scenario.PeriodStart)).Plan!;
+        var days = 0;
+        var rulesDiffer = 0;
         foreach (var (date, day) in built!.ByDate)
         {
             if (day.Shifts.Count == 0) continue;
-            var s1 = plan.Days.First(d => d.Date == date).Result;
-            var ctx = await labels.LabelContextAsync(scenario.StoreId, date, ResetSource.From(s1));
-            Assert.Equal(Json(Label.LabelShifts(Carry.WithoutLabels(day.Shifts), ctx)), Json(day.Shifts));
+            days++;
+            var held = plan.Days.First(d => d.Date == date);
+            var planShifts = PlanShiftsOf(held);
+            foreach (var x in UnchangedTiles(planShifts, day.Shifts.Select(CarryShift.Of).ToList()))
+                Assert.True(x.R.Sub == x.P.Sub, $"{date} {Grid.MinToTime(x.R.Time)} {x.R.Group}");
+            var ctx = await labels.LabelContextAsync(scenario.StoreId, date, ResetSource.From(held.Result));
+            Assert.Equal(Json(Carried(ctx, planShifts, day.Shifts)), Json(day.Shifts));
+            // Before, a day like this was labelled by the rules alone.
+            var rules = Label.LabelShifts(Carry.WithoutLabels(day.Shifts), ctx);
+            if (!Carry.SameLabels(rules.Select(CarryShift.Of).ToList(), day.Shifts.Select(CarryShift.Of).ToList())) rulesDiffer++;
         }
+        Assert.True(days > 10, $"{days} days");
+        Assert.True(rulesDiffer > 0);
     }
+
+    [SqlServerFact]
+    public async Task Labels_a_roster_held_or_published_before_subtasks_the_same_way_when_it_is_read()
+    {
+        var (scenario, sp) = await ScenarioAsync("g999");
+        await using var _ = sp;
+        using var scope = HarnessScenario.SystemScope(sp);
+        var plans = scope.ServiceProvider.GetRequiredService<IHeldPlans>();
+        var rosters = scope.ServiceProvider.GetRequiredService<IHeldRosters>();
+        var labels = scope.ServiceProvider.GetRequiredService<ISubtaskLabels>();
+        await plans.ComputeAndStorePlanSnapshotAsync(scenario.StoreId, scenario.PeriodStart, User1);
+        var built = await rosters.ComputeAndStoreRosterSnapshotAsync(scenario.StoreId, scenario.PeriodStart, User1);
+        var plan = (await rosters.ReadSnapshotsAsync(scenario.StoreId, scenario.PeriodStart)).Plan!;
+        var heldOf = plan.Days.ToDictionary(d => d.Date);
+
+        // Held before sub-tasks: the roster's tiles carry no labels.
+        await using (var sys = db.System("a roster held before sub-tasks"))
+        {
+            var row = await sys.PlanSnapshots.SingleAsync(s => s.StoreId == scenario.StoreId && s.PeriodStart == scenario.PeriodStart && s.Kind == SnapshotKinds.Roster);
+            var payload = JsonNode.Parse(row.Payload)!;
+            foreach (var pair in payload["byDate"]!.AsArray())
+                foreach (var shift in pair![1]!["shifts"]!.AsArray())
+                    foreach (var block in shift!["blocks"]!.AsArray()) block!.AsObject().Remove("sub");
+            row.Payload = payload.ToJsonString();
+            await sys.SaveChangesAsync();
+        }
+        var read = await rosters.ReadSnapshotsAsync(scenario.StoreId, scenario.PeriodStart);
+        Assert.Equal(Json(built!.ByDate), Json(read.Roster!.ByDate));
+        foreach (var (date, day) in read.Roster.ByDate)
+        {
+            if (day.Shifts.Count == 0) continue;
+            var held = heldOf[date];
+            var ctx = await labels.LabelContextAsync(scenario.StoreId, date, ResetSource.From(held.Result));
+            Assert.Equal(Json(Carried(ctx, PlanShiftsOf(held), day.Shifts)), Json(day.Shifts));
+        }
+
+        // Published before sub-tasks (0049): its tiles have no sub_task.
+        await using (var sys = db.System("a roster published before sub-tasks"))
+        {
+            sys.ShiftTaskBlocks.RemoveRange(sys.ShiftTaskBlocks);
+            sys.GeneratedShifts.RemoveRange(sys.GeneratedShifts);
+            await sys.SaveChangesAsync();
+            var n = 0;
+            foreach (var (date, day) in built.ByDate)
+                foreach (var s in day.Shifts)
+                {
+                    if (s.Unfilled || string.IsNullOrEmpty(s.EmployeeId)) continue;
+                    n++;
+                    sys.GeneratedShifts.Add(new GeneratedShift
+                    {
+                        // Ids in the order published, as SQL Server and .NET both order them: the
+                        // print reads a day's shifts by start time, then id.
+                        Id = new Guid(0, 0, 0, [0, 0, 0, 0, 0, 0, (byte)(n >> 8), (byte)n]),
+                        StoreId = scenario.StoreId, Date = date, EmployeeId = Guid.Parse(s.EmployeeId), EmployeeName = s.Name, Role = s.Role,
+                        StartTime = Clock(s.Start), EndTime = Clock(s.End), BreakMinutes = (int)s.BreakMinutes,
+                        Blocks = s.Blocks.Select(b => new ShiftTaskBlock { BlockTime = Clock(b.Time), LabourGroup = b.Group, SubTask = null }).ToList(),
+                    });
+                }
+            await sys.SaveChangesAsync();
+        }
+        var runs = await scope.ServiceProvider.GetRequiredService<IPublishedSubtasks>()
+            .PublishedSubtaskRunsAsync(scenario.StoreId, scenario.PeriodStart, Period.PeriodDatesFrom(scenario.PeriodStart));
+        var printed = 0;
+        foreach (var (date, day) in built.ByDate)
+        {
+            // In the order the print reads them: start time, then the order published.
+            var published = day.Shifts.Where(s => !s.Unfilled && !string.IsNullOrEmpty(s.EmployeeId)).OrderBy(s => s.Start).ToList();
+            if (published.Count == 0) continue;
+            var held = heldOf[date];
+            var ctx = await labels.LabelContextAsync(scenario.StoreId, date, ResetSource.From(held.Result));
+            foreach (var s in Carried(ctx, PlanShiftsOf(held), published))
+            {
+                Assert.True(runs.TryGet($"{s.EmployeeId}:{date.ToIso()}", out var run), $"{date} {s.EmployeeId}");
+                Assert.Equal(Runs.SubtaskRun(s.Blocks), run);
+                printed++;
+            }
+        }
+        Assert.True(printed > 100, $"{printed} printed");
+    }
+
+    private static TimeOnly Clock(double minutes) => TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(minutes));
 
     [GeneratedRegex(@"(\d\d:\d\d)–(\d\d:\d\d)")]
     private static partial Regex Span();

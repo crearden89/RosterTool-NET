@@ -42,42 +42,42 @@ public static class Day
     public static List<PlanShift> LabelPlanDay(IReadOnlyList<PlanShift> shifts, LabelContext ctx) => Label.LabelShifts(shifts, ctx);
 
     /// <summary>
-    /// A day's tiles with their labels, labelling only when some tile of the four
-    /// groups has none (a plan or roster held or published before sub-tasks).
-    /// Labels the tiles already carry are kept; the rest are given by the normal
-    /// rules. Returns the shifts themselves when nothing needs a label.
+    /// A roster day's tiles labelled from its held plan. The owner: the plan's
+    /// sub-tasks carry to the roster (15/11/2026), on every day (26/11/2026), not
+    /// only on a day whose plan a manager relabelled or edited. Every roster tile
+    /// that comes unchanged from the plan keeps the plan's label (Carry), whether
+    /// the rules or a manager gave it; the rest are labelled by the rules, which
+    /// keep the carried labels and share out the others. (Left to themselves the
+    /// rules hand sub-tasks out person by person over the roster's own tiles and
+    /// order, so on many days they gave some tiles the roster kept other labels
+    /// than the plan's: the plan's labels now win there.)
     /// </summary>
-    public static IReadOnlyList<PlanShift> WithDayLabels(IReadOnlyList<PlanShift> shifts, LabelContext ctx) =>
-        Label.NeedsLabels(shifts) ? Label.LabelShifts(shifts, ctx) : shifts;
-
-    /// <inheritdoc cref="WithDayLabels(IReadOnlyList{PlanShift}, LabelContext)"/>
-    public static IReadOnlyList<Shift> WithDayLabels(IReadOnlyList<Shift> shifts, LabelContext ctx) =>
-        Label.NeedsLabels(shifts) ? Label.LabelShifts(shifts, ctx) : shifts;
-
-    /// <inheritdoc cref="WithDayLabels(IReadOnlyList{PlanShift}, LabelContext)"/>
-    public static IReadOnlyList<IReadOnlyList<DisplayBlock>> WithDayLabels(IReadOnlyList<IReadOnlyList<DisplayBlock>> shifts, LabelContext ctx) =>
-        Label.NeedsLabels(shifts) ? Label.LabelBlocks(shifts, ctx) : shifts;
-
-    /// <summary>
-    /// A roster day's tiles labelled from its held plan (owner, 15/11/2026: the
-    /// plan's sub-tasks carry to the roster). Where the plan's labels are not the
-    /// ones the rules give its tiles - a manager relabelled a tile, or edited the
-    /// day - every roster tile that comes unchanged from the plan keeps the plan's
-    /// label (Carry), and the rest are labelled by the rules. A plan the rules
-    /// labelled gives the roster the rules' labels, as before: the rules hand
-    /// sub-tasks out person by person over the roster's own tiles and order, and
-    /// on about half the days of the test fortnights that gives some tiles the
-    /// roster kept other labels than the plan's, so carrying them would change
-    /// those rosters.
-    /// </summary>
-    public static List<Shift> LabelRosterDay(IReadOnlyList<CarryShift> plan, IReadOnlyList<Shift> roster, LabelContext ctx)
-    {
-        var relabelled = plan.Count > 0 &&
-            !Carry.SameLabels(Label.LabelShifts(Carry.WithoutLabels(plan), ctx, s => s.Blocks, (s, b) => s with { Blocks = b }), plan);
-        return Label.LabelShifts(relabelled ? Carry.CarryLabels(plan, roster) : roster, ctx);
-    }
+    public static List<Shift> LabelRosterDay(IReadOnlyList<CarryShift> plan, IReadOnlyList<Shift> roster, LabelContext ctx) =>
+        Label.LabelShifts(Carry.CarryLabels(plan, roster), ctx);
 
     /// <inheritdoc cref="LabelRosterDay(IReadOnlyList{CarryShift}, IReadOnlyList{Shift}, LabelContext)"/>
     public static List<Shift> LabelRosterDay(IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> roster, LabelContext ctx) =>
         LabelRosterDay(plan.Select(CarryShift.Of).ToList(), roster, ctx);
+
+    /// <inheritdoc cref="LabelRosterDay(IReadOnlyList{CarryShift}, IReadOnlyList{Shift}, LabelContext)"/>
+    public static List<CarryShift> LabelRosterDay(IReadOnlyList<CarryShift> plan, IReadOnlyList<CarryShift> roster, LabelContext ctx) =>
+        Label.LabelShifts(Carry.CarryLabels(plan, roster), ctx, s => s.Blocks, (s, b) => s with { Blocks = b });
+
+    /// <summary>
+    /// A roster day held or published before sub-tasks, labelled as it is read,
+    /// the way a roster is labelled when it is built (LabelRosterDay): the held
+    /// plan's labels on the tiles that come unchanged from it, the rules for the
+    /// rest. Only a day with a tile of the four groups unlabelled is labelled; a
+    /// labelled day is left exactly as held (the shifts themselves are returned).
+    /// </summary>
+    public static IReadOnlyList<Shift> WithDayLabels(IReadOnlyList<CarryShift> plan, IReadOnlyList<Shift> shifts, LabelContext ctx) =>
+        Label.NeedsLabels(shifts) ? LabelRosterDay(plan, shifts, ctx) : shifts;
+
+    /// <inheritdoc cref="WithDayLabels(IReadOnlyList{CarryShift}, IReadOnlyList{Shift}, LabelContext)"/>
+    public static IReadOnlyList<Shift> WithDayLabels(IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> shifts, LabelContext ctx) =>
+        WithDayLabels(plan.Select(CarryShift.Of).ToList(), shifts, ctx);
+
+    /// <inheritdoc cref="WithDayLabels(IReadOnlyList{CarryShift}, IReadOnlyList{Shift}, LabelContext)"/>
+    public static IReadOnlyList<CarryShift> WithDayLabels(IReadOnlyList<CarryShift> plan, IReadOnlyList<CarryShift> shifts, LabelContext ctx) =>
+        Label.NeedsLabels(shifts.Select(s => s.Blocks)) ? LabelRosterDay(plan, shifts, ctx) : shifts;
 }

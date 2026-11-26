@@ -93,14 +93,15 @@ public sealed class HeldRosters(
         (await ReadSnapshotsAsync(storeId, periodStart, ct)).Roster;
 
     /// <summary>
-    /// A roster held from before sub-tasks is labelled when it is read, by the same rules as a
-    /// new one (Reset from the held plan's Stage 1 record). Days already labelled are left
-    /// exactly as held; nothing is written back.
+    /// A roster held from before sub-tasks is labelled when it is read, the way a new one is
+    /// labelled when it is built: the held plan's labels on the tiles that come unchanged from
+    /// it, the rules for the rest (Reset from the held plan's Stage 1 record). Days already
+    /// labelled are left exactly as held; nothing is written back.
     /// </summary>
     private async Task<RosterSnapshot> WithRosterLabelsAsync(Guid storeId, RosterSnapshot roster, PlanSnapshot? plan, CancellationToken ct)
     {
-        var stage1Of = new Dictionary<DateOnly, Roster.Engine.Planning.Stage1.Stage1Computation>();
-        foreach (var d in plan?.Days ?? []) stage1Of[d.Date] = d.Result;
+        var heldOf = new Dictionary<DateOnly, PlanSnapshotDay>();
+        foreach (var d in plan?.Days ?? []) heldOf[d.Date] = d;
         var byDate = new JsMap<DateOnly, RosterComputation>();
         foreach (var (date, day) in roster.ByDate)
         {
@@ -109,7 +110,9 @@ public sealed class HeldRosters(
                 byDate.Set(date, day);
                 continue;
             }
-            var shifts = await labels.WithDayLabelsAsync(storeId, date, stage1Of.TryGetValue(date, out var s1) ? ResetSource.From(s1) : null, day.Shifts, ct);
+            heldOf.TryGetValue(date, out var held);
+            var shifts = await labels.WithDayLabelsAsync(storeId, date, held is null ? null : ResetSource.From(held.Result),
+                held?.Plan?.Shifts ?? [], day.Shifts, ct);
             byDate.Set(date, ReferenceEquals(shifts, day.Shifts) ? day : day with { Shifts = shifts.ToList() });
         }
         return roster with { ByDate = byDate };
@@ -125,6 +128,11 @@ public sealed class HeldRosters(
             if (plan is null) return null;
             var heldDays = plan.Days.Select(d => new HeldPlanDay(d.Date, d.Result, d.Plan)).ToList();
             var fortnight = await rosters.ComputeRosterFortnightAsync(storeId, periodStart, heldDays, ct);
+            // Every Reset, Load Running, Cleaning and Specials tile of the roster gets
+            // its sub-task - labels only, so nothing the roster checks changes. Every
+            // tile the roster keeps from the plan has the plan's label, the rules' or
+            // a manager's; the pass that labels the plan labels the rest, on the
+            // roster's own painted tiles (SubTasks/Day LabelRosterDay).
             var heldOf = plan.Days.ToDictionary(d => d.Date);
             var byDate = new JsMap<DateOnly, RosterComputation>();
             foreach (var (date, day) in fortnight.ByDate)
