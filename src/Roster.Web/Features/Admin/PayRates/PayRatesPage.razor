@@ -15,5 +15,8 @@
     private PayRatesView? _view;
 
     // The whole grid: a partial read would show every position past the cut as zero.
-    protected override async Task OnInitializedAsync() => _view = await Service.LoadAsync();
+    protected override async Task OnInitializedAsync() =>
+        _view = await AdminLoad.OrAsync(
+            () => Service.LoadAsync(),
+            new PayRatesView([], [], global::Roster.Engine.Pay.PaySettings.Default, global::Roster.Engine.Pay.PayrollTax.ZeroRates()));
 }

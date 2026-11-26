@@ -29,5 +29,7 @@
     protected override Task OnParametersSetAsync() => ReloadAsync();
 
     private async Task ReloadAsync() =>
-        _view = await Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId);
+        _view = await AdminLoad.OrAsync(
+            () => Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId),
+            new SpecialHoursView([], null, []));
 }

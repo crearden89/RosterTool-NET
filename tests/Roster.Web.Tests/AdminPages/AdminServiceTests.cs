@@ -26,7 +26,7 @@ public sealed class AdminServiceTests : IDisposable
     {
         var (_, stores) = _db.Organisation("G101");
         _db.SignInAs(new ScopedUser(Guid.NewGuid(), "store.manager", Tier.Store, stores[0], null, null, null));
-        var service = new KioskLinksService(_db.Contexts, _db.Scope);
+        var service = new KioskLinksService(_db.Services);
         await Assert.ThrowsAsync<SuperUserRequiredException>(() => service.RotateKioskTokenAsync(stores[0]));
         await Assert.ThrowsAsync<SuperUserRequiredException>(() => service.LoadAsync());
     }
@@ -35,7 +35,7 @@ public sealed class AdminServiceTests : IDisposable
     public async Task Rotating_a_kiosk_token_issues_a_new_32_digit_hex_token()
     {
         var (_, stores) = _db.Organisation("G102", "G101");
-        var service = new KioskLinksService(_db.Contexts, _db.Scope);
+        var service = new KioskLinksService(_db.Services);
         var before = await service.LoadAsync();
         Assert.Equal(["G101", "G102"], before.Select(s => s.Code)); // by code
         Assert.True((await service.RotateKioskTokenAsync(stores[1])).Ok);
@@ -48,7 +48,7 @@ public sealed class AdminServiceTests : IDisposable
     [Fact]
     public async Task A_feed_token_needs_a_label_and_rotates_to_a_new_64_digit_token()
     {
-        var service = new DataFeedService(_db.Contexts, _db.Scope);
+        var service = new DataFeedService(_db.Services);
         Assert.Equal("Give the token a label (e.g. 'area-db-sync').", (await service.CreateFeedTokenAsync("   ")).Error);
         Assert.True((await service.CreateFeedTokenAsync("  area-db-sync ")).Ok);
         var token = Assert.Single((await service.LoadAsync()).Tokens);
@@ -64,7 +64,7 @@ public sealed class AdminServiceTests : IDisposable
     public async Task Special_hours_list_latest_first_and_a_closed_range_keeps_no_times()
     {
         var (_, stores) = _db.Organisation("G101", "G102");
-        var service = new SpecialTradingHoursService(_db.Contexts, _db.Scope);
+        var service = new SpecialTradingHoursService(_db.Services);
         Assert.True((await service.AddSpecialHoursAsync(new(stores[1], "2026-12-24", "2026-12-24", false, "08:30", "18:00", " Christmas Eve "))).Ok);
         Assert.True((await service.AddSpecialHoursAsync(new(stores[1], "2026-12-25", "2026-12-25", true, "08:30", "18:00", ""))).Ok);
         Assert.Equal("Open time must be before close time.",
@@ -92,7 +92,7 @@ public sealed class AdminServiceTests : IDisposable
     public async Task Calendar_rows_add_by_state_and_delete_from_their_table()
     {
         var (_, stores) = _db.Organisation("G101");
-        var service = new CalendarsService(_db.Contexts, _db.Scope);
+        var service = new CalendarsService(_db.Services);
         Assert.True((await service.AddNationalHolidayAsync("2026-12-25", "Christmas Day")).Ok);
         Assert.True((await service.AddStateHolidayAsync("VIC", "2026-11-03", "Melbourne Cup")).Ok);
         Assert.Equal("invalid input value for enum au_state: \"XYZ\"", (await service.AddStateHolidayAsync("XYZ", "2026-11-03", "Cup")).Error);
@@ -114,7 +114,7 @@ public sealed class AdminServiceTests : IDisposable
     [Fact]
     public async Task A_new_load_type_goes_last_and_a_saved_one_rounds_its_priority()
     {
-        var service = new LoadTypesService(_db.Contexts, _db.Scope);
+        var service = new LoadTypesService(_db.Services);
         Assert.True((await service.AddLoadTypeAsync(" Ambient ", 15, "#2563eb")).Ok);
         Assert.True((await service.AddLoadTypeAsync("Freezer", 12, "#0ea5e9")).Ok);
         Assert.Equal("Minutes must be positive", (await service.AddLoadTypeAsync("Bread", -1, "#0ea5e9")).Error);
@@ -143,7 +143,7 @@ public sealed class AdminServiceTests : IDisposable
     public async Task A_sub_category_with_entries_is_only_deleted_when_forced_with_them()
     {
         var (_, stores) = _db.Organisation("G101");
-        var service = new NonOpCategoriesService(_db.Contexts, _db.Scope);
+        var service = new NonOpCategoriesService(_db.Services);
         Assert.True((await service.AddCategoryAsync(" Meetings ")).Ok);
         var category = Assert.Single((await service.LoadAsync()).Categories);
         Assert.Equal("Meetings", category.Name);
@@ -178,11 +178,11 @@ public sealed class AdminServiceTests : IDisposable
     public async Task The_bulk_upload_lands_valid_rows_and_names_each_rejected_one()
     {
         var (_, stores) = _db.Organisation("G101");
-        var categories = new NonOpCategoriesService(_db.Contexts, _db.Scope);
+        var categories = new NonOpCategoriesService(_db.Services);
         await categories.AddCategoryAsync("Meetings");
         var category = Assert.Single((await categories.LoadAsync()).Categories);
         await categories.AddSubcategoryAsync(category.Id, new("Store meeting", 30, null, null));
-        var upload = new NonOpEntryUpload(_db.Contexts, _db.Scope);
+        var upload = new NonOpEntryUpload(_db.Services);
 
         Assert.Equal("Missing required column(s): Minutes, Store ID",
             (await upload.BulkUploadNonOpEntriesAsync("Day,NonOpHoursCategory,NonOpHoursSubCategory\n02/11/2026,Meetings,Store meeting")).Error);
@@ -219,7 +219,7 @@ public sealed class AdminServiceTests : IDisposable
     public async Task A_new_store_comes_with_default_attributes_and_seven_open_days()
     {
         var (region, _) = _db.Organisation("G101");
-        var service = new StoreAttributesService(_db.Contexts, _db.Scope, _db.Clock);
+        var service = new StoreAttributesService(_db.Services, _db.Clock);
         Assert.Equal("Store ID and name are required", (await service.AddStoreAsync(region, new("", "Lakeside", "NSW"))).Error);
         Assert.Equal("Invalid state 'nsw'", (await service.AddStoreAsync(region, new("25", "Lakeside", "nsw"))).Error);
         Assert.True((await service.AddStoreAsync(region, new("25", " Lakeside ", "QLD", "2026-09-01"))).Ok);
@@ -247,7 +247,7 @@ public sealed class AdminServiceTests : IDisposable
     public async Task Saving_a_store_clamps_its_share_and_keeps_no_times_on_a_closed_day()
     {
         var (_, stores) = _db.Organisation("G101");
-        var service = new StoreAttributesService(_db.Contexts, _db.Scope, _db.Clock);
+        var service = new StoreAttributesService(_db.Services, _db.Clock);
         var view = await service.LoadAsync(stores[0], null);
         Assert.Equal(AttributeValues.Defaults, view.Attributes); // no row yet: the sheet's defaults
         Assert.Equal(("07:00", "21:00", false), (view.Hours[6].OpenTime, view.Hours[6].CloseTime, view.Hours[6].Closed));

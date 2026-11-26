@@ -76,5 +76,7 @@
             : [new("store-date", "Store and date")];
 
     protected override async Task OnParametersSetAsync() =>
-        _view = await Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId, Date);
+        _view = await AdminLoad.OrAsync(
+            () => Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId, Date),
+            new TillPreviewView([], null, "", null));
 }

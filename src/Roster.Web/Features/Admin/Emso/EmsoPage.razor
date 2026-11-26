@@ -108,7 +108,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _view = await Service.LoadAsync();
+        _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), new EmsoView([], [], [], []));
         _newArea = _view.Areas.Count > 0 ? _view.Areas[0].Id.ToString() : "";
     }
 
@@ -137,7 +137,7 @@
         if (res.Ok)
         {
             _username = "";
-            _view = await Service.LoadAsync();
+            _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), _view!);
         }
         _pending = false;
     }
@@ -148,7 +148,7 @@
         _pending = true;
         var res = await Service.SetEmsoAreaAsync(emsoId, _sel.TryGetValue(emsoId, out var v) && Guid.TryParse(v, out var g) ? g : null);
         _msg = res.Ok ? "Area saved." : $"Error: {res.Error}";
-        if (res.Ok) _view = await Service.LoadAsync();
+        if (res.Ok) _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), _view!);
         _pending = false;
     }
 

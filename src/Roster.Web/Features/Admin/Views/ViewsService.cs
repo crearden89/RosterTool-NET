@@ -55,8 +55,13 @@ public static class ViewsMatrix
     }
 }
 
-internal sealed class ViewsService(IRosterDbContextFactory contexts, IStoreScope scope) : IViewsService
+internal sealed class ViewsService(IServiceProvider services) : IViewsService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     public async Task<IReadOnlyDictionary<string, bool>> LoadAsync(CancellationToken ct = default)
     {
         scope.RequireSuperUser();

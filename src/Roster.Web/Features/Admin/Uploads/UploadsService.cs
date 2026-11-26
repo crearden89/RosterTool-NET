@@ -75,8 +75,14 @@ public interface IUploadsService
         string type, string mode, bool acceptPartial, string? periodEnd, string text, string filename, CancellationToken ct = default);
 }
 
-internal sealed class UploadsService(IRosterDbContextFactory contexts, IStoreScope scope, IUploadIngest ingest, TimeProvider clock) : IUploadsService
+internal sealed class UploadsService(IServiceProvider services, TimeProvider clock) : IUploadsService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+    private IUploadIngest ingest => services.GetRequiredService<IUploadIngest>();
+
     public async Task<UploadsView> LoadAsync(CancellationToken ct = default)
     {
         scope.RequireSuperUser();

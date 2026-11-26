@@ -29,8 +29,13 @@ public interface IVarianceReportService
     Task<AdminResult> SaveVarianceSettingsAsync(double dataLightPct, double metricPct, double hoursPct, CancellationToken ct = default);
 }
 
-internal sealed partial class VarianceReportService(IRosterDbContextFactory contexts, IStoreScope scope, TimeProvider clock) : IVarianceReportService
+internal sealed partial class VarianceReportService(IServiceProvider services, TimeProvider clock) : IVarianceReportService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}$")]
     private static partial Regex IsoDate();
 

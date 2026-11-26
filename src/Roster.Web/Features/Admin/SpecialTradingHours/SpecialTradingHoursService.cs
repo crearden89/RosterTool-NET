@@ -32,8 +32,13 @@ public interface ISpecialTradingHoursService
     Task<AdminResult> DeleteSpecialHoursAsync(Guid id, CancellationToken ct = default);
 }
 
-internal sealed class SpecialTradingHoursService(IRosterDbContextFactory contexts, IStoreScope scope) : ISpecialTradingHoursService
+internal sealed class SpecialTradingHoursService(IServiceProvider services) : ISpecialTradingHoursService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     public async Task<SpecialHoursView> LoadAsync(Guid? requestedStore, Guid? rememberedStore, CancellationToken ct = default)
     {
         scope.RequireSuperUser();

@@ -53,8 +53,15 @@ public interface IEmsoService
     Task<EmsoCheckRun> RunEmsoCheckNowAsync(CancellationToken ct = default);
 }
 
-internal sealed class EmsoService(IRosterDbContextFactory contexts, IStoreScope scope, IUserAdmin users, IEmsoRosterCheck check) : IEmsoService
+internal sealed class EmsoService(IServiceProvider services) : IEmsoService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+    private IUserAdmin users => services.GetRequiredService<IUserAdmin>();
+    private IEmsoRosterCheck check => services.GetRequiredService<IEmsoRosterCheck>();
+
     public async Task<EmsoView> LoadAsync(CancellationToken ct = default)
     {
         scope.RequireSuperUser();

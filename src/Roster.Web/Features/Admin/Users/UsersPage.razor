@@ -113,7 +113,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _view = await Service.LoadAsync();
+        _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), new UsersView([], [], [], Guid.Empty));
         _storeId = _view.Stores.Count > 0 ? _view.Stores[0].Id.ToString() : "";
         _areaId = _view.Areas.Count > 0 ? _view.Areas[0].Id.ToString() : "";
     }
@@ -123,7 +123,7 @@
         _pending = true;
         var res = await fn();
         _msg = res.Ok ? okMsg : $"Error: {res.Error}";
-        if (res.Ok) _view = await Service.LoadAsync();
+        if (res.Ok) _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), _view!);
         _pending = false;
     }
 

@@ -101,7 +101,13 @@
 
     protected override Task OnParametersSetAsync() => ReloadAsync();
 
-    private async Task ReloadAsync() => _view = await Service.LoadAsync(Date);
+    private async Task ReloadAsync() =>
+        _view = await AdminLoad.OrAsync(
+            () => Service.LoadAsync(Date),
+            new VarianceReportView(
+                VarianceReportService.DateFor(Date, Dates.TodayAu()),
+                new global::Roster.Engine.Variance.VarianceReport(0, [], [], []),
+                new VarianceThresholds(VarianceReports.DefaultDataLightPct, VarianceReports.DefaultMetricPct, VarianceReports.DefaultHoursPct)));
 
     private static string DayHref(DateOnly d) => $"/admin/variance-report?date={AdminParse.Iso(d)}";
 

@@ -25,8 +25,14 @@ public interface ITillPreviewService
     Task<TillPreviewView> LoadAsync(Guid? requestedStore, Guid? rememberedStore, string? date, CancellationToken ct = default);
 }
 
-internal sealed class TillPreviewService(IRosterDbContextFactory contexts, IStoreScope scope, ITillLoader tills, TimeProvider clock) : ITillPreviewService
+internal sealed class TillPreviewService(IServiceProvider services, TimeProvider clock) : ITillPreviewService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+    private ITillLoader tills => services.GetRequiredService<ITillLoader>();
+
     public async Task<TillPreviewView> LoadAsync(Guid? requestedStore, Guid? rememberedStore, string? date, CancellationToken ct = default)
     {
         scope.RequireSuperUser();

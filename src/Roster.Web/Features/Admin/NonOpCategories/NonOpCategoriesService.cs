@@ -99,8 +99,13 @@ public static class NonOpRules
         $"{n} recorded entr{(n == 1 ? "y uses" : "ies use")} this sub-category.";
 }
 
-internal sealed class NonOpCategoriesService(IRosterDbContextFactory contexts, IStoreScope scope) : INonOpCategoriesService
+internal sealed class NonOpCategoriesService(IServiceProvider services) : INonOpCategoriesService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     public async Task<NonOpCategoriesView> LoadAsync(CancellationToken ct = default)
     {
         scope.RequireSuperUser();

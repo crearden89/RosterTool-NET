@@ -4,6 +4,7 @@
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Roster.Data;
 using Roster.Data.Entities;
 using Roster.Data.Scope;
@@ -23,7 +24,15 @@ public sealed class AdminTestDb : IDisposable
         Accessor.Current = AccessContext.ForUser(SuperUser);
         Contexts = new Factory(Options, Accessor);
         Scope = new StoreScope(Accessor, Contexts);
+        Services = new ServiceCollection()
+            .AddSingleton(Contexts)
+            .AddSingleton(Scope)
+            .AddSingleton(Clock)
+            .BuildServiceProvider();
     }
+
+    /// <summary>What the page services resolve: these contexts, this scope, this clock.</summary>
+    public IServiceProvider Services { get; }
 
     public DbContextOptions<RosterDbContext> Options { get; }
     public AccessContextAccessor Accessor { get; } = new();
