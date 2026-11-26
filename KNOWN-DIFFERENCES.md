@@ -1,14 +1,27 @@
 # Known differences from the TypeScript app
 
 The .NET edition applies the TypeScript app's rules in the same order and gets the same figures. Parity tests run
-both engines on shared inputs and require identical results: Stage 1 (1,981 days), the painter (6,251), the shaper
-(1,992), the fortnight roster (67 fortnights), pay (11,205), the till (86,780), sub-tasks (988) and load (328),
-all identical. The 1,010 TypeScript unit tests are ported with the same cases and expected values.
+both engines on shared inputs, recorded from the TypeScript app at `1e4f39e`, and require identical results: Stage 1
+(1,981 days), the painter (6,251), the shaper (1,992), the fortnight roster (67 fortnights), pay (11,205), the till
+(86,780), sub-tasks (988) and load (328), all identical. The TypeScript unit tests (1,021 at `1e4f39e`, including
+those added for the owner's decisions) are ported with the same cases and expected values.
 
 This page lists every known place where the two editions still behave differently. Some differences are deliberate,
 some come from the platform, and some fix a fault in the old app, as noted. Each line says what differs, why, and
 whether it can change a number. Faults found in the old app are listed in
 [CURRENT-APP-FINDINGS.md](CURRENT-APP-FINDINGS.md).
+
+## The owner's decisions of 26 November 2026
+
+The owner decided five points, and both editions now apply them in the same way (the TypeScript app at `1e4f39e`),
+so none of them is a difference. [CURRENT-APP-FINDINGS.md](CURRENT-APP-FINDINGS.md) marks each one fixed in both
+editions.
+
+- **Notifications are each person's own, a super user's too:** the bell count, the list, mark-all-read, the review page's count and the marking on opening a review. Times show in Sydney time, in the en-AU format, seconds included. *Numbers: a super user's unread count is now their own.*
+- **Team Members:** the editor's help text says the default notional day is "contract ÷ 10", the figure it has always used. *Numbers: no.*
+- **Held plans and daily loads are read by store scope,** as every other store table: a super user, PA and DSO every store, an EMSO the stores of their area, a store login its own store. Another store's held plan is read only through the peer gate, the plan-only read that the Plan page's peer view uses (and the Sales page, for its own stores): the TypeScript app reads it with the service role, the .NET edition as the system once the person is signed in. The kiosks read their own store's: the TypeScript app with the service role, the .NET edition through the kiosk context, whose one store is the link's. In both editions a peer viewing a plan held from before sub-tasks gets that day's Load Running labels from the Rostering-rules shares, not from that store's load board, as the owner accepted. *Numbers: no.*
+- **The roster always carries the plan's sub-task labels,** on every day, not only on a day whose plan was edited, and a roster held or printed from before sub-tasks is labelled the same way when it is read. *Numbers: no (labels only).*
+- **An RSM's hours cost the Store Assistant rate** for the hour and day type, with the Roster page's key and fallback, plus the Pay Rates RSM allowance (the owner's $9, editable) for each hour in the quarter-hours the RSM is the only manager on the floor. One costing of a shift serves the Roster page and Analysis. An open manager slot no longer counts as a manager on the floor, and Analysis's leave and make-up pay use the same rate lookup. *Numbers: yes, as the owner decided: in Analysis, the RSM's cost, worked and total payroll and the average hourly rate rise where RSMs work. The Roster page's costs are unchanged.*
 
 ## Across the app
 
@@ -61,8 +74,6 @@ whether it can change a number. Faults found in the old app are listed in
 - **Held-roster endpoint.** For a store id that isn't an id, the endpoint answers 500 with the old database-style message, after the scope check. *Numbers: no.*
 
 ### Review and Notifications
-- **Notification times** are written in Sydney time in the same en-AU format, seconds included. The old page showed the server's UTC time (a fix). *Numbers: no.*
-- **Each person's notifications are their own, a super user's too:** the bell, the list, mark-all-read and the marking on opening a review. The old database rules let a super user's count, list and mark-all-read cover everyone (a fix). *Numbers: the super user's unread count is now their own.*
 - **A failed notifications read** counts as 0 unread and an empty list, as before. *Numbers: no.*
 
 ### Dashboard, Analysis and Notes History
