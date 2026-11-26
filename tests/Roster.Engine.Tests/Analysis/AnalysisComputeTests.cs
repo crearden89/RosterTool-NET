@@ -91,15 +91,100 @@ public class AnalysisComputeTests
     }
 
     [Fact]
-    public void Pays_the_rsm_allowance_only_while_they_are_the_only_manager()
+    public void Pays_the_rsm_the_store_assistant_rate_plus_the_allowance_only_while_they_are_the_only_manager()
     {
         var a = AnalysisCompute.Compute(Inputs());
-        // 17:00-21:00 alone: 16 blocks at $9/h. RSMs price at the "SA" key, which has no
-        // rate of its own, so the allowance is their whole cost.
+        // The owner's rule: an RSM's hours cost the Store Assistant rate for the hour and
+        // day type (SA-FF, $30 here), less the unpaid break, plus the allowance for
+        // 17:00-21:00 alone: 16 blocks at $9/h.
         var rsm = a.CostByRole.First(r => r.Role == "RSM");
-        Close.To(16 * 9 * 0.25, rsm.Cost, 9);
+        var rsmBreak = Breaks.BreakForRole("RSM", 8).UnpaidMinutes;
+        Close.To(32 * 30 * 0.25 - 30 * rsmBreak / 60 + 16 * 9 * 0.25, rsm.Cost, 9);
         // Controllables: the allowance and the make-up pay (no overtime here).
         Close.To(36 + 18.4 * 30, a.ControllablesCost, 9);
+    }
+
+    // ─── Port of src/lib/analysis/compute.test.ts ───────────────────────────────
+    // Analysis prices an RSM shift as the Roster page does (Pay/ShiftCost): the Store
+    // Assistant rate for each hour, plus the Pay Rates "RSM allowance" per hour in the
+    // quarter-hours the RSM is the only manager on the floor. The TypeScript test runs the
+    // real computeAnalysis and computeShiftCosts with the day's roster, Stage 1 (no data),
+    // the pay period's tiers (all ordinary time) and the day type stood in for; here the
+    // same inputs go to their pure halves.
+
+    private static double H(double hh) => hh * 60;
+
+    // The SM opens; a DSM covers the afternoon handover; the RSM closes, alone from 17:00 -
+    // the open DSM slot from 18:00 has nobody on it.
+    private static readonly List<Shift> RsmDay =
+    [
+        new() { EmployeeId = "e-sm", Name = "e-sm", Role = "SM", Start = H(6), End = H(14) },
+        new() { EmployeeId = "e-sa", Name = "e-sa", Role = "SA", Start = H(8), End = H(16) },
+        new() { EmployeeId = "e-dsm", Name = "e-dsm", Role = "DSM", Start = H(13), End = H(17) },
+        new() { EmployeeId = "e-rsm", Name = "e-rsm", Role = "RSM", Start = H(14), End = H(22) },
+        new() { EmployeeId = "", Name = "", Role = "DSM", Start = H(18), End = H(22), Unfilled = true },
+    ];
+    private const double SoleManagerHours = 5; // 17:00-22:00
+
+    private static IEnumerable<PayRateRow> Rates(string position, double day, double evening) =>
+        Enumerable.Range(0, 24).Select(h => new PayRateRow(DayTypes.Weekday, h, position, h >= 18 ? evening : day));
+
+    // Invented rates. RSM has no row of its own: it is paid the SA-FF rate.
+    private static readonly List<PayRateRow> RsmDayRates = [.. Rates("SA-FF", 31.4, 37.68), .. Rates("SM-45-1", 52.1, 52.1), .. Rates("DSM", 40.25, 48.3)];
+
+    private static readonly List<AnalysisEmployee> RsmDayTeam =
+    [
+        new("e-sm", "SM", "SM-45-1", 1, null, 90),
+        new("e-sa", "SA", "SA-FF", null, null, 60),
+        new("e-dsm", "DSM", "DSM", null, null, 76),
+        new("e-rsm", "RSM", "RSM", null, null, 76),
+    ];
+
+    // The setting is the owner's to edit on Pay Rates; any value is priced.
+    private static PaySettings Settings(double rsmAllowance) => PaySettings.Default with { RsmAllowance = rsmAllowance };
+
+    private static AnalysisResult AnalyseRsmDay(double rsmAllowance) => AnalysisCompute.Compute(new AnalysisInputs
+    {
+        Days = [Tue],
+        PerDay = [new(Tue, DayTypes.Weekday, new RosterComputation { HasData = true, Shifts = RsmDay }, new Stage1Computation(), new JsMap<string, ShiftTiers>())],
+        Employees = RsmDayTeam,
+        PayRates = RsmDayRates,
+        PaySettings = Settings(rsmAllowance),
+        StoreState = "NSW",
+    });
+
+    private static ShiftCosts RsmDayShiftCosts(double rsmAllowance) => ShiftCost.ComputeShiftCosts(
+        Tue,
+        RsmDay.Where(s => !s.Unfilled).Select(s => new CostableShift(s.EmployeeId, s.Role, s.Start, s.End, s.BreakMinutes)).ToList(),
+        RsmDayRates,
+        RsmDayTeam.Select(e => new CostEmployee(e.Id, e.PositionCode, e.SmYearBand)),
+        new JsMap<string, ShiftTiers>(),
+        Settings(rsmAllowance),
+        DayTypes.Weekday);
+
+    [Fact]
+    public void Prices_the_rsms_hours_at_the_store_assistant_rate_plus_the_allowance_where_they_are_the_sole_manager()
+    {
+        var a = AnalyseRsmDay(7.25);
+        var shiftCosts = RsmDayShiftCosts(7.25);
+        var rsm = a.CostByRole.First(r => r.Role == "RSM");
+        Assert.Equal(1, rsm.Shifts);
+        Assert.True(rsm.Cost > 7.25 * SoleManagerHours, $"{rsm.Cost}"); // more than the allowance alone
+        Close.To(shiftCosts.CostByEmployee.Get("e-rsm"), rsm.Cost, 9);
+        // Every other position too: one costing of a shift, on both pages.
+        foreach (var (role, id) in new[] { ("SM", "e-sm"), ("SA", "e-sa"), ("DSM", "e-dsm") })
+            Close.To(shiftCosts.CostByEmployee.Get(id), a.CostByRole.First(r => r.Role == role).Cost, 9);
+        Close.To(shiftCosts.DayTotal, a.TotalCost, 9);
+    }
+
+    [Fact]
+    public void Adds_the_pay_rates_allowance_as_set_for_each_hour_the_rsm_is_the_only_manager_on_the_floor()
+    {
+        var withAllowance = AnalyseRsmDay(7.25).CostByRole.First(r => r.Role == "RSM").Cost;
+        var without = AnalyseRsmDay(0).CostByRole.First(r => r.Role == "RSM").Cost;
+        Assert.True(without > 0, $"{without}");
+        Close.To(7.25 * SoleManagerHours, withAllowance - without, 9);
+        Close.To(RsmDayShiftCosts(0).CostByEmployee.Get("e-rsm"), without, 9);
     }
 
     [Fact]

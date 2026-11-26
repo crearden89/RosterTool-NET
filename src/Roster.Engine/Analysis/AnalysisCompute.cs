@@ -68,7 +68,6 @@ public static class AnalysisCompute
 {
     private static readonly string[] GroupsOrder = ["checkout", "load_running", "reset", "admin", "specials", "cleaning"];
     private static readonly string[] RoleOrder = ["SM", "ASM", "DSM", "RSM", "SA", "JSA"];
-    private static readonly string[] Managers = ["SM", "ASM", "DSM", "RSM"];
 
     /// <summary>
     /// The (inclusive) date range, capped at 31 days so a fortnight or a full month can be
@@ -84,9 +83,10 @@ public static class AnalysisCompute
     public static AnalysisResult Compute(AnalysisInputs input)
     {
         var days = input.Days;
-        var rateMap = new JsMap<string, double>();
-        foreach (var r in input.PayRates) rateMap.Set(RateGrid.RateKey(r.DayType, r.Hour, r.Role), r.Rate);
-        double RateFor(string dt, double hour, string role) => rateMap.GetOr(RateGrid.RateKey(dt, hour, role), 0);
+        // The Pay Rates grid, read as the Roster page reads it (Pay/ShiftPay): a
+        // position with no row of its own for an hour falls back through its
+        // coarser forms rather than costing $0.
+        var rateFor = ShiftPay.RateLookup(input.PayRates);
 
         var empById = new JsMap<string, AnalysisEmployee>();
         foreach (var e in input.Employees) empById.Set(e.Id, e);
@@ -106,68 +106,43 @@ public static class AnalysisCompute
         double totalCost = 0, totalLabourHours = 0, rsmAllowanceTotal = 0, otPremiumTotal = 0;
         var densityDays = 0;
         var anyData = false;
-        const double Block = Grid.BlockMin;
 
         foreach (var day in input.PerDay)
         {
             var (date, dt, roster, stage1, tiers) = (day.Date, day.DayType, day.Roster, day.Stage1, day.Tiers);
             if (roster.HasData || stage1.HasData) anyData = true;
 
-            // Managers on the floor per 15-min block, so an RSM's sole-manager allowance can
-            // be applied only for the blocks where they're the only one.
-            var mgrAtBlock = new JsMap<double, double>();
-            foreach (var shift in roster.Shifts)
-            {
-                if (!Managers.Contains(shift.Role)) continue;
-                for (var m = shift.Start; m < shift.End; m += Block) mgrAtBlock.Set(m, mgrAtBlock.GetOr(m, 0) + 1);
-            }
+            // The shifts people work: an open shift has no employee, no wage cost
+            // and nobody on the floor.
+            var worked = roster.Shifts.Where(s => !s.Unfilled).ToList();
+            // Managers on the floor per 15-min block, so an RSM's sole-manager
+            // allowance applies only in the blocks where they're the only one.
+            var managers = ShiftPay.ManagersOnFloor(worked.Select(s => (s.Role, s.Start, s.End)));
 
             // Per-day rostered hours, so a FUTURE day (no actuals yet) can stand in its own
             // rostered hours where a past day uses what was really worked.
             var hoursBeforeDay = totalLabourHours;
 
-            foreach (var shift in roster.Shifts)
+            foreach (var shift in worked)
             {
-                if (shift.Unfilled) continue; // open shifts have no employee - no wage cost
-                // RSMs have no rate of their own - paid the Store Assistant rate, plus a $/hr
-                // allowance only for blocks where they're the sole manager.
-                var rateRole = shift.Role == "RSM" ? "SA" : PayRoleFor(shift.Role, shift.EmployeeId);
+                // Priced exactly as the Roster page prices it (Pay/ShiftPay): an RSM at
+                // the Store Assistant rate, plus the Pay Rates allowance for the blocks
+                // where they're the sole manager; overtime and double time from the
+                // whole pay period's tiers; only the unpaid break deducted.
+                var emp = empById.Get(shift.EmployeeId);
+                var pay = ShiftPay.PayFor(shift.Role, shift.Start, shift.End, emp?.PositionCode, emp?.SmYearBand, dt, rateFor,
+                    PayTiers.TiersFor(tiers, shift.EmployeeId, date, shift.Start).MultByMinute,
+                    managers,
+                    input.PaySettings.RsmAllowance);
                 if (!costByRole.TryGet(shift.Role, out var cur)) cur = [0, 0, 0];
                 cur[2] += 1;
-                // Overtime / double time for this shift, decided across the whole pay
-                // period. Blocks not listed are ordinary time.
-                var tier = PayTiers.TiersFor(tiers, shift.EmployeeId, date, shift.Start);
-                for (var m = shift.Start; m < shift.End; m += Block)
-                {
-                    var hour = Math.Floor(m / 60);
-                    var mult = tier.MultByMinute.GetOr(m, 1);
-                    var ordinary = RateFor(dt, hour, rateRole) * (Block / 60);
-                    var premium = ordinary * (mult - 1);
-                    var blockCost = ordinary + premium;
-                    otPremiumTotal += premium;
-                    if (shift.Role == "RSM" && mgrAtBlock.GetOr(m, 0) == 1)
-                    {
-                        var allowance = input.PaySettings.RsmAllowance * (Block / 60);
-                        blockCost += allowance;
-                        rsmAllowanceTotal += allowance;
-                    }
-                    cur[0] += blockCost;
-                    cur[1] += Block / 60;
-                    totalCost += blockCost;
-                    totalLabourHours += Block / 60;
-                }
-                // Deduct the UNPAID break at the rate of the hour it sits in - the loop above
-                // pays every block on the clock. (Paid rest breaks stay on the clock.) This
-                // mirrors lib/payroll/shiftCost, which the roster grid uses.
-                var brk = Breaks.BreakForRole(shift.Role, (shift.End - shift.Start) / 60);
-                var bw = Display.BreakWindows(shift.Start, shift.End, brk);
-                var breakHour = Math.Floor((bw.Count > 0 ? bw[0].Start : shift.Start) / 60);
-                var unpaidCost = RateFor(dt, breakHour, rateRole) * (brk.UnpaidMinutes / 60);
-                cur[0] -= unpaidCost;
-                cur[1] -= brk.UnpaidMinutes / 60;
-                totalCost -= unpaidCost;
-                totalLabourHours -= brk.UnpaidMinutes / 60;
+                cur[0] += pay.Cost;
+                cur[1] += pay.PaidHours;
                 costByRole.Set(shift.Role, cur);
+                totalCost += pay.Cost;
+                totalLabourHours += pay.PaidHours;
+                otPremiumTotal += pay.Premium;
+                rsmAllowanceTotal += pay.Allowance;
             }
             rosteredHoursByDate.Set(date, totalLabourHours - hoursBeforeDay);
 
@@ -197,7 +172,7 @@ public static class AnalysisCompute
             var emp = empById.Get(l.EmployeeId);
             if (emp is null) continue;
             var payRole = PayRoleFor(emp.Role, l.EmployeeId);
-            var baseRate = RateFor(DayTypes.Weekday, 9, payRole);
+            var baseRate = rateFor(DayTypes.Weekday, 9, payRole);
             var dailyHours = l.DayHours ?? emp.NotionalHours ?? emp.ContractHours / 10;
             foreach (var date in days)
             {
@@ -219,7 +194,7 @@ public static class AnalysisCompute
                 var hours = PayTiers.MakeUpHours(o.Role, o.ContractPeriodHours, o.PaidHours, o.CreditedHours);
                 if (hours <= 0) continue;
                 makeUpHoursTotal += hours;
-                makeUpCost += hours * RateFor(DayTypes.Weekday, 9, PayRoleFor(o.Role, o.EmployeeId));
+                makeUpCost += hours * rateFor(DayTypes.Weekday, 9, PayRoleFor(o.Role, o.EmployeeId));
             }
         }
 
