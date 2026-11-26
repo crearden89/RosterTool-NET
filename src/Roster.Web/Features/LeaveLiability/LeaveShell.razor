@@ -1,0 +1,235 @@
+@* Port of LeavePage in src/app/(app)/admin/leave-liability/LeaveClient.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@* ─── Leave Liability ─────────────────────────────────────────────────────────
+   The page in the app's design language: the header with the store picker and
+   the pay-period arrows, the "Estimated data" statement, the five views as one
+   segmented bar, and each view in its own component. Every figure comes from the
+   page service; the saves are its four actions. *@
+@{
+    var d = Data;
+    var view = d.View;
+    var periods = d.Network.Periods;
+    var at = IndexOf(periods, PeriodEnd);
+    var store = d.Stores.FirstOrDefault(s => s.Id == d.StoreId);
+    var subtitle = string.Join(" · ", new[]
+    {
+        store?.Name,
+        PeriodEnd is { } pe ? $"pay period ending {LeaveUi.LongDate(pe)}" : "no pay period loaded yet",
+        "leave balances and bookings from the UKG extract",
+    }.Where(s => !string.IsNullOrEmpty(s)));
+    var pending = Pending || _navigating;
+    const string arrow = "px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] disabled:opacity-35 disabled:hover:bg-transparent " + Ui.FocusRing;
+}
+<div>
+    <PageHeader Title="Leave Liability">
+        <Badge><Pill Tone="PillTone.Amber">Estimated</Pill></Badge>
+        <Subtitle>@subtitle</Subtitle>
+        <Actions>
+            @* A store login has exactly one store: its name is in the line under
+               the title, so no one-option picker. *@
+            <StorePicker Stores="_stores" Value="d.StoreId" Disabled="pending" HrefFor="@(id => $"/admin/leave-liability?store={id}&tab={_tab}")" />
+            @if (periods.Count > 0)
+            {
+                <div class="flex items-center rounded-xl border border-[var(--ui-control)] bg-white">
+                    <button type="button" aria-label="Earlier pay period" title="Earlier pay period"
+                            disabled="@(pending || at < 0 || at >= periods.Count - 1)" @onclick="() => GoAsync((PeriodKey, periods[at + 1].ToIso()))"
+                            class="@($"rounded-l-xl {arrow}")">
+                        <Icon Name="IconName.ChevronLeft" Class="h-4 w-4" />
+                    </button>
+                    <label class="relative flex items-center">
+                        <span class="sr-only">Pay period ending</span>
+                        <select value="@(PeriodEnd?.ToIso() ?? "")" disabled="@pending" @onchange="e => GoAsync((PeriodKey, e.Value?.ToString() ?? string.Empty))"
+                                class="@($"appearance-none rounded-md bg-transparent py-2 pr-7 pl-2 text-center text-sm font-semibold text-[var(--ui-ink)] {Ui.FocusRing}")">
+                            @foreach (var p in periods)
+                            {
+                                <option @key="p" value="@p.ToIso()">Period ending @LeaveUi.LongDate(p)</option>
+                            }
+                        </select>
+                        <Icon Name="IconName.ChevronDown" Class="pointer-events-none absolute right-1.5 h-4 w-4 text-[var(--ui-muted)]" />
+                    </label>
+                    <button type="button" aria-label="Later pay period" title="Later pay period"
+                            disabled="@(pending || at <= 0)" @onclick="() => GoAsync((PeriodKey, periods[at - 1].ToIso()))"
+                            class="@($"rounded-r-xl {arrow}")">
+                        <Icon Name="IconName.ChevronRight" Class="h-4 w-4" />
+                    </button>
+                </div>
+            }
+            @if (pending)
+            {
+                <span role="status" class="text-sm text-[var(--ui-muted)]">Loading…</span>
+            }
+        </Actions>
+    </PageHeader>
+
+    @* Rendered once, above the views, so it covers every one of them - and
+       deliberately NOT dismissible: a governance statement a user can click
+       away stops being one the moment they do. *@
+    <div class="mb-5 flex items-start gap-3 rounded-2xl bg-[var(--ui-amber-bg)] px-4 py-3 text-[13px] leading-relaxed text-[var(--ui-amber-ink)]">
+        <Icon Name="IconName.Info" Class="mt-0.5 h-4 w-4 shrink-0" StrokeWidth="2.5" />
+        <p>
+            <strong class="font-semibold">Estimated data.</strong> Leave balances are derived from the UKG extract current at the date of
+            upload@(view is not null ? $" (pay period ending {Dates.AuFull(view.PeriodEnd)})" : "") and are published for workforce planning and
+            management oversight. Refresh timing differs from the balanced scorecard calculation; the balanced scorecard remains the single
+            source of truth for leave liability.
+        </p>
+    </div>
+
+    <div @ref="_tabBar" class="mb-5 max-w-full overflow-x-auto">
+        <div role="group" aria-label="Views" class="inline-flex gap-1 rounded-xl bg-[var(--ui-lavender)] p-1">
+            @foreach (var t in Tabs)
+            {
+                var on = _tab == t.Key;
+                <button @key="t.Key" type="button" aria-pressed="@(on ? "true" : "false")" @onclick="() => PickTabAsync(t.Key)"
+                        class="@($"inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-semibold whitespace-nowrap {Ui.FocusRing} {(on ? "bg-white text-[var(--ui-ink)] shadow-sm" : "text-[var(--ui-muted)] hover:text-[var(--ui-ink)]")}")">
+                    @t.Label
+                    @if (t.Key == LeaveTab.Team && view is not null)
+                    {
+                        <span class="text-xs font-medium text-[var(--ui-muted)] tabular-nums">@view.Members.Count</span>
+                    }
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (view is { UnbandedCombos.Count: > 0 })
+    {
+        <div class="mb-5 flex items-start gap-3 rounded-2xl bg-[var(--ui-amber-bg)] px-4 py-3 text-sm text-[var(--ui-amber-ink)]">
+            <Icon Name="IconName.TriangleAlert" Class="mt-0.5 h-4 w-4 shrink-0" StrokeWidth="2.5" />
+            <p>
+                <strong class="font-semibold">No accrual band</strong> for @string.Join(", ", view.UnbandedCombos) - those employees&apos;
+                projections fall back to their file notional and accrue nothing. Add the band under Settings.
+            </p>
+        </div>
+    }
+
+    <div class="@($"transition-opacity {(pending ? "opacity-60" : "")}")">
+        @switch (_tab)
+        {
+            case LeaveTab.Overview:
+                <LeaveOverviewTab View="view" Trend="d.Trend" Target="d.Target" CanSettings="CanSettings" OnTab="PickTabAsync" />
+                break;
+            case LeaveTab.Team:
+                <LeaveTeamTab View="view" Target="d.Target" />
+                break;
+            case LeaveTab.Calendar:
+                <LeaveCalendarTab View="view" Today="d.Today" CanSettings="CanSettings" OnTab="PickTabAsync" />
+                break;
+            case LeaveTab.Network when d.ShowNetwork:
+                <LeaveNetworkTab Network="d.Network" StoreId="d.StoreId" CanSeeNational="d.CanSeeNational" Scope="d.NetworkScope"
+                                 OnScope="OnScopeAsync" Pending="pending" />
+                break;
+            case LeaveTab.Settings when CanSettings:
+                <LeaveSettingsTab Bands="d.Bands" Target="d.Target" FteDivisor="d.FteDivisor" StoreId="d.StoreId" StoreName="@(store?.Name ?? "this store")"
+                                  MaxStaffOnLeave="d.MaxStaffOnLeave" CanEditStore="d.CanEditStore" IsSuperUser="d.IsSuperUser" OnSaved="OnReload" />
+                break;
+        }
+    </div>
+</div>
+
+@code {
+    private const string PeriodKey = "period", ScopeKey = "scope";
+
+    private static readonly (string Key, string Label)[] AllTabs =
+    [
+        (LeaveTab.Overview, "Overview"),
+        (LeaveTab.Team, "Team Analysis"),
+        (LeaveTab.Calendar, "Calendar"),
+        (LeaveTab.Network, "Network"),
+        (LeaveTab.Settings, "Settings"),
+    ];
+
+    private string _tab = LeaveTab.Overview;
+    private bool _started;
+    private bool _navigating;
+    private string? _keptInView;
+    private IReadOnlyList<StoreOption> _stores = [];
+    private ElementReference _tabBar;
+    private IJSObjectReference? _module;
+
+    [CascadingParameter] public SaveScope? SaveScope { get; set; }
+    [Parameter, EditorRequired] public LeavePageData Data { get; set; } = default!;
+    [Parameter] public bool Pending { get; set; }
+    [Parameter] public EventCallback OnReload { get; set; }
+
+    private bool CanSettings => Data.CanEditStore || Data.IsSuperUser;
+
+    private IEnumerable<(string Key, string Label)> Tabs =>
+        AllTabs.Where(t => (t.Key != LeaveTab.Network || Data.ShowNetwork) && (t.Key != LeaveTab.Settings || CanSettings));
+
+    // The pay period on screen.
+    private DateOnly? PeriodEnd => Data.View?.PeriodEnd ?? Data.Network.PeriodEnd;
+
+    protected override void OnParametersSet()
+    {
+        // The view stays as chosen while the page reloads under it (the tab is page
+        // state, as React kept it); a fresh visit opens on the address's tab.
+        if (!_started)
+        {
+            _tab = Data.InitialTab;
+            _started = true;
+        }
+        _navigating = false;
+        _stores = Data.Stores.Select(s => new StoreOption(s.Id, s.Code, s.Name)).ToList();
+    }
+
+    // On a phone the views bar scrolls sideways: keep the chosen view in sight
+    // (a link straight to ?tab=network lands on it).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_keptInView == _tab) return;
+        _keptInView = _tab;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Features/LeaveLiability/LeaveLiabilityPage.razor.js");
+            await _module.InvokeVoidAsync("keepTabInView", _tabBar);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task<bool> ConfirmLeaveAsync() => SaveScope is null || await SaveScope.ConfirmLeaveAsync();
+
+    // What to carry when the period or the network's scope changes: each keeps the
+    // other (the newest period needs no parameter).
+    private async Task GoAsync((string Key, string Value) change)
+    {
+        if (!await ConfirmLeaveAsync()) return;
+        var q = new List<(string Key, string Value)> { ("store", Data.StoreId?.ToString() ?? ""), ("tab", _tab) };
+        if (PeriodEnd is { } pe && (Data.Network.Periods.Count == 0 || pe != Data.Network.Periods[0])) q.Add((PeriodKey, pe.ToIso()));
+        if (Data.NetworkScope == NetworkScope.National) q.Add((ScopeKey, "national"));
+        var i = q.FindIndex(x => x.Key == change.Key);
+        if (i >= 0) q[i] = change;
+        else q.Add(change);
+        _navigating = true;
+        Navigation.NavigateTo("/admin/leave-liability?" + string.Join("&", q.Select(x => $"{x.Key}={Uri.EscapeDataString(x.Value)}")));
+    }
+
+    private Task OnScopeAsync(NetworkScope s) => GoAsync((ScopeKey, s == NetworkScope.National ? "national" : "remit"));
+
+    private async Task PickTabAsync(string t)
+    {
+        if (t == _tab) return;
+        // Settings' forms go when the tab does: an unsaved change asks first.
+        if (_tab == LeaveTab.Settings && !await ConfirmLeaveAsync()) return;
+        _tab = t;
+    }
+
+    private static int IndexOf(IReadOnlyList<DateOnly> xs, DateOnly? x)
+    {
+        for (var i = 0; i < xs.Count; i++)
+            if (xs[i] == x) return i;
+        return -1;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

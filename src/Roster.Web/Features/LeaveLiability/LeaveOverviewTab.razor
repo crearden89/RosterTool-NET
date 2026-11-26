@@ -1,0 +1,123 @@
+@* Port of src/app/(app)/admin/leave-liability/LeaveOverview.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@using global::Roster.Engine.Planning.Plan
+@* ─── Overview ────────────────────────────────────────────────────────────────
+   The store's liability in four cards, its trend, who holds the most leave now
+   and at 31 December, and the dates already at the cover cap. *@
+@if (View is null)
+{
+    <NoLeaveData />
+}
+else
+{
+    var l = View.Liability;
+    var over = (l.VsTarget ?? 0) > 0;
+    var gap = Math.Abs(l.VsTarget ?? 0);
+    <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <StatCard>
+                <Label>Leave liability</Label>
+                <Value>@($"{LeaveUi.H1(l.TotalLiabilityHours)} h")</Value>
+                <Sub>@($"{LeaveUi.H1(l.TotalAnnualHours)} h annual {(l.TotalLieuHours < 0 ? "−" : "+")} {LeaveUi.H1(Math.Abs(l.TotalLieuHours))} h lieu")</Sub>
+            </StatCard>
+            <StatCard>
+                <Label>FTE</Label>
+                <Value>@LeaveUi.H2(l.Fte)</Value>
+                <Sub>@($"{l.Headcount} accruing · {l.CasualCount} casual{(l.CasualCount == 1 ? "" : "s")} not counted")</Sub>
+            </StatCard>
+            <StatCard>
+                <Label>Liability per FTE</Label>
+                <Value><span class="@LeaveUi.OverColour(over)">@(l.HoursPerFte is null ? "-" : $"{LeaveUi.H1(l.HoursPerFte)} h")</span></Value>
+                <Sub>@(l.VsTarget is null ? $"Target {LeaveUi.N(Target)} h" : $"{LeaveUi.H1(gap)} h {(over ? "over" : "under")} the {LeaveUi.N(Target)} h target")</Sub>
+                <Footer>
+                    @if (l.VsTarget is not null)
+                    {
+                        @* A quarter of the target either side fills the bar. *@
+                        <CentredBar Value="@Math.Min(1, gap / (Target / 4))" Side="@(gap == 0 ? BarSide.None : over ? BarSide.Above : BarSide.Below)"
+                                    Label="@($"{LeaveUi.H1(gap)} hours per FTE {(over ? "over" : "under")} the target")"
+                                    AboveColour="@LeaveUi.TargetAbove" BelowColour="@LeaveUi.TargetBelow" />
+                    }
+                </Footer>
+            </StatCard>
+            <StatCard>
+                <Label>Since the last period</Label>
+                <Value><span class="@(View.ChangePct is null ? "" : LeaveUi.OverColour(View.ChangePct > 0))">@LeaveUi.Pct(View.ChangePct)</span></Value>
+                <Sub>@(View.PreviousPeriodEnd is { } prev ? $"Was {LeaveUi.H1(View.PreviousLiability?.HoursPerFte)} h per FTE at {ShortOf(prev, View.PeriodEnd)}" : "No earlier period to compare")</Sub>
+            </StatCard>
+        </div>
+
+        <Card>
+            <SectionHeader>
+                <Title>Liability per FTE by pay period</Title>
+                <Aside>
+                    <span class="inline-flex items-center gap-3">
+                        <span class="inline-flex items-center gap-1.5">
+                            <span aria-hidden="true" class="h-0.5 w-4 rounded" style="@($"background: {TradeCurve.CurveHue}")"></span> per FTE
+                        </span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <span aria-hidden="true" class="w-4 border-t-2 border-dashed border-[var(--ui-bad)]"></span> @LeaveUi.N(Target) h target
+                        </span>
+                    </span>
+                </Aside>
+            </SectionHeader>
+            <p class="-mt-2 mb-2 text-xs text-[var(--ui-muted)]">Every uploaded period, oldest first.</p>
+            <LiabilityTrend Points="Trend" Target="Target" />
+        </Card>
+
+        <div class="grid gap-4 lg:grid-cols-3">
+            <LeaveTopCard Title="Highest balance now" Aside="annual + lieu" Rows="View.TopCurrent" ValueOf="m => m.CurrentLiabilityHours" Target="Target" Against="false">
+                <Footer><LeaveTabLink OnClick="() => OnTab.InvokeAsync(LeaveTab.Team)">Everyone in Team Analysis →</LeaveTabLink></Footer>
+            </LeaveTopCard>
+            <LeaveTopCard Title="Highest at 31 December" Aside="@($"projected · against {LeaveUi.N(Target)} h")" Rows="View.TopEoy" ValueOf="m => m.EoyBalanceHours" Target="Target" Against="true">
+                <Footer><LeaveTabLink OnClick="() => OnTab.InvokeAsync(LeaveTab.Team)">Days each still needs to book →</LeaveTabLink></Footer>
+            </LeaveTopCard>
+            <Card Class="flex flex-col">
+                <SectionHeader>
+                    <Title>Dates at the cover cap</Title>
+                    <Aside>@($"{View.MaxStaffOnLeave} or more on approved leave")</Aside>
+                </SectionHeader>
+                @if (View.Calendar.UnavailableDates.Count == 0)
+                {
+                    <p class="text-sm text-[var(--ui-muted)]">None - every date has cover.</p>
+                }
+                else
+                {
+                    <ul class="flex max-h-52 flex-wrap gap-1.5 overflow-y-auto" aria-label="Dates at the cover cap">
+                        @foreach (var d in View.Calendar.UnavailableDates)
+                        {
+                            <li @key="d"><Pill Tone="PillTone.Red" Class="!px-3 !py-1 text-[13px]">@Dates.AuDayLabel(d)</Pill></li>
+                        }
+                    </ul>
+                    <p class="mt-3 text-xs text-[var(--ui-muted)]">No more leave should be approved on these dates.</p>
+                }
+                <div class="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4">
+                    <LeaveTabLink OnClick="() => OnTab.InvokeAsync(LeaveTab.Calendar)">Open the calendar →</LeaveTabLink>
+                    @if (CanSettings)
+                    {
+                        <LeaveTabLink OnClick="() => OnTab.InvokeAsync(LeaveTab.Settings)">@($"Cover cap {View.MaxStaffOnLeave} · Settings →")</LeaveTabLink>
+                    }
+                    else
+                    {
+                        <span class="text-xs text-[var(--ui-muted)]">@($"Cover cap {View.MaxStaffOnLeave}")</span>
+                    }
+                </div>
+            </Card>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public LeaveStoreView? View { get; set; }
+    [Parameter] public IReadOnlyList<TrendPoint> Trend { get; set; } = [];
+    [Parameter] public double Target { get; set; }
+
+    /// <summary>The viewer has a Settings tab (the cover cap's link goes there).</summary>
+    [Parameter] public bool CanSettings { get; set; }
+
+    [Parameter] public EventCallback<string> OnTab { get; set; }
+
+    // "25 October", with the year only when it is not the current period's.
+    private static string ShortOf(DateOnly d, DateOnly? current) =>
+        current is { } c && c.Year == d.Year ? $"{d.Day} {LeaveUi.MonthName(d.Month - 1)}" : LeaveUi.LongDate(d);
+}

@@ -1,0 +1,117 @@
+@* Port of src/app/(app)/admin/leave-liability/LiabilityTrend.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@using global::Roster.Engine.Planning.Plan
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@* Liability per FTE across pay periods. Drawn at display size (no viewBox
+   scaling) so the type stays at the size it is written - the trade-curve card
+   learned that lesson the hard way. The width is MEASURED rather than fixed,
+   the same way DensityChart does it: a hard-coded width kept the chart at its
+   own size in a card that is wider, which just looked broken. *@
+@if (Points.Count == 0)
+{
+    @* The measured wrapper is rendered either way, so the observer still binds
+       when the chart first mounts with no history. *@
+    <div @ref="_container" class="w-full">
+        <p class="py-8 text-center text-sm text-[var(--brand-navy)]/40">No history yet - upload a second pay period to see the trend.</p>
+    </div>
+}
+else
+{
+    var w = Math.Max(MinW, _width);
+    var plotW = w - PadLeft - PadRight;
+    var top = NiceTop(Js.Max(Points.Select(p => p.HoursPerFte).Append(Target)));
+    double X(int i) => PadLeft + (Points.Count == 1 ? plotW / 2 : (double)i / (Points.Count - 1) * plotW);
+    double Y(double v) => PadTop + PlotH - v / top * PlotH;
+    var ticks = new[] { 0, top / 2, top };
+    var path = string.Join(" ", Points.Select((p, i) => $"{(i == 0 ? "M" : "L")}{N(X(i))},{N(Y(p.HoursPerFte))}"));
+    <div @ref="_container" class="w-full overflow-x-auto">
+        <svg width="@N(w)" height="@Ht" role="img" aria-label="Liability per FTE by pay period">
+            @foreach (var t in ticks)
+            {
+                <g @key="t">
+                    <line x1="@PadLeft" x2="@N(w - PadRight)" y1="@N(Y(t))" y2="@N(Y(t))" stroke="var(--brand-border)" stroke-width="1" />
+                    <text x="@(PadLeft - 6)" y="@N(Y(t) + 3)" text-anchor="end" font-size="10" fill="var(--brand-navy)" opacity="0.5">@Js.ToFixed(t, 0)</text>
+                </g>
+            }
+            @* The target line - the whole point of the chart is distance from it. *@
+            <line x1="@PadLeft" x2="@N(w - PadRight)" y1="@N(Y(Target))" y2="@N(Y(Target))" stroke="var(--brand-red)" stroke-width="1.5" stroke-dasharray="6 4" />
+            <text x="@N(w - PadRight)" y="@N(Y(Target) - 5)" text-anchor="end" font-size="10" fill="var(--brand-red)">target @(N(Target))h</text>
+            <path d="@path" fill="none" stroke="@TradeCurve.CurveHue" stroke-width="2" stroke-linejoin="round" />
+            @for (var i = 0; i < Points.Count; i++)
+            {
+                var p = Points[i];
+                <g @key="p.PeriodEnd">
+                    <circle cx="@N(X(i))" cy="@N(Y(p.HoursPerFte))" r="3.5" fill="@TradeCurve.CurveHue" />
+                    <title>@($"{Dates.AuFull(p.PeriodEnd)}: {Js.ToFixed(p.HoursPerFte, 1)}h per FTE")</title>
+                    <text x="@N(X(i))" y="@(Ht - 10)" text-anchor="middle" font-size="10" fill="var(--brand-navy)" opacity="0.55">@Dates.AuShort(p.PeriodEnd)</text>
+                </g>
+            }
+        </svg>
+    </div>
+}
+
+@code {
+    private const int Ht = 180;
+    private const int MinW = 480;
+    private const int PadTop = 14, PadRight = 12, PadBottom = 30, PadLeft = 44;
+    private const int PlotH = Ht - PadTop - PadBottom;
+
+    private ElementReference _container;
+    private double _width = 1100;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _observer;
+    private DotNetObjectReference<LiabilityTrend>? _self;
+
+    [Parameter, EditorRequired] public IReadOnlyList<TrendPoint> Points { get; set; } = [];
+    [Parameter] public double Target { get; set; }
+
+    private static string N(double v) => Js.NumberToString(v);
+
+    private static double NiceTop(double max)
+    {
+        var step = max <= 50 ? 10 : max <= 150 ? 25 : 50;
+        double top = step;
+        while (top < max) top += step;
+        return top;
+    }
+
+    // Keep the SVG's coordinate space 1:1 with its rendered width, so the line
+    // fills the card without a scaled viewBox warping the axis labels.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Features/LeaveLiability/LeaveLiabilityPage.razor.js");
+            _self = DotNetObjectReference.Create(this);
+            _observer = await _module.InvokeAsync<IJSObjectReference>("observeWidth", _container, _self);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public Task SetWidth(double width)
+    {
+        if (Math.Abs(width - _width) < 0.5) return Task.CompletedTask;
+        _width = width;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_observer is not null)
+            {
+                await _observer.InvokeVoidAsync("dispose");
+                await _observer.DisposeAsync();
+            }
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        _self?.Dispose();
+    }
+}

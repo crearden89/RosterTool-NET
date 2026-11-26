@@ -1,0 +1,200 @@
+@* Port of src/app/(app)/admin/leave-liability/LeaveCalendar.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@* ─── Calendar ────────────────────────────────────────────────────────────────
+   One month of the year's leave, a row per team member, with the store's
+   "on approved leave" count on top: amber one below the cover cap, red at it. *@
+@if (View is null)
+{
+    <NoLeaveData />
+}
+else
+{
+    var holidays = View.Holidays.ToHashSet();
+    var byId = View.Members.GroupBy(m => m.UkgEmployeeId).ToDictionary(g => g.Key, g => g.Last());
+    var cap = View.MaxStaffOnLeave;
+    var cols = View.Calendar.Dates.Select((date, i) => (Date: date, I: i)).Where(c => c.Date.Month - 1 == _month).ToList();
+    var atCap = cols.Where(c => cap > 0 && View.Calendar.OnLeaveByDate[c.I] >= cap).ToList();
+    var phs = cols.Where(c => holidays.Contains(c.Date)).ToList();
+    var year = View.Calendar.Dates.Count > 0 ? View.Calendar.Dates[0].Year : Today.Year;
+    <div>
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <FilterChips TKey="string" Label="Month" Value="@_month.ToString()" OnChange="k => _month = int.Parse(k)"
+                         Options="@Enumerable.Range(0, 12).Select(i => new FilterChip<string>(i.ToString(), LeaveUi.MonthName(i)[..3])).ToList()" />
+            @if (CanSettings)
+            {
+                <LeaveTabLink OnClick="() => OnTab.InvokeAsync(LeaveTab.Settings)">@($"Cover cap {cap} · change it in Settings →")</LeaveTabLink>
+            }
+            else
+            {
+                <span class="text-xs text-[var(--ui-muted)]">@($"Cover cap {cap}")</span>
+            }
+        </div>
+
+        <Card Class="mb-3 !p-4">
+            <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <h2 class="text-base font-semibold text-[var(--ui-ink)]">@LeaveUi.MonthName(_month) @year</h2>
+                <span class="flex flex-wrap items-center gap-1.5 text-[var(--ui-muted)]">
+                    At the cap:
+                    @if (atCap.Count == 0)
+                    {
+                        <span>none</span>
+                    }
+                    else
+                    {
+                        foreach (var c in atCap)
+                        {
+                            <Pill @key="c.Date" Tone="PillTone.Red">@Dates.AuDayLabel(c.Date)</Pill>
+                        }
+                    }
+                </span>
+                @if (phs.Count > 0)
+                {
+                    <span class="flex flex-wrap items-center gap-1.5 text-[var(--ui-muted)]">
+                        Public holidays:
+                        @foreach (var c in phs)
+                        {
+                            <Pill @key="c.Date" Tone="PillTone.Amber">@Dates.AuDayLabel(c.Date)</Pill>
+                        }
+                    </span>
+                }
+            </div>
+            <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-[var(--ui-muted)]" aria-label="Key">
+                @foreach (var (code, cls, label) in CodeStyles)
+                {
+                    <li @key="code" class="flex items-center gap-1.5">
+                        <span class="@($"inline-grid h-5 min-w-7 place-items-center rounded-md px-1 text-[10px] font-bold {cls}")">@(code)</span>
+                        @label
+                    </li>
+                }
+                <li class="flex items-center gap-1.5"><span aria-hidden="true" class="inline-block h-5 w-7 rounded-md bg-[var(--ui-amber-bg)]"></span> Public holiday</li>
+                <li class="flex items-center gap-1.5"><span aria-hidden="true" class="inline-block h-5 w-7 rounded-md bg-[var(--ui-lavender)]"></span> Weekend</li>
+            </ul>
+        </Card>
+
+        <div @ref="_scroller" class="@Ui.Table.Frame">
+            <table class="w-full border-separate border-spacing-0 text-xs text-[var(--ui-ink)]">
+                <thead>
+                    <tr>
+                        <th class="sticky left-0 z-10 w-[7.5rem] min-w-[7.5rem] border-b border-[var(--ui-line)] bg-white px-3 py-2 text-left text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase sm:w-auto sm:min-w-[11.5rem]">Team member</th>
+                        @foreach (var c in cols)
+                        {
+                            var dow = (int)c.Date.DayOfWeek;
+                            var ph = holidays.Contains(c.Date);
+                            var isToday = c.Date == Today;
+                            <th @key="c.Date" data-today="@(isToday ? "" : null)"
+                                title="@($"{Dates.AuFull(c.Date)}{(ph ? " (public holiday)" : "")}{(isToday ? " (today)" : "")}")"
+                                class="@($"min-w-[1.85rem] border-b border-[var(--ui-line)] px-0 py-1.5 text-center font-semibold {(ph ? "bg-[var(--ui-amber-bg)]" : dow == 0 || dow == 6 ? "bg-[var(--ui-lavender)]" : "")}")">
+                                <span class="block text-[10px] text-[var(--ui-faint)]">@WeekdayLetter[dow]</span>
+                                <span class="@($"mx-auto block w-6 rounded-full text-[13px] {(isToday ? "bg-[var(--ui-ink)] text-white" : "")}")">@c.Date.Day</span>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="sticky left-0 z-10 border-b border-[var(--ui-line)] bg-[var(--ui-canvas)] px-3 py-1.5 text-xs font-semibold">On approved leave</td>
+                        @foreach (var c in cols)
+                        {
+                            var n = View.Calendar.OnLeaveByDate[c.I];
+                            var full = n >= cap && cap > 0;
+                            var near = n == cap - 1 && n > 0;
+                            <td @key="c.Date" class="border-b border-[var(--ui-line)] bg-[var(--ui-canvas)] px-0 py-1 text-center">
+                                @if (n > 0)
+                                {
+                                    <span title="@(full ? "At the cap - no further leave should be approved" : null)"
+                                          class="@($"inline-grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold {(full ? "bg-[var(--ui-bad)] text-white" : near ? "bg-[var(--ui-amber-bg)] text-[var(--ui-amber-ink)]" : "text-[var(--ui-muted)]")}")">@n</span>
+                                }
+                            </td>
+                        }
+                    </tr>
+                    @foreach (var r in View.Calendar.Rows)
+                    {
+                        if (!byId.TryGetValue(r.UkgEmployeeId, out var m)) continue;
+                        var name = LeaveMetrics.DisplayName(m.EmployeeName);
+                        <tr @key="r.UkgEmployeeId">
+                            <td class="sticky left-0 z-10 max-w-[7.5rem] border-b border-[var(--ui-line)] bg-white px-3 py-1 sm:max-w-none">
+                                <span class="flex min-w-0 items-center gap-2">
+                                    <Avatar Name="@name" Seed="@m.UkgEmployeeId" Size="20" />
+                                    <span class="truncate text-xs font-medium" title="@name">@name</span>
+                                </span>
+                            </td>
+                            @foreach (var c in cols)
+                            {
+                                var code = r.Codes[c.I];
+                                var dow = (int)c.Date.DayOfWeek;
+                                var ph = holidays.Contains(c.Date);
+                                <td @key="c.Date" title="@($"{Dates.AuFull(c.Date)}{(ph ? " (public holiday)" : "")}")"
+                                    class="@($"border-b border-[var(--ui-line)] px-0.5 py-1 text-center {(ph ? "bg-[var(--ui-amber-bg)]/70" : dow == 0 || dow == 6 ? "bg-[var(--ui-lavender)]/60" : "")}")">
+                                    @if (code.Length > 0)
+                                    {
+                                        <span class="@($"inline-grid h-5 w-full place-items-center rounded-md text-[10px] font-bold {StyleOf(code)}")">@(code)</span>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-2 text-xs text-[var(--ui-muted)]">
+            Today&apos;s date is marked in navy, and the grid opens on it. Hover a day for its date. Sick, carers and unpaid leave show once
+            requested; only approved annual leave counts towards the cap.
+        </p>
+    </div>
+}
+
+@code {
+    // Calendar cell colours. AL is the only "settled" state, so it gets the solid
+    // tone; everything else reads as provisional or exceptional.
+    private static readonly (string Code, string Cls, string Label)[] CodeStyles =
+    [
+        (LeaveCode.AL, "bg-[var(--ui-ink)] text-white", "Annual leave (approved)"),
+        (LeaveCode.S, "border border-dashed border-[var(--ui-ink)] bg-white text-[var(--ui-ink)]", "Annual leave (submitted)"),
+        (LeaveCode.SIC, "bg-[var(--brand-red-tint)] text-[var(--ui-bad)]", "Sick / carers"),
+        (LeaveCode.UP, "bg-[var(--ui-amber-bg)] text-[var(--ui-amber-ink)]", "Unpaid"),
+    ];
+
+    private const string WeekdayLetter = "SMTWTFS";
+
+    private int _month;
+    private int _scrolledMonth = -1;
+    private ElementReference _scroller;
+    private IJSObjectReference? _module;
+
+    [Parameter] public LeaveStoreView? View { get; set; }
+
+    /// <summary>Today's date in Australia, from the server.</summary>
+    [Parameter] public DateOnly Today { get; set; }
+
+    [Parameter] public bool CanSettings { get; set; }
+    [Parameter] public EventCallback<string> OnTab { get; set; }
+
+    protected override void OnInitialized() => _month = Today.Month - 1;
+
+    private static string StyleOf(string code) => CodeStyles.First(s => s.Code == code).Cls;
+
+    // The grid opens at today's date: on a phone only a week shows at once.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (View is null || _scrolledMonth == _month) return;
+        _scrolledMonth = _month;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Features/LeaveLiability/LeaveLiabilityPage.razor.js");
+            await _module.InvokeVoidAsync("scrollToToday", _scroller);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
+}
