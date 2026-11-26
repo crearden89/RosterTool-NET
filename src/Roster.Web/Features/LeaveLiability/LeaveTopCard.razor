@@ -1,0 +1,47 @@
+@* Port of TopCard in src/app/(app)/admin/leave-liability/LeaveOverview.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+<Card Class="flex flex-col">
+    <SectionHeader>
+        <Title>@Title</Title>
+        <Aside>@Aside</Aside>
+    </SectionHeader>
+    @if (Rows.Count == 0)
+    {
+        <p class="text-sm text-[var(--ui-muted)]">No data.</p>
+    }
+    else
+    {
+        var max = Js.Max(Rows.Select(ValueOf).Append(1));
+        <ul class="space-y-3">
+            @foreach (var m in Rows)
+            {
+                var v = ValueOf(m);
+                var colour = Against ? (v > Target ? "var(--ui-bad)" : "var(--ui-good)") : "var(--ui-ink)";
+                <li @key="m.UkgEmployeeId">
+                    <div class="flex items-center justify-between gap-3">
+                        <LeavePerson Member="m" Size="26" />
+                        <span class="@($"shrink-0 text-sm font-bold tabular-nums {(Against ? LeaveUi.OverColour(v > Target) : "text-[var(--ui-ink)]")}")">@LeaveUi.H1(v) h</span>
+                    </div>
+                    <div class="mt-1.5 pl-9">
+                        <MeterBar Value="@(v / max)" Label="@($"{LeaveMetrics.DisplayName(m.EmployeeName)} {LeaveUi.H1(v)} hours")" Colour="@colour" />
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+    <div class="mt-auto pt-4">@Footer</div>
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string Aside { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<TeamMember> Rows { get; set; } = [];
+    [Parameter, EditorRequired] public Func<TeamMember, double> ValueOf { get; set; } = _ => 0;
+    [Parameter] public double Target { get; set; }
+
+    /// <summary>Colour each balance against the target (red over, green under).</summary>
+    [Parameter] public bool Against { get; set; }
+
+    [Parameter] public RenderFragment? Footer { get; set; }
+}

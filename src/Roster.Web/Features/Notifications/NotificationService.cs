@@ -10,9 +10,9 @@ using Roster.Data.Services.Notifications;
 namespace Roster.Web.Features.Notifications;
 
 /// <summary>
-/// <see cref="INotificationService"/> as the signed-in person. Their reads and writes go
-/// through the store scope's notification rule, as row-level security scoped them: their
-/// own rows (a super user's reach every row, as the notifications policies allow).
+/// <see cref="INotificationService"/> as the signed-in person: their own notifications only,
+/// whoever they are. (The TypeScript app left this to row-level security, whose policies also
+/// let a super user count, list and mark read everyone's; the owner corrected that here.)
 /// </summary>
 /// <remarks>
 /// The menu's badge reads this on every page, so the data layer is reached per call, and a
@@ -59,12 +59,14 @@ public sealed class NotificationService(
     // open the Notifications screen.
     public async Task MarkAllReadAsync(CancellationToken cancellationToken = default)
     {
-        if (access.Current.User is null) return; // requireUser: the page itself needs a sign-in
+        if (access.Current.User?.Id is not { } me) return; // requireUser: the page itself needs a sign-in
         try
         {
             await using var db = services.GetRequiredService<IRosterDbContextFactory>().Create();
             var now = clock.GetUtcNow();
-            var unread = await db.Notifications.Where(n => n.ReadAt == null).ToListAsync(cancellationToken);
+            // Their own rows only, a super user's too (the notifications rule would let a
+            // super user's update reach everyone's: the owner's correction of the TypeScript app).
+            var unread = await db.Notifications.Where(n => n.UserId == me && n.ReadAt == null).ToListAsync(cancellationToken);
             foreach (var n in unread) n.ReadAt = now;
             await db.SaveChangesAsync(cancellationToken);
         }

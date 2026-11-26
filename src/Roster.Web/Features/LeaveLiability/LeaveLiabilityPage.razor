@@ -1,0 +1,51 @@
+@page "/admin/leave-liability"
+@* Port of src/app/(app)/admin/leave-liability/page.tsx and LeaveClient.tsx. *@
+@inject IServiceProvider Services
+@* Leave Liability - the web port of the Leave Liability workbook. Open to every
+   signed-in tier; what each of them SEES is decided by the reporting scope, and
+   the national config on the Settings tab stays super-user only. *@
+@if (_data is null)
+{
+    <Loading />
+}
+else
+{
+    @* The save scope covers the whole page, so leaving Settings with an unsaved
+       change (another tab, store or pay period) asks first. *@
+    <SaveScope Note="@(_data.IsSuperUser ? SuperUserNote : null)">
+        <LeaveShell Data="_data" Pending="_pending" OnReload="ReloadAsync" />
+    </SaveScope>
+}
+
+@code {
+    private static readonly RenderFragment SuperUserNote = @<text>Targets and the cover cap save here; each accrual band row has its own Save</text>;
+
+    private ILeaveLiabilityService? _service;
+    private LeavePageData? _data;
+    private bool _pending;
+
+    // Resolved on the interactive render, which is where the data loads.
+    private ILeaveLiabilityService Service => _service ??= Services.GetRequiredService<ILeaveLiabilityService>();
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+    [SupplyParameterFromQuery(Name = "period")] public string? PeriodParam { get; set; }
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    [SupplyParameterFromQuery(Name = "scope")] public string? Scope { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The data loads once, on the interactive render: the prerender shows the
+        // loading state rather than reading everything twice.
+        if (!RendererInfo.IsInteractive) return;
+        _pending = true;
+        await ReloadAsync();
+        _pending = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        Guid? store = Guid.TryParse(Store, out var s) ? s : null;
+        DateOnly? period = DateOnly.TryParseExact(PeriodParam, "yyyy-MM-dd", out var p) ? p : null;
+        _data = await Service.LoadAsync(new LeavePageQuery(store, period, Tab, Scope));
+    }
+}

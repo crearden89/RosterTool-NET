@@ -1,0 +1,14 @@
+@* Port of NoLeaveData in src/app/(app)/admin/leave-liability/leaveUi.tsx. *@
+@* The store has no leave data loaded. No upload link here: most tiers who now
+   reach this page cannot load the UKG exports, so pointing them at a screen
+   they cannot open would read as a broken permission rather than an
+   explanation. *@
+<Card>
+    <div class="flex flex-col items-center gap-2 py-4 text-center">
+        <span class="grid h-10 w-10 place-items-center rounded-full bg-[var(--ui-lavender)] text-[var(--ui-violet)]">
+            <Icon Name="IconName.FileSpreadsheet" Class="h-5 w-5" />
+        </span>
+        <p class="text-sm font-semibold text-[var(--ui-ink)]">No leave data has been loaded for this store yet.</p>
+        <p class="max-w-sm text-xs text-[var(--ui-muted)]">Balances and bookings appear here once the store&apos;s UKG extract is loaded.</p>
+    </div>
+</Card>

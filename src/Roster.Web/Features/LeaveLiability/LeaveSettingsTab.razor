@@ -1,0 +1,38 @@
+@* Port of Settings in src/app/(app)/admin/leave-liability/LeaveSettings.tsx. *@
+@using global::Roster.Engine.Leave
+@* ─── Settings ────────────────────────────────────────────────────────────────
+   In the settings pages' style: a card per setting with its purpose, the
+   targets and the cover cap saved from the page's save bar, and each accrual
+   band row keeping its own Save. Gated as before: the national block (targets,
+   bands) for a super user, the cover cap for whoever may edit the store. *@
+<div class="space-y-4">
+    <div class="@(IsSuperUser && CanEditStore ? "grid gap-4 xl:grid-cols-2" : "space-y-4")">
+        @if (IsSuperUser)
+        {
+            <LeaveTargetsForm Target="Target" FteDivisor="FteDivisor" OnSaved="OnSaved" />
+        }
+        @if (CanEditStore && StoreId is { } storeId)
+        {
+            <LeaveCoverForm StoreId="storeId" StoreName="@StoreName" Max="MaxStaffOnLeave" OnSaved="OnSaved" />
+        }
+    </div>
+    @* The accrual bands are award-wide, not a store's to change. *@
+    @if (IsSuperUser)
+    {
+        <LeaveBandsSection Bands="Bands" OnSaved="OnSaved" />
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<AccrualBand> Bands { get; set; } = [];
+    [Parameter] public double Target { get; set; }
+    [Parameter] public double FteDivisor { get; set; }
+    [Parameter] public Guid? StoreId { get; set; }
+    [Parameter] public string StoreName { get; set; } = "";
+    [Parameter] public int MaxStaffOnLeave { get; set; }
+    [Parameter] public bool CanEditStore { get; set; }
+    [Parameter] public bool IsSuperUser { get; set; }
+
+    /// <summary>A save went through: the page reads its figures again.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+}

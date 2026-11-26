@@ -1,0 +1,262 @@
+@* Port of src/app/(app)/admin/leave-liability/LeaveTeam.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@implements IAsyncDisposable
+@inject RosterJs Browser
+@* ─── Team Analysis ───────────────────────────────────────────────────────────
+   Everyone's balance as a table. Filter chips narrow it, the sort switch
+   orders it, and the Columns menu turns columns on and off. *@
+@if (View is null)
+{
+    <NoLeaveData />
+}
+else
+{
+    var members = View.Members;
+    var rows = Rows(members);
+    // The longest bar is the furthest anyone sits from the target.
+    var maxGap = Js.Max(members.Select(m => Math.Abs(m.EoyBalanceHours - Target)).Append(1));
+    var numeric = TeamCols.Where(c => _cols[c.Key] && c.Key != "position").ToList();
+    var colSpan = 1 + numeric.Count + (_cols["eoy"] ? 1 : 0);
+    <div>
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <FilterChips TKey="string" Label="Show" Value="_filter" OnChange="v => _filter = v"
+                         Options="@([
+                             new FilterChip<string>("all", "All", members.Count),
+                             new FilterChip<string>("over", "Over target at 31 Dec", members.Count(m => m.EoyBalanceHours > Target)),
+                             new FilterChip<string>("managers", "Managers", members.Count(IsManager)),
+                             new FilterChip<string>("team", "Store team", members.Count(m => !IsManager(m))),
+                         ])" />
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-semibold text-[var(--ui-muted)]" aria-hidden="true">Sort by</span>
+                <SegmentedControl T="string" Label="Sort by" Size="ControlSize.Sm" Value="_sort" OnChange="v => _sort = v"
+                                  Options="@([new SegmentOption<string>("eoy", "EOY balance"), new SegmentOption<string>("current", "Current balance"), new SegmentOption<string>("name", "Name")])" />
+                @* The Columns menu: a switch per optional column. Escape or a click outside closes it. *@
+                <div class="relative">
+                    <button type="button" @onclick="ToggleMenuAsync" aria-expanded="@(_menuOpen ? "true" : "false")" aria-controls="leave-columns"
+                            class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">
+                        <Icon Name="IconName.Columns3" Class="h-3.5 w-3.5" /> Columns
+                    </button>
+                    @if (_menuOpen)
+                    {
+                        <div class="fixed inset-0 z-10" aria-hidden="true" @onmousedown="CloseMenuAsync"></div>
+                        <div id="leave-columns" class="absolute right-0 z-20 mt-2 w-60 rounded-2xl border border-[var(--ui-line)] bg-white p-2 shadow-[0_10px_30px_rgba(0,0,95,0.12)]">
+                            <p class="px-2 pt-1 pb-2 text-[11px] font-semibold tracking-[0.08em] text-[var(--ui-faint)] uppercase">Columns · Name is always shown</p>
+                            <ul>
+                                @foreach (var c in TeamCols)
+                                {
+                                    <li @key="c.Key" class="px-2 py-1">
+                                        <Switch Checked="_cols[c.Key]" OnChange="on => _cols[c.Key] = on" Label="@c.Label" />
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="@Ui.Table.Frame">
+            <table class="@Ui.Table.Element">
+                <thead class="@Ui.Table.Head">
+                    <tr>
+                        @* The names stay in view while the figures scroll on a phone. *@
+                        <th class="@($"{Ui.Table.Th} sticky left-0 z-[1] bg-[#f1f1f8] text-left")">Name</th>
+                        @foreach (var c in numeric)
+                        {
+                            <th class="@($"{Ui.Table.Th} text-right")">@c.Label</th>
+                            @if (c.Key == "eoy")
+                            {
+                                <th class="@($"{Ui.Table.Th} hidden w-44 text-center md:table-cell")">vs @LeaveUi.N(Target) h target</th>
+                            }
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (rows.Count == 0)
+                    {
+                        <tr><td colspan="@colSpan" class="@Ui.Table.Empty">@(members.Count == 0 ? "No employees for this period." : "No one matches this filter.")</td></tr>
+                    }
+                    else
+                    {
+                        foreach (var m in rows)
+                        {
+                            var gap = m.EoyBalanceHours - Target;
+                            <tr @key="m.UkgEmployeeId" class="@Ui.Table.Row">
+                                <td class="@($"{Ui.Table.Td} sticky left-0 z-[1] min-w-[9.5rem] bg-white sm:min-w-[12.5rem]")">
+                                    <LeavePerson Member="m">
+                                        <Badge>
+                                            @if (m.Unbanded)
+                                            {
+                                                <Pill Tone="PillTone.Amber" Title="No accrual band">No band</Pill>
+                                            }
+                                        </Badge>
+                                        <Sub>
+                                            @if (_cols["position"])
+                                            {
+                                                <span class="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-[var(--ui-muted)]">
+                                                    <RolePill Role="@m.RoleClass" />
+                                                    <span class="truncate">@LeaveUi.PositionLabel(m)</span>
+                                                </span>
+                                            }
+                                        </Sub>
+                                    </LeavePerson>
+                                </td>
+                                @foreach (var c in numeric)
+                                {
+                                    @if (c.Key == "eoy")
+                                    {
+                                        @* The 31 December balance, red over the target and green under, and its bar. *@
+                                        <td class="@Num($"font-bold {LeaveUi.OverColour(gap > 0)}")">@LeaveUi.H1(m.EoyBalanceHours)</td>
+                                        <td class="@($"{Ui.Table.Td} hidden md:table-cell")">
+                                            <CentredBar Value="@(Math.Abs(gap) / maxGap)" Side="@(gap > 0 ? BarSide.Above : gap < 0 ? BarSide.Below : BarSide.None)"
+                                                        Label="@($"{LeaveUi.H1(Math.Abs(gap))} hours {(gap > 0 ? "over" : "under")} the target")"
+                                                        AboveColour="@LeaveUi.TargetAbove" BelowColour="@LeaveUi.TargetBelow" />
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        @Cell(c.Key, m)
+                                    }
+                                }
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <details class="mt-3 rounded-2xl border border-[var(--ui-line)] bg-white px-4 py-3">
+            <summary class="@($"flex cursor-pointer items-center gap-2 rounded-sm text-sm font-semibold text-[var(--ui-ink)] {Ui.FocusRing}")">
+                <Icon Name="IconName.Info" Class="h-4 w-4 text-[var(--ui-violet)]" /> How these figures are worked out
+            </summary>
+            <p class="mt-2 max-w-4xl text-xs leading-relaxed text-[var(--ui-muted)]">
+                Liability is <strong>annual leave + lieu</strong>, and nothing else - sick, carers, bereavement and long service accrue but
+                are not carried as leave liability (they still show on the Calendar once requested). Lieu is signed: negative means the
+                employee owes hours back, and it carries forward flat because it is earned by working, not by the calendar. Projections run
+                from today to 31 December; only future approved leave reduces the balance, since leave already taken has been deducted by
+                UKG. Casuals accrue nothing and are excluded.
+            </p>
+        </details>
+    </div>
+}
+
+@code {
+    // Optional columns, in table order. Name is fixed - it is what identifies the
+    // row. The four switched OFF by default (contract, leave notional, to accrue,
+    // EOY weeks) are the workbook's working-out rather than numbers a manager acts
+    // on, so they stay available without crowding the view.
+    public static readonly IReadOnlyList<(string Key, string Label, bool On)> TeamCols =
+    [
+        ("position", "Position", true),
+        ("contract", "Contract", false),
+        ("notional", "Leave notional", false),
+        ("annual", "Annual", true),
+        ("lieu", "Lieu", true),
+        ("liability", "Liability", true),
+        ("planned", "Planned", true),
+        ("accrue", "To accrue", false),
+        ("eoy", "EOY balance", true),
+        ("eoyWeeks", "EOY weeks", false),
+        ("daysToTake", "Days to take", true),
+    ];
+
+    private readonly Dictionary<string, bool> _cols = TeamCols.ToDictionary(c => c.Key, c => c.On);
+    private string _sort = "eoy";
+    private string _filter = "all";
+    private bool _menuOpen;
+    private DotNetObjectReference<LeaveTeamTab>? _self;
+    private IJSObjectReference? _escape;
+
+    [Parameter] public LeaveStoreView? View { get; set; }
+    [Parameter] public double Target { get; set; }
+
+    private static bool IsManager(TeamMember m) => RoleClass.ManagerClasses.Contains(m.RoleClass);
+
+    private List<TeamMember> Rows(IReadOnlyList<TeamMember> members)
+    {
+        var r = members.Where(m => _filter switch
+        {
+            "over" => m.EoyBalanceHours > Target,
+            "managers" => IsManager(m),
+            "team" => !IsManager(m),
+            _ => true,
+        }).ToList();
+        if (_sort == "name") Js.Sort(r, (a, b) => Js.LocaleCompare(a.EmployeeName, b.EmployeeName));
+        else if (_sort == "current") Js.Sort(r, (a, b) => b.CurrentLiabilityHours - a.CurrentLiabilityHours);
+        else Js.Sort(r, (a, b) => b.EoyBalanceHours - a.EoyBalanceHours);
+        return r;
+    }
+
+    private static string Num(string extra = "") => $"{Ui.Table.Td} text-right whitespace-nowrap tabular-nums {extra}";
+
+    private RenderFragment Cell(string col, TeamMember m) => col switch
+    {
+        "contract" => @<td class="@Num()">@LeaveUi.H1(m.ContractHours)</td>,
+        "notional" => @<td class="@Num()">@LeaveUi.H2(m.LeaveNotional)</td>,
+        "annual" => @<td class="@Num()">@LeaveUi.H1(m.AnnualHours)</td>,
+        "lieu" => @<td class="@Num(m.LieuHours < 0 ? "text-[var(--ui-bad)]" : "text-[var(--ui-muted)]")">@(Js.Truthy(m.LieuHours) ? $"{(m.LieuHours > 0 ? "+" : "−")}{Js.ToFixed(Math.Abs(m.LieuHours), 1)}" : "-")</td>,
+        "liability" => @<td class="@Num("font-semibold")">@LeaveUi.H1(m.CurrentLiabilityHours)</td>,
+        // Hours, not days: a leave day is worth a different number of hours to
+        // every contract, so the day count invites the wrong comparison.
+        "planned" => @<td class="@Num("text-[var(--ui-muted)]")">@(Js.Truthy(m.PlannedHours) ? $"{LeaveUi.H1(m.PlannedHours)} h" : "-")</td>,
+        "accrue" => @<td class="@Num("text-[var(--ui-muted)]")">@LeaveUi.H1(m.EoyAccrualHours)</td>,
+        "eoyWeeks" => @<td class="@Num()">@LeaveUi.H1(m.EoyBalanceWeeks)</td>,
+        "daysToTake" => @<td class="@($"{Ui.Table.Td} text-right whitespace-nowrap")">
+            @if (m.DaysToTake > 0)
+            {
+                <Pill Tone="PillTone.Red">@($"{Js.ToFixed(m.DaysToTake, 1)} days")</Pill>
+            }
+            else
+            {
+                <span class="text-[var(--ui-faint)]">-</span>
+            }
+        </td>,
+        _ => _ => { },
+    };
+
+    private async Task ToggleMenuAsync()
+    {
+        if (_menuOpen)
+        {
+            await CloseMenuAsync();
+            return;
+        }
+        _menuOpen = true;
+        _self ??= DotNetObjectReference.Create(this);
+        try
+        {
+            _escape = await Browser.OnKeyAsync("Escape", _self, nameof(EscapeAsync));
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    [JSInvokable]
+    public Task EscapeAsync() => InvokeAsync(CloseMenuAsync);
+
+    private async Task CloseMenuAsync()
+    {
+        _menuOpen = false;
+        await DropEscapeAsync();
+        StateHasChanged();
+    }
+
+    private async Task DropEscapeAsync()
+    {
+        if (_escape is null) return;
+        try
+        {
+            await _escape.InvokeVoidAsync("dispose");
+            await _escape.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        _escape = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DropEscapeAsync();
+        _self?.Dispose();
+    }
+}

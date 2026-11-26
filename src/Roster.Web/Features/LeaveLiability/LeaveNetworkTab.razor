@@ -1,0 +1,110 @@
+@* Port of src/app/(app)/admin/leave-liability/LeaveNetwork.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@* ─── Network ─────────────────────────────────────────────────────────────────
+   Every in-scope store's totals for the pay period, highest per FTE first.
+   Totals only: named balances stay on each store's own tabs. *@
+@{
+    var rows = Network.Rows;
+    var target = Network.Target;
+}
+@* The switch has to render even when the current scope is empty, or a PA
+   whose own region has no data loaded would be stranded with no way back. *@
+<div class="mb-4 flex flex-wrap items-center gap-3">
+    @if (CanSeeNational)
+    {
+        <fieldset disabled="@Pending" class="contents">
+            <SegmentedControl T="NetworkScope" Label="Stores shown" Size="ControlSize.Sm" Value="Scope" OnChange="OnScope"
+                              Options="@([new SegmentOption<NetworkScope>(NetworkScope.Remit, "My stores"), new SegmentOption<NetworkScope>(NetworkScope.National, "National")])" />
+        </fieldset>
+    }
+    <span class="text-xs text-[var(--ui-muted)]">@($"{rows.Count} store{(rows.Count == 1 ? "" : "s")} with data{(rows.Count > 1 ? " · highest per FTE first" : "")}")</span>
+</div>
+
+@if (Network.PeriodEnd is null || rows.Count == 0)
+{
+    <Card><p class="text-center text-sm text-[var(--ui-muted)]">No leave data for any store in this view.</p></Card>
+}
+else
+{
+    var over = rows.Count(r => (r.VsTarget ?? 0) > 0);
+    double totalHours = 0, totalFte = 0;
+    foreach (var r in rows) totalHours += r.TotalLiabilityHours;
+    foreach (var r in rows) totalFte += r.Fte;
+    var top = rows[0];
+    var maxGap = Js.Max(rows.Select(r => Math.Abs(r.VsTarget ?? 0)).Append(1));
+    <div class="mb-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
+        <StatCard>
+            <Label>Over the target</Label>
+            <Value>@($"{over} of {rows.Count}")</Value>
+            <Sub>@($"stores above {LeaveUi.N(target)} h per FTE")</Sub>
+        </StatCard>
+        <StatCard>
+            <Label>These stores together</Label>
+            <Value>@($"{LeaveUi.H1(totalFte > 0 ? totalHours / totalFte : null)} h")</Value>
+            <Sub>@($"per FTE · {LeaveUi.H1(totalHours)} h over {LeaveUi.H2(totalFte)} FTE")</Sub>
+        </StatCard>
+        <StatCard Class="col-span-2 xl:col-span-1">
+            <Label>Highest</Label>
+            <Value>@top.Code</Value>
+            <Sub>@($"{top.Name} · {LeaveUi.H1(top.HoursPerFte)} h per FTE")</Sub>
+        </StatCard>
+    </div>
+    <div class="@Ui.Table.Frame">
+        <table class="@Ui.Table.Element">
+            <thead class="@Ui.Table.Head">
+                <tr>
+                    <th class="@($"{Ui.Table.Th} text-left")">Store</th>
+                    <th class="@($"{Ui.Table.Th} text-right")">Team</th>
+                    <th class="@($"{Ui.Table.Th} text-right")">Liability hrs</th>
+                    <th class="@($"{Ui.Table.Th} text-right")">FTE</th>
+                    <th class="@($"{Ui.Table.Th} text-right")">Hrs / FTE</th>
+                    <th class="@($"{Ui.Table.Th} text-right")">vs @(LeaveUi.N(target))h</th>
+                    <th class="@($"{Ui.Table.Th} hidden w-56 text-center md:table-cell")">Under · over target</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in rows)
+                {
+                    var gap = r.VsTarget ?? 0;
+                    var mine = r.StoreId == StoreId;
+                    <tr @key="r.StoreId" class="@($"{Ui.Table.Row} {(mine ? "bg-[var(--ui-lavender)]/50" : "")}")">
+                        <td class="@($"{Ui.Table.Td} whitespace-nowrap")">
+                            <span class="font-semibold">@r.Code</span> <span class="text-[var(--ui-muted)]">@r.Name</span>
+                            @if (mine)
+                            {
+                                <Pill Tone="PillTone.Navy" Class="ml-2">Selected</Pill>
+                            }
+                        </td>
+                        <td class="@($"{Ui.Table.Td} text-right tabular-nums")">@r.Headcount</td>
+                        <td class="@($"{Ui.Table.Td} text-right tabular-nums")">@LeaveUi.H1(r.TotalLiabilityHours)</td>
+                        <td class="@($"{Ui.Table.Td} text-right tabular-nums")">@LeaveUi.H2(r.Fte)</td>
+                        <td class="@($"{Ui.Table.Td} text-right font-bold tabular-nums")">@LeaveUi.H1(r.HoursPerFte)</td>
+                        <td class="@($"{Ui.Table.Td} text-right font-semibold tabular-nums {LeaveUi.OverColour(gap > 0)}")">@(r.VsTarget is { } vs ? $"{(vs > 0 ? "+" : "")}{Js.ToFixed(vs, 1)}" : "-")</td>
+                        <td class="@($"{Ui.Table.Td} hidden md:table-cell")">
+                            <CentredBar Value="@(Math.Abs(gap) / maxGap)" Side="@(gap > 0 ? BarSide.Above : gap < 0 ? BarSide.Below : BarSide.None)"
+                                        Label="@($"{LeaveUi.H1(Math.Abs(gap))} hours per FTE {(gap > 0 ? "over" : "under")} the target")"
+                                        AboveColour="@LeaveUi.TargetAbove" BelowColour="@LeaveUi.TargetBelow" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="mt-2 text-xs text-[var(--ui-muted)]">
+        Totals only: named balances stay on each store&apos;s own tabs.
+        @(Scope == NetworkScope.National && CanSeeNational ? "Every store with data." : "The stores you look after.")
+    </p>
+}
+
+@code {
+    [Parameter, EditorRequired] public LeaveNetworkView Network { get; set; } = default!;
+
+    /// <summary>The store picked in the header, marked in the table.</summary>
+    [Parameter] public Guid? StoreId { get; set; }
+
+    [Parameter] public bool CanSeeNational { get; set; }
+    [Parameter] public NetworkScope Scope { get; set; }
+    [Parameter] public EventCallback<NetworkScope> OnScope { get; set; }
+    [Parameter] public bool Pending { get; set; }
+}
