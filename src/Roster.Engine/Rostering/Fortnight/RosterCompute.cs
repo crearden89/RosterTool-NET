@@ -187,6 +187,39 @@ public static class RosterCompute
     public static FortnightRoster ComputeRosterFortnight(FortnightSources src)
     {
         var dates = Period.PeriodDatesFrom(src.PeriodStart);
+        var result = FortnightEngine.RunFortnightStage2(BuildFortnightInput(src));
+
+        var out_ = new JsMap<DateOnly, RosterComputation>();
+        for (var di = 0; di < dates.Count; di++)
+        {
+            var date = dates[di];
+            var shaped = src.DaySlots[di].Shaped;
+            var s1 = src.DaySlots[di].Stage1;
+            var dr = result.ByDate.Get(date.ToIso());
+            out_.Set(date, new RosterComputation
+            {
+                Shifts = dr is null ? new List<Shift>() : dr.Shifts.Cast<Shift>().ToList(),
+                // Plan-structure flags (manager gap, slivers, safety floor) surface on
+                // the roster day too - same day, same structure.
+                Flags = [.. shaped?.Flags ?? [], .. dr?.Flags ?? []],
+                HasData = s1.HasData,
+                Closed = s1.Closed,
+                TradingOpen = s1.TradingOpen,
+                TradingClose = s1.TradingClose,
+            });
+        }
+        return new FortnightRoster { ByDate = out_, FortnightFlags = result.Flags, Outcomes = result.Outcomes };
+    }
+
+    /// <summary>
+    /// The fortnight engine's input as computeRosterFortnight builds it from the
+    /// reads: the active team, and each date's context with every employee's
+    /// availability (leave, weekend-off markers, granted day-offs, fixed rosters
+    /// and locked shifts collapsed into one DayAvail).
+    /// </summary>
+    public static FortnightInput BuildFortnightInput(FortnightSources src)
+    {
+        var dates = Period.PeriodDatesFrom(src.PeriodStart);
         if (src.DaySlots.Count != dates.Count)
             throw new ArgumentException($"FortnightSources.DaySlots has {src.DaySlots.Count} days; the period has {dates.Count}.");
         var emps = src.Employees.Where(e => e.Active).ToList();
@@ -285,7 +318,7 @@ public static class RosterCompute
             };
         }).ToList();
 
-        var result = FortnightEngine.RunFortnightStage2(new FortnightInput
+        return new FortnightInput
         {
             Days = days,
             Employees = employees,
@@ -293,27 +326,6 @@ public static class RosterCompute
             TaskPriority = [.. src.TaskPriority],
             Rules = src.RuleOverrides,
             Order = src.RosterOrder,
-        });
-
-        var out_ = new JsMap<DateOnly, RosterComputation>();
-        for (var di = 0; di < dates.Count; di++)
-        {
-            var date = dates[di];
-            var shaped = src.DaySlots[di].Shaped;
-            var s1 = src.DaySlots[di].Stage1;
-            var dr = result.ByDate.Get(date.ToIso());
-            out_.Set(date, new RosterComputation
-            {
-                Shifts = dr is null ? new List<Shift>() : dr.Shifts.Cast<Shift>().ToList(),
-                // Plan-structure flags (manager gap, slivers, safety floor) surface on
-                // the roster day too - same day, same structure.
-                Flags = [.. shaped?.Flags ?? [], .. dr?.Flags ?? []],
-                HasData = s1.HasData,
-                Closed = s1.Closed,
-                TradingOpen = s1.TradingOpen,
-                TradingClose = s1.TradingClose,
-            });
-        }
-        return new FortnightRoster { ByDate = out_, FortnightFlags = result.Flags, Outcomes = result.Outcomes };
+        };
     }
 }

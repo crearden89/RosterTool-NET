@@ -33,7 +33,7 @@ public sealed class SqlServerSchemaTests
         foreach (var batch in batches.Where(b => !string.IsNullOrWhiteSpace(b)))
             db.Exec(db.Name, batch);
         Assert.Equal(70, db.Scalar<int>(TableCount));
-        Assert.Equal(1, db.Scalar<int>("SELECT COUNT(*) FROM [__ef_migrations_history]"));
+        Assert.Equal(2, db.Scalar<int>("SELECT COUNT(*) FROM [__ef_migrations_history]")); // InitialCreate, ReferenceData
     }
 
     [SqlServerFact]
