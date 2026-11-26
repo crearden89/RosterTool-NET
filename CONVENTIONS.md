@@ -31,7 +31,7 @@ No new projects; add folders inside these.
 ## Who owns what
 
 The TypeScript app is the source of truth for behaviour: `src/...` paths below are in
-that app (version `a004032`).
+that app (version `1e4f39e`, which carries the owner's decisions of 26 November 2026).
 
 ### Engine — `src/Roster.Engine`, tests in the same folder names under `tests/Roster.Engine.Tests`
 
