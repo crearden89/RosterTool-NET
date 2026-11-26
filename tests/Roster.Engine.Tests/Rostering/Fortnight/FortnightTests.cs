@@ -727,7 +727,7 @@ public class FortnightCreditTests
         foreach (var day in days) day.Avail.Set("away", ON_LEAVE);
         var e = Emp("away", "SA", 80) with { NotionalHours = 6 };
         Assert.Equal(6, FortnightEngine.NotionalHoursOf(e));
-        Assert.Equal(8, FortnightEngine.NotionalHoursOf(Emp("away", "SA", 80))); // default contract/5
+        Assert.Equal(8, FortnightEngine.NotionalHoursOf(Emp("away", "SA", 80))); // default contract/10
         Assert.Equal(60, FortnightEngine.LeaveHoursFor(e, days)); // 10 weekdays × 6h
     }
 
