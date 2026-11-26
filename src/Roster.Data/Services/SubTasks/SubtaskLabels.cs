@@ -53,26 +53,42 @@ public sealed class SubtaskLabels(IRosterDbContextFactory contexts, IRefData ref
     public Task<LoadBoardAverages> GetLoadBoardAveragesAsync(Guid storeId, DateOnly periodStart, CancellationToken ct = default) =>
         RequestMemo.Cached("refdata.getLoadBoardAverages", [storeId, periodStart], async () =>
         {
-            await using var db = contexts.Create();
-            var types = await db.LoadTypes.AsNoTracking().OrderBy(t => t.SortOrder).ThenBy(t => t.Name)
-                .Select(t => new LoadTypeRow { Id = t.Id.ToString(), Name = t.Name, MinutesPerPallet = t.MinutesPerPallet, Priority = t.Priority, SubTask = t.SubTask })
-                .ToListAsync(ct);
-            List<DailyLoadRow> rows;
-            try
-            {
-                var from = LoadBoard.LoadHistoryFrom(periodStart);
-                rows = await db.DailyLoads.AsNoTracking()
-                    .Where(d => d.StoreId == storeId && d.Date >= from && d.Date <= periodStart)
-                    .OrderBy(d => d.Date).ThenBy(d => d.LoadTypeId)
-                    .Select(d => new DailyLoadRow { Date = d.Date, LoadTypeId = d.LoadTypeId.ToString(), Qty = d.Qty })
-                    .ToListAsync(ct);
-            }
-            catch (Exception e) when (e is DbUpdateException or System.Data.Common.DbException)
-            {
-                rows = []; // a label must never stop a plan: an unreadable load board is no history
-            }
+            var (types, rows) = await ReadLoadBoardAsync(storeId, periodStart, ct);
             return LoadBoard.LoadBoardAverages(types, rows, periodStart);
         });
+
+    /// <summary>
+    /// The load types and the store's daily loads the load board averages. Ids become text
+    /// here, after the read: SQL Server (and SQLite) would print a uniqueidentifier in upper
+    /// case inside the query, unlike every other id the app writes as text.
+    /// </summary>
+    internal async Task<(List<LoadTypeRow> Types, List<DailyLoadRow> Rows)> ReadLoadBoardAsync(
+        Guid storeId, DateOnly periodStart, CancellationToken ct = default)
+    {
+        await using var db = contexts.Create();
+        var types = (await db.LoadTypes.AsNoTracking().OrderBy(t => t.SortOrder).ThenBy(t => t.Name)
+                .Select(t => new { t.Id, t.Name, t.MinutesPerPallet, t.Priority, t.SubTask })
+                .ToListAsync(ct))
+            .Select(t => new LoadTypeRow { Id = t.Id.ToString(), Name = t.Name, MinutesPerPallet = t.MinutesPerPallet, Priority = t.Priority, SubTask = t.SubTask })
+            .ToList();
+        List<DailyLoadRow> rows;
+        try
+        {
+            var from = LoadBoard.LoadHistoryFrom(periodStart);
+            rows = (await db.DailyLoads.AsNoTracking()
+                .Where(d => d.StoreId == storeId && d.Date >= from && d.Date <= periodStart)
+                .OrderBy(d => d.Date).ThenBy(d => d.LoadTypeId)
+                .Select(d => new { d.Date, d.LoadTypeId, d.Qty })
+                .ToListAsync(ct))
+                .Select(d => new DailyLoadRow { Date = d.Date, LoadTypeId = d.LoadTypeId.ToString(), Qty = d.Qty })
+                .ToList();
+        }
+        catch (Exception e) when (e is DbUpdateException or System.Data.Common.DbException)
+        {
+            rows = []; // a label must never stop a plan: an unreadable load board is no history
+        }
+        return (types, rows);
+    }
 
     public async Task<LabelContext> LabelContextAsync(Guid storeId, DateOnly date, ResetSource? stage1, CancellationToken ct = default)
     {
