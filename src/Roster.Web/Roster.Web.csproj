@@ -6,6 +6,8 @@
   </ItemGroup>
 
   <PropertyGroup>
+    <!-- dotnet user-secrets for local settings such as ConnectionStrings:Roster (Development only). -->
+    <UserSecretsId>roster-web-dev</UserSecretsId>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
