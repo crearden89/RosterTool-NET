@@ -145,13 +145,28 @@ public class CarryTests
         Held("c", ("reset", 390, 1), ("load_running", 405, 5), ("reset", 480, 4), ("cleaning", 600, 4)),
     ];
 
+    // The roster build carries the plan's labels (owner, 15/11 and 26/11/2026).
     [Fact]
-    public void Gives_a_plan_labelled_by_the_rules_exactly_the_labels_the_rules_give_the_roster()
+    public void Carries_them_on_every_day_from_a_plan_the_rules_labelled_as_well_as_an_edited_one()
     {
         var plan = LabelPlanDay(PlanTiles());
         var roster = RosterOf();
-        var before = Label.LabelShifts(roster, ServerCtx());
-        Assert.Equal(before.Select(Shape), Day.LabelRosterDay(plan, roster, ServerCtx()).Select(Shape));
+        var out_ = Day.LabelRosterDay(plan, roster, ServerCtx());
+        // "a" (the plan's first shift) and "b" (its second), kept whole: every
+        // tile has the plan's label.
+        foreach (var (r, p) in new[] { (1, 0), (0, 1) })
+            foreach (var b in out_[r].Blocks) Assert.True(SubAt(plan[p], b.Time) == b.Sub, $"{out_[r].EmployeeId} {b.Time}");
+        // "c" was painted afresh at 07:30: that tile is labelled by the rules, its
+        // unchanged tiles keep the plan's.
+        foreach (var b in out_[2].Blocks)
+            if (b.Time != 390) Assert.True(SubAt(plan[2], b.Time) == b.Sub, $"c {b.Time}");
+        Assert.True(Catalogue.IsSubtaskOf("reset", SubAt(out_[2], 390)));
+        Assert.False(Label.NeedsLabels(out_));
+        // Labels only: people, times and groups exactly as the roster has them.
+        Assert.Equal(roster.Select(Shape), Carry.WithoutLabels(out_).Select(Shape));
+        // The rules alone, handing sub-tasks out over the roster's own order,
+        // label these tiles otherwise: this day is one the carry changes.
+        Assert.NotEqual(Label.LabelShifts(roster, ServerCtx()).Select(Shape), out_.Select(Shape));
     }
 
     [Fact]

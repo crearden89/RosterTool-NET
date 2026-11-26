@@ -13,6 +13,9 @@ public class RosterTests
     private static LabelContext ServerCtx(ResetSource? s1) =>
         Day.ContextFor(Tue, s1, new LoadBoardAverages([]), RosteringRules.Resolve(new Dictionary<string, double>()), [("Shelf sweep", "re_runs")]);
 
+    /// <summary>No held plan to carry labels from.</summary>
+    private static readonly IReadOnlyList<CarryShift> NoPlan = [];
+
     /// <summary>A roster shift: a named person with runs of tiles.</summary>
     private static Shift RosterShift(string id, (string Group, double From, int N)[] runs, bool unfilled = false)
     {
@@ -67,11 +70,12 @@ public class RosterTests
     {
         var old = TheRoster();
         Assert.True(Label.NeedsLabels(old));
-        var read = Day.WithDayLabels(old, ServerCtx(Stage1));
+        // No held plan to carry labels from: the rules label every tile.
+        var read = Day.WithDayLabels(NoPlan, old, ServerCtx(Stage1));
         Assert.False(Label.NeedsLabels(read));
         Assert.Equal(TilesOf(old, "reset"), TilesOf(read, "reset"));
         // Read again: already labelled, so nothing is relabelled.
-        Assert.Same(read, Day.WithDayLabels(read, ServerCtx(Stage1)));
+        Assert.Same(read, Day.WithDayLabels(NoPlan, read, ServerCtx(Stage1)));
     }
 
     [Fact]
@@ -141,7 +145,7 @@ public class RosterTests
     [Fact]
     public void The_server_labeller_reads_the_reset_tasks_saved_mappings()
     {
-        var out_ = Day.WithDayLabels([RosterShift("a", [("reset", 480, 4)])], ServerCtx(ShelfSweep));
+        var out_ = Day.WithDayLabels(NoPlan, [RosterShift("a", [("reset", 480, 4)])], ServerCtx(ShelfSweep));
         Assert.Equal(["re_runs", "re_runs", "re_runs", "re_runs"], out_[0].Blocks.Select(b => b.Sub));
     }
 

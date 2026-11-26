@@ -36,13 +36,16 @@ public interface ISubtaskLabels
     /// <summary>labelPlanDay: every Reset, Load Running, Cleaning and Specials tile labelled.</summary>
     Task<List<PlanShift>> LabelPlanDayAsync(Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> shifts, CancellationToken ct = default);
 
-    /// <summary>withDayLabels: labelled only where some tile of the four groups has none (held from before sub-tasks).</summary>
-    Task<IReadOnlyList<PlanShift>> WithDayLabelsAsync(Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> shifts, CancellationToken ct = default);
+    /// <summary>
+    /// withDayLabels: a roster day held from before sub-tasks, labelled as it is read the way
+    /// a roster is labelled when it is built (the held plan's labels on the tiles that come
+    /// unchanged from it, the rules for the rest); a day with every tile labelled is
+    /// returned itself.
+    /// </summary>
+    Task<IReadOnlyList<Shift>> WithDayLabelsAsync(
+        Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> shifts, CancellationToken ct = default);
 
-    /// <inheritdoc cref="WithDayLabelsAsync(Guid, DateOnly, ResetSource?, IReadOnlyList{PlanShift}, CancellationToken)"/>
-    Task<IReadOnlyList<Shift>> WithDayLabelsAsync(Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<Shift> shifts, CancellationToken ct = default);
-
-    /// <summary>labelRosterDay: a roster day labelled from its held plan (the plan's labels carry over).</summary>
+    /// <summary>labelRosterDay: a roster day labelled from its held plan (the plan's labels carry over, on every day).</summary>
     Task<List<Shift>> LabelRosterDayAsync(
         Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> roster, CancellationToken ct = default);
 
@@ -109,11 +112,9 @@ public sealed class SubtaskLabels(IRosterDbContextFactory contexts, IRefData ref
     public async Task<List<PlanShift>> LabelPlanDayAsync(Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> shifts, CancellationToken ct = default) =>
         Day.LabelPlanDay(shifts, await LabelContextAsync(storeId, date, stage1, ct));
 
-    public async Task<IReadOnlyList<PlanShift>> WithDayLabelsAsync(Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> shifts, CancellationToken ct = default) =>
-        Label.NeedsLabels(shifts) ? await LabelPlanDayAsync(storeId, date, stage1, shifts, ct) : shifts;
-
-    public async Task<IReadOnlyList<Shift>> WithDayLabelsAsync(Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<Shift> shifts, CancellationToken ct = default) =>
-        Label.NeedsLabels(shifts) ? Day.WithDayLabels(shifts, await LabelContextAsync(storeId, date, stage1, ct)) : shifts;
+    public async Task<IReadOnlyList<Shift>> WithDayLabelsAsync(
+        Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> shifts, CancellationToken ct = default) =>
+        Label.NeedsLabels(shifts) ? Day.WithDayLabels(plan, shifts, await LabelContextAsync(storeId, date, stage1, ct)) : shifts;
 
     public async Task<List<Shift>> LabelRosterDayAsync(
         Guid storeId, DateOnly date, ResetSource? stage1, IReadOnlyList<PlanShift> plan, IReadOnlyList<Shift> roster, CancellationToken ct = default) =>
@@ -138,8 +139,10 @@ public sealed class PublishedSubtasks(IRosterDbContextFactory contexts, ISubtask
     // ─── Sub-tasks on a PUBLISHED roster (the printed roster) ────────────────
     // A published roster's tiles are rows of shift_task_blocks; since 0049 each
     // carries its sub-task. Rows published before that have none and are labelled
-    // here when read, by the normal rules (Reset from the held plan's Stage 1
-    // record). Nothing is written back.
+    // here when read, the way a roster is labelled when it is built: the held
+    // plan's labels on the tiles that come unchanged from it, the normal rules for
+    // the rest (Reset from the held plan's Stage 1 record). Nothing is written
+    // back.
     public async Task<JsMap<string, List<string>>> PublishedSubtaskRunsAsync(
         Guid storeId, DateOnly periodStart, IReadOnlyList<DateOnly> dates, AccessContext? access = null, CancellationToken ct = default)
     {
@@ -147,7 +150,7 @@ public sealed class PublishedSubtasks(IRosterDbContextFactory contexts, ISubtask
         await using var db = access is null ? contexts.Create() : contexts.Create(access);
         var shifts = await db.GeneratedShifts.AsNoTracking().Where(s => s.StoreId == storeId && list.Contains(s.Date))
             .OrderBy(s => s.Date).ThenBy(s => s.StartTime).ThenBy(s => s.Id)
-            .Select(s => new { s.Id, s.EmployeeId, s.Date }).ToListAsync(ct);
+            .Select(s => new { s.Id, s.EmployeeId, s.Date, s.StartTime, s.EndTime }).ToListAsync(ct);
         var ids = shifts.Select(s => s.Id).ToList();
         var tiles = await db.ShiftTaskBlocks.AsNoTracking().Where(t => ids.Contains(t.ShiftId))
             .OrderBy(t => t.ShiftId).ThenBy(t => t.BlockTime)
@@ -161,14 +164,16 @@ public sealed class PublishedSubtasks(IRosterDbContextFactory contexts, ISubtask
         {
             plan = null; // a label must never stop the roster printing
         }
-        var stage1Of = new Dictionary<DateOnly, Stage1Computation>();
-        foreach (var d in plan?.Days ?? []) stage1Of[d.Date] = d.Result;
+        var heldOf = new Dictionary<DateOnly, PlanSnapshotDay>();
+        foreach (var d in plan?.Days ?? []) heldOf[d.Date] = d;
         var contextsByDate = new Dictionary<DateOnly, LabelContext>();
         foreach (var date in shifts.Select(s => s.Date).Distinct())
-            contextsByDate[date] = await labels.LabelContextAsync(storeId, date, stage1Of.TryGetValue(date, out var s1) ? ResetSource.From(s1) : null, ct);
+            contextsByDate[date] = await labels.LabelContextAsync(storeId, date, heldOf.TryGetValue(date, out var held) ? ResetSource.From(held.Result) : null, ct);
         return Stored.PublishedSubtaskRuns(
-            shifts.Select(s => new StoredShift(s.Id.ToString("D"), s.EmployeeId.ToString("D"), s.Date)).ToList(),
+            shifts.Select(s => new StoredShift(s.Id.ToString("D"), s.EmployeeId.ToString("D"), s.Date, RefDataReader.Hms(s.StartTime), RefDataReader.Hms(s.EndTime))).ToList(),
             tiles.Select(t => new StoredTile(t.ShiftId.ToString("D"), RefDataReader.Hms(t.BlockTime), t.LabourGroup, t.SubTask)).ToList(),
-            date => contextsByDate[date]);
+            date => contextsByDate[date],
+            // The held plan's shifts for the date, whose labels carry to the tiles that come unchanged from them.
+            date => heldOf.TryGetValue(date, out var held) ? (held.Plan?.Shifts ?? []).Select(CarryShift.Of).ToList() : []);
     }
 }
