@@ -82,9 +82,10 @@ else
             @for (var i = 0; i < weeks.Length; i++)
             {
                 var wk = weeks[i];
+                var weekNo = i + 1; // the fragments below render later: not the loop variable
                 var es = data.Entries.Where(e => wk.Contains(e.Date)).ToList();
-                <StatCard @key="i">
-                    <Label>@($"Week {i + 1} · {(wk.Count > 0 ? Dates.AuRange(wk[0], wk[^1]) : "")}")</Label>
+                <StatCard @key="weekNo">
+                    <Label>@($"Week {weekNo} · {(wk.Count > 0 ? Dates.AuRange(wk[0], wk[^1]) : "")}")</Label>
                     <Value>@($"{NonOpShared.HoursText(NonOpShared.MinutesOf(es))} h")</Value>
                     <Sub>@(es.Count > 0 ? $"{NonOpShared.Plural(es.Count, "entry", "entries")} on {NonOpShared.Plural(es.Select(e => e.Date).Distinct().Count(), "day", "days")}" : "Nothing booked")</Sub>
                 </StatCard>
@@ -129,10 +130,11 @@ else
                 @for (var i = 0; i < weeks.Length; i++)
                 {
                     var wk = weeks[i];
+                var weekNo = i + 1; // the fragments below render later: not the loop variable
                     var es = data.Entries.Where(e => wk.Contains(e.Date)).ToList();
-                    <section @key="i" aria-label="@($"Week {i + 1}")">
+                    <section @key="weekNo" aria-label="@($"Week {weekNo}")">
                         <div class="mb-2 flex items-baseline justify-between gap-3">
-                            <Eyebrow>@($"Week {i + 1} · {(wk.Count > 0 ? Dates.AuRange(wk[0], wk[^1]) : "")}")</Eyebrow>
+                            <Eyebrow>@($"Week {weekNo} · {(wk.Count > 0 ? Dates.AuRange(wk[0], wk[^1]) : "")}")</Eyebrow>
                             <p class="text-xs text-[var(--ui-muted)]">
                                 <b class="font-semibold text-[var(--ui-ink)]">@NonOpShared.HoursText(NonOpShared.MinutesOf(es)) h</b> · @NonOpShared.Plural(es.Count, "entry", "entries")
                             </p>
