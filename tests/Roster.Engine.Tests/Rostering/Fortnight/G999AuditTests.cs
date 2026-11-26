@@ -102,7 +102,7 @@ public class G999AuditLiveMarkersTests(ITestOutputHelper log)
     {
         // Full-period leave used to land exactly on contract. The closed 12/08 now
         // credits nothing (client decision), so each is short precisely one
-        // notional day - contract/5 - and no more.
+        // notional day - contract/10 - and no more.
         foreach (var name in new[] { "Ella Bishop", "Rhys Brooks", "Stuart Ramsay" })
         {
             var o = Run.Outcomes.Find(x => x.Name == name)!;
