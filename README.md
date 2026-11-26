@@ -327,9 +327,10 @@ the till, Stage 1, sub-tasks and the load planner.
 
 - **The committed corpus** is `tests/parity-corpus`: 2,445 representative calls, one gzipped JSON
   Lines file per entry point. Its `manifest.json` names the TypeScript commit they came from,
-  `a004032`. It runs in the everyday suite.
+  `1e4f39e` (the owner's decisions of 26 November 2026, merged; the calls are the same as at
+  `a004032`). It runs in the everyday suite.
 - **The full corpus** holds every distinct call: 109,592 cases, too large to commit. Generate it
-  from a checkout of the TypeScript version at `a004032` with its packages installed (`npm ci`).
+  from a checkout of the TypeScript version at `1e4f39e` with its packages installed (`npm ci`).
   This takes about twelve minutes:
 
   ```bash
@@ -349,7 +350,9 @@ the till, Stage 1, sub-tasks and the load planner.
 
 **The result:** all 109,592 cases are identical across the eight entry points under the strict
 comparer: pay 11,205; shaper 1,992; painter 6,251; fortnight 67; till 86,780; Stage 1 1,981;
-sub-tasks 988; load 328. The comparer compares the JSON exactly, with a missing field counted as
+sub-tasks 988; load 328. That was checked again on 26 November 2026 on the corpus regenerated
+from `1e4f39e`, after the owner's decisions; the calls recorded there are the same as at
+`a004032`. The comparer compares the JSON exactly, with a missing field counted as
 null. Its only leeway is at five listed fields, where the TypeScript leaves the field out and the
 C# writes `false`. The TypeScript app reads each of those fields only as true or false, so the two
 mean the same. `tests/Roster.Engine.Tests/Parity/ParityTolerances.cs` lists the five, with the
