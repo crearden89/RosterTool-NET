@@ -64,6 +64,29 @@ public sealed class NotificationScopeTests : IDisposable
         Assert.Equal(
             [("admin 1", true), ("admin 2", true), ("admin 3", true), ("sm 1", false), ("sm 2", false), ("emso 1", false)],
             All());
+        // One already read keeps the time it was read (the TypeScript app's actions.test.ts).
+        using var db = _t.System();
+        Assert.Equal(At, db.Notifications.AsNoTracking().Single(n => n.Body == "admin 1").ReadAt);
+    }
+
+    [Fact]
+    public async Task Opening_a_review_leaves_a_super_users_notices_for_another_review_unread()
+    {
+        // As the TypeScript app's review actions.test.ts: a notice for another fortnight's
+        // review is not this review's, even for the same person.
+        using (var db = _t.System())
+        {
+            db.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(), UserId = Admin.Id, Kind = "review_submitted", Body = "admin, next fortnight",
+                Link = ReviewLinks.ReviewLink(St1, PS.AddDays(14)), CreatedAt = At.AddMinutes(7),
+            });
+            db.SaveChanges();
+        }
+        _t.As(Admin);
+        await _t.Service.MarkReviewNoticesReadAsync(St1, PS);
+        Assert.Equal(("admin, next fortnight", false), All().Last());
+        Assert.Equal(1, (await _t.Service.LoadPageAsync(St1, PS.AddDays(14))).UnreadNotices);
     }
 
     [Fact]

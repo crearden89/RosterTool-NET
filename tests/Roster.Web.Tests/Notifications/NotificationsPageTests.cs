@@ -58,6 +58,14 @@ public sealed class NotificationsPageTests : UiTestContext
         Assert.Equal("25/11/2026, 5:17:05 pm", NotificationFormat.LocaleString(
             DateTimeOffset.Parse("2026-11-25T06:17:05Z", System.Globalization.CultureInfo.InvariantCulture)));
 
+    // The TypeScript app's own cases for its Sydney times (auLocaleString, src/lib/notifications.test.ts).
+    [Theory]
+    [InlineData("2026-11-25T22:30:00Z", "26/11/2026, 9:30:00 am")] // AEDT, UTC+11: the next day when UTC is still the evening before
+    [InlineData("2026-06-30T14:05:09Z", "01/07/2026, 12:05:09 am")] // AEST, UTC+10, in winter
+    [InlineData("2026-07-01T03:15:00Z", "01/07/2026, 1:15:00 pm")]
+    public void Writes_Sydney_daylight_and_standard_time_as_the_TypeScript_app_does(string at, string expected) =>
+        Assert.Equal(expected, NotificationFormat.LocaleString(DateTimeOffset.Parse(at, System.Globalization.CultureInfo.InvariantCulture)));
+
     private sealed class EmptyNotifications : INotificationService
     {
         public Task<IReadOnlyList<NotificationItem>> ListMineAsync(CancellationToken cancellationToken = default) =>
