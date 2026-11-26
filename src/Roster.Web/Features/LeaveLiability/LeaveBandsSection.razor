@@ -1,0 +1,141 @@
+@* Port of BandsSection in src/app/(app)/admin/leave-liability/LeaveSettings.tsx. *@
+@using global::Roster.Engine.Core
+@using global::Roster.Engine.Leave
+@inject ILeaveLiabilityService Service
+@inject NavigationManager Navigation
+@* A row's edit is saved by its own button; leaving with one unsaved asks first. *@
+<LeaveGuard Id="leave-bands" Dirty="Dirty" />
+<SettingsSection Id="leave-bands" Flush="true">
+    <Title>Accrual bands</Title>
+    <Purpose>
+        Keyed on contract hours <em>and</em> role, because a 70-hour contract means 7.50 / 5 weeks for a DSM and 7.25 / 4 weeks for a Store
+        Assistant. The leave notional is what a leave DAY is worth - it is deliberately not the same as the true notional on the liability
+        file.
+    </Purpose>
+    <Aside>
+        <Pill Tone="PillTone.Soft">Every store</Pill>
+        <Pill Tone="PillTone.Grey">Each row saves on its own</Pill>
+    </Aside>
+    <ChildContent>
+        @if (Roles.Count > 1)
+        {
+            <div class="flex flex-wrap items-center gap-3 px-5 pb-4 sm:px-6">
+                <SegmentedControl T="string" Label="Role" Size="ControlSize.Sm" Value="_role" OnChange="r => _role = r"
+                                  Options="@Roles.Select(r => new SegmentOption<string>(r, $"{r} · {Bands.Count(b => b.RoleClass == r)}")).ToList()" />
+                <span class="text-xs text-[var(--ui-muted)]">One role at a time, its contract sizes largest first</span>
+            </div>
+        }
+        @* Positioned, so the head's screen-reader label stays inside the
+           scroll box on a phone instead of widening the page. *@
+        <div class="relative overflow-x-auto">
+            <table class="w-full text-sm text-[var(--ui-ink)]">
+                <thead class="ui-thead">
+                    <tr>
+                        <th class="px-5 py-2.5 text-left whitespace-nowrap">Contract (@_role)</th>
+                        <th class="px-3 py-2.5 text-right whitespace-nowrap">Leave notional</th>
+                        <th class="px-3 py-2.5 text-right whitespace-nowrap">Weeks</th>
+                        <th class="px-3 py-2.5 text-right whitespace-nowrap">Annual accrual (hrs)</th>
+                        <th class="px-5 py-2.5"><span class="sr-only">Save</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        var shown = Bands.Where(b => b.RoleClass == _role).ToList();
+                    }
+                    @if (shown.Count == 0)
+                    {
+                        <tr><td colspan="5" class="px-5 py-6 text-center text-sm text-[var(--ui-muted)]">No accrual bands yet.</td></tr>
+                    }
+                    else
+                    {
+                        foreach (var b in shown)
+                        {
+                            var k = KeyOf(b);
+                            var e = _edit.TryGetValue(k, out var held) ? held : SavedEdit(b);
+                            var label = $"{Js.NumberToString(b.ContractHours)}h {b.RoleClass}";
+                            <tr @key="k" class="border-t border-[var(--ui-line)]">
+                                <td class="px-5 py-1.5 font-semibold whitespace-nowrap tabular-nums">@Js.NumberToString(b.ContractHours) h</td>
+                                <td class="px-3 py-1.5 text-right">
+                                    <input value="@e.N" inputmode="decimal" aria-label="@($"Leave notional, {label}")"
+                                           @oninput="ev => Set(b, e with { N = ev.Value?.ToString() ?? string.Empty })" class="@($"w-20 text-right {Ui.CompactField}")" />
+                                </td>
+                                <td class="px-3 py-1.5 text-right">
+                                    <input value="@e.W" inputmode="decimal" aria-label="@($"Weeks, {label}")"
+                                           @oninput="ev => Set(b, e with { W = ev.Value?.ToString() ?? string.Empty })" class="@($"w-14 text-right {Ui.CompactField}")" />
+                                </td>
+                                <td class="px-3 py-1.5 text-right">
+                                    <input value="@e.A" inputmode="decimal" aria-label="@($"Annual accrual hours, {label}")"
+                                           @oninput="ev => Set(b, e with { A = ev.Value?.ToString() ?? string.Empty })" class="@($"w-24 text-right {Ui.CompactField}")" />
+                                </td>
+                                <td class="px-5 py-1.5 text-right">
+                                    <button type="button" disabled="@_busy" aria-label="@($"Save the {label} band")" @onclick="() => SaveAsync(b, label)"
+                                            class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)">Save</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_msg is { } msg)
+        {
+            <div class="border-t border-[var(--ui-line)] px-5 pt-3 sm:px-6"><FormMessage Tone="msg.Tone">@msg.Text</FormMessage></div>
+        }
+        <p class="px-5 py-3 text-xs leading-relaxed text-[var(--ui-muted)] sm:px-6">
+            Seeded from the workbook&apos;s Setup sheet. Note the 40 / 30 / 21 bands: the workbook hard-codes 80 / 60 / 42 hours there rather than
+            applying its own notional × 5 × weeks formula (which would give 105 / 95 / 80). The seed reproduces the workbook exactly - change these
+            if the formula basis is intended.
+        </p>
+    </ChildContent>
+</SettingsSection>
+
+@code {
+    // The roles in the order a manager reads them; any other role a band carries follows.
+    private static readonly string[] RoleOrder = [RoleClass.SM, RoleClass.ASM, RoleClass.DSM, RoleClass.SA];
+
+    private sealed record BandEdit(string N, string W, string A);
+
+    private readonly Dictionary<string, BandEdit> _edit = [];
+    private string? _role;
+    private (FormMessageTone Tone, string Text)? _msg;
+    private bool _busy;
+
+    [Parameter, EditorRequired] public IReadOnlyList<AccrualBand> Bands { get; set; } = [];
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private List<string> Roles =>
+    [
+        .. RoleOrder.Where(r => Bands.Any(b => b.RoleClass == r)),
+        .. Bands.Select(b => b.RoleClass).Distinct().Where(r => !RoleOrder.Contains(r)),
+    ];
+
+    protected override void OnParametersSet() => _role ??= Roles.Count > 0 ? Roles[0] : RoleClass.SM;
+
+    private static string KeyOf(AccrualBand b) => $"{Js.NumberToString(b.ContractHours)}:{b.RoleClass}";
+
+    private static BandEdit SavedEdit(AccrualBand b) =>
+        new(Js.NumberToString(b.LeaveNotionalHours), Js.NumberToString(b.AccrualWeeks), Js.NumberToString(b.AnnualAccrualHours));
+
+    private bool Dirty => Bands.Any(b => _edit.TryGetValue(KeyOf(b), out var e) && e != SavedEdit(b));
+
+    private void Set(AccrualBand b, BandEdit e)
+    {
+        _edit[KeyOf(b)] = e;
+        _msg = null;
+    }
+
+    private async Task SaveAsync(AccrualBand b, string label)
+    {
+        var e = _edit.TryGetValue(KeyOf(b), out var held) ? held : SavedEdit(b);
+        _busy = true;
+        var res = await Service.SaveAccrualBandAsync(b.ContractHours, b.RoleClass, Js.Number(e.N), Js.Number(e.W), Js.Number(e.A));
+        if (res.RedirectTo is { } to)
+        {
+            Navigation.NavigateTo(to);
+            return;
+        }
+        _msg = res.Ok ? (FormMessageTone.Ok, $"Saved the {label} band.") : (FormMessageTone.Error, $"Error: {res.Error}");
+        if (res.Ok) await OnSaved.InvokeAsync();
+        _busy = false;
+    }
+}

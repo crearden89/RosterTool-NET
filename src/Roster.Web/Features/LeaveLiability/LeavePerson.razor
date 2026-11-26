@@ -1,0 +1,22 @@
+@* Port of Person in src/app/(app)/admin/leave-liability/leaveUi.tsx. *@
+@using global::Roster.Engine.Leave
+@* A team member: their initials, their name and an optional line under it. *@
+<span class="flex min-w-0 items-center gap-2.5">
+    <Avatar Name="@Name" Seed="@Member.UkgEmployeeId" Size="Size" />
+    <span class="min-w-0">
+        <span class="flex min-w-0 items-center gap-1.5">
+            <span class="truncate text-sm font-semibold text-[var(--ui-ink)]">@Name</span>
+            @Badge
+        </span>
+        @Sub
+    </span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public TeamMember Member { get; set; } = default!;
+    [Parameter] public int Size { get; set; } = 28;
+    [Parameter] public RenderFragment? Sub { get; set; }
+    [Parameter] public RenderFragment? Badge { get; set; }
+
+    private string Name => LeaveMetrics.DisplayName(Member.EmployeeName);
+}

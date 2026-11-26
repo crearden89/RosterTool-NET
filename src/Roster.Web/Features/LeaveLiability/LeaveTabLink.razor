@@ -1,0 +1,9 @@
+@* Port of TabLink in src/app/(app)/admin/leave-liability/leaveUi.tsx. *@
+@* A quiet link-styled button that moves to another tab ("Open the calendar →"). *@
+<button type="button" @onclick="OnClick"
+        class="@($"rounded-sm text-xs font-semibold text-[var(--ui-violet)] underline-offset-2 hover:underline {Ui.FocusRing}")">@ChildContent</button>
+
+@code {
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
