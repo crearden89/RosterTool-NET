@@ -34,9 +34,10 @@ public static class ParityRunner
         var clock = Stopwatch.StartNew();
         var failures = new List<string>();
         var counts = new SortedDictionary<string, (int Cases, int Failed)>();
+        var tolerance = ParityTolerances.For(entry);
         foreach (var c in ParityCorpus.Read(dir, entry))
         {
-            var diff = Compare(c, adapters);
+            var diff = Compare(c, adapters, tolerance);
             var (n, f) = counts.GetValueOrDefault(c.Fn);
             counts[c.Fn] = (n + 1, f + (diff is null ? 0 : 1));
             if (diff != null && failures.Count < MaxReported) failures.Add($"{c}\n    {diff}");
@@ -45,6 +46,7 @@ public static class ParityRunner
         var failed = counts.Values.Sum(x => x.Failed);
         var summary = string.Join(", ", counts.Select(kv => $"{kv.Key} {kv.Value.Cases - kv.Value.Failed}/{kv.Value.Cases}"));
         log.WriteLine($"{entry}: {total - failed} of {total} cases identical ({summary}) in {clock.Elapsed.TotalSeconds:0.0}s");
+        ParityTolerances.Report(tolerance, log);
         Assert.True(total > 0, $"{file} has no cases");
         if (failed > 0)
             Assert.Fail(
@@ -54,7 +56,7 @@ public static class ParityRunner
     }
 
     /// <summary>The first difference for one case, or null when the C# result is identical.</summary>
-    public static string? Compare(ParityCase c, IReadOnlyDictionary<string, Func<ParityCase, ParityResult>> adapters)
+    public static string? Compare(ParityCase c, IReadOnlyDictionary<string, Func<ParityCase, ParityResult>> adapters, Tolerance tolerance)
     {
         if (!adapters.TryGetValue(c.Fn, out var run)) return $"no C# adapter for {c.Fn}";
         ParityResult r;
@@ -73,10 +75,10 @@ public static class ParityRunner
             // Only the arguments the TypeScript changed are compared.
             var after = new JsonObject();
             foreach (var (k, _) in c.After) after[k] = r.After[k]?.DeepClone();
-            var d = JsonDiff.FirstDifference(c.After, after, "$.after");
+            var d = JsonDiff.FirstDifference(c.After, after, $"{c.Fn}:$.after", tolerance, c.Id);
             if (d != null) return d;
         }
-        return JsonDiff.FirstDifference(c.Output, r.Output, "$.output");
+        return JsonDiff.FirstDifference(c.Output, r.Output, $"{c.Fn}:$.output", tolerance, c.Id);
     }
 
     /// <summary>The case's argument <paramref name="name"/>, read as <typeparamref name="T"/>.</summary>

@@ -26,6 +26,13 @@ public static class ParityJson
 
     public static T Read<T>(JsonNode? node) => node.Deserialize<T>(Options)!;
 
+    /// <summary>
+    /// Empty maps read from the other JSON form (a string-keyed JsMap from [], a
+    /// pair-keyed one from {}), by map type: no entries either way, so nothing
+    /// is lost - recorded for the tolerance audit.
+    /// </summary>
+    public static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> EmptyMapReads = new();
+
     /// <summary>A C# value as the corpus would write it (re-parsed, so every number is a plain JSON number).</summary>
     public static JsonNode? ToNode(object? value) =>
         value is null ? null : JsonNode.Parse(JsonSerializer.Serialize(value, value.GetType(), Options));
@@ -55,6 +62,9 @@ public static class ParityJson
                     peek.Read();
                     if (peek.TokenType is JsonTokenType.EndArray or JsonTokenType.EndObject)
                     {
+                        var stringKeyed = typeof(TKey) == typeof(string);
+                        if (stringKeyed == (reader.TokenType == JsonTokenType.StartArray))
+                            EmptyMapReads.AddOrUpdate($"JsMap<{typeof(TKey).Name},{typeof(TValue).Name}> from {(stringKeyed ? "[]" : "{}")}", 1, (_, n) => n + 1);
                         reader.Read();
                         return new JsMap<TKey, TValue>();
                     }
