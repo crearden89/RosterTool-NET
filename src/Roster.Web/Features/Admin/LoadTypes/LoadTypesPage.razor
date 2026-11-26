@@ -1,0 +1,126 @@
+@page "/admin/load-types"
+@* Port of src/app/(app)/admin/load-types/page.tsx and LoadTypesClient.tsx. *@
+@inject ILoadTypesService Service
+
+<div>
+    <SettingsHeader Area="Catalogues" Title="Load Types">
+        <Subtitle>The load categories, their minutes per pallet by days of service, and the order they are worked · applies to every store</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @* Each type saves, adds or deletes on its own, as before; a type edited and not
+           saved, or a new one half-typed, counts as an unsaved change when leaving. *@
+        <LeaveGuard Id="new-load-type" Dirty="@(Js.Trim(_newName) != "")" />
+        <SettingsSection Id="types" Flush="true">
+            <Title>Load types</Title>
+            <Purpose>Each category of pallet: what it counts as, the order it is worked in and how long a pallet takes. Save, Add and Delete act on one type at a time.</Purpose>
+            <ChildContent>
+                <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                    <table class="@Ui.Table.Element">
+                        <thead class="@Ui.Table.Head">
+                            <tr>
+                                <th class="@($"{Ui.Table.Th} pl-5 sm:pl-6")">Load type</th>
+                                <th class="@Ui.Table.Th" title="Which Load Running sub-task this type's pallets count under on the plan and roster">Counts as</th>
+                                <th class="@($"{Ui.Table.Th} text-right")" title="Allocation order: lower numbers are worked first">Priority</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">&gt; 90 days</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">&lt; 90 days</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">&lt; 60 days</th>
+                                <th class="@($"{Ui.Table.Th} text-right")">&lt; 30 days</th>
+                                <th class="@Ui.Table.Th">Colour</th>
+                                <th class="@($"{Ui.Table.Th} pr-5 text-right sm:pr-6")">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in _rows)
+                            {
+                                <LoadTypeRowEditor @key="r.Id" Row="r" Pending="_pending" Run="RunAsync" />
+                            }
+                            <tr class="@($"{Ui.Table.Row} bg-[var(--ui-canvas)]")">
+                                <td class="py-2.5 pr-3 pl-5 sm:pl-6" colspan="3">
+                                    <input @bind="_newName" @bind:event="oninput" placeholder="New load type" aria-label="New load type" class="@($"w-full {Ui.CompactField}")" />
+                                </td>
+                                <td class="px-3 py-2.5 text-right">
+                                    <input type="number" min="1" step="0.1" aria-label="New load type minutes per pallet (fully trained)"
+                                           @bind="_newMinutes" @bind:event="oninput" class="@($"w-20 text-right {Ui.CompactField}")" />
+                                </td>
+                                @* A new type starts with the trained figure only; the tenure columns
+                                   are filled in on the row once it exists. *@
+                                <td colspan="3" class="px-3 py-2.5 text-center text-xs text-[var(--ui-faint)]">set after adding</td>
+                                <td class="px-3 py-2.5">
+                                    <input type="color" aria-label="New load type colour" @bind="_newColor" @bind:event="oninput"
+                                           class="h-9 w-14 cursor-pointer rounded-lg border border-[var(--ui-control)]" />
+                                </td>
+                                <td class="py-2.5 pr-5 pl-3 text-right sm:pr-6">
+                                    <button type="button" disabled="@(_pending || Js.Trim(_newName) == "")" @onclick="AddAsync" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)">Add</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                @if (_error is not null)
+                {
+                    <div class="border-t border-[var(--ui-line)] px-5 py-3 sm:px-6">
+                        <FormMessage Tone="FormMessageTone.Error">@_error</FormMessage>
+                    </div>
+                }
+            </ChildContent>
+        </SettingsSection>
+
+        <SettingsSection Id="columns">
+            <Title>How the columns work</Title>
+            <Purpose>What priority, the days-of-service columns and Counts as each decide.</Purpose>
+            <ChildContent>
+                <p class="text-sm text-[var(--ui-muted)]">
+                    <strong>Priority</strong> is the order the Load Planner works the categories in - lower
+                    numbers first (freeze-to-thaw before liquor before fresh), with unranked types (100)
+                    falling back to biggest-first. Minutes per pallet by <strong>days of service</strong>. Someone in their first weeks is genuinely
+                    slower at physical work, so the Load Planner prices their pallets from the matching
+                    column - otherwise the chart promises the truck away earlier than it will be. The band is worked
+                    out from each person&apos;s <strong>start date</strong> on Team Members, on the day being planned:
+                    a blank start date is treated as fully trained, never as a new hire. Leave a tenure cell empty to
+                    charge that band the same as a trained team member. <strong>Counts as</strong> is the Load Running
+                    sub-task a type&apos;s pallets are labelled on the plan and roster tiles. Left on &quot;by name&quot;,
+                    the type&apos;s name decides (D&apos;s count as Ambient, worked last; anything unrecognised is
+                    Ambient) - so set it before renaming a type, and the split won&apos;t change.
+                </p>
+            </ChildContent>
+        </SettingsSection>
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("types", "Load types"),
+        new("columns", "How the columns work"),
+    ];
+
+    private IReadOnlyList<LoadTypeRow> _rows = [];
+    private bool _pending;
+    private string? _error;
+    private string _newName = "", _newMinutes = "15", _newColor = "#2563eb";
+
+    protected override async Task OnInitializedAsync() => _rows = await Service.LoadAsync();
+
+    private async Task RunAsync(Func<Task<AdminResult>> fn)
+    {
+        _error = null;
+        _pending = true;
+        StateHasChanged();
+        var res = await fn();
+        if (!res.Ok) _error = res.Error ?? "Something went wrong";
+        else _rows = await Service.LoadAsync();
+        _pending = false;
+        StateHasChanged();
+    }
+
+    private Task AddAsync() => RunAsync(async () =>
+    {
+        var res = await Service.AddLoadTypeAsync(_newName, Js.Number(_newMinutes), _newColor);
+        if (res.Ok)
+        {
+            _newName = "";
+            _newMinutes = "15";
+        }
+        return res;
+    });
+}

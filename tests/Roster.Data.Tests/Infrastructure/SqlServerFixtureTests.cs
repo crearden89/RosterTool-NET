@@ -80,8 +80,10 @@ public sealed class SqlServerFixtureTests(SqlServerDatabaseFixture db) : IClassF
         // Whatever the migrations inserted (the reference catalogues) is checkpointed and
         // restored, also after a test changed or deleted it.
         var before = db.ReferenceTables.ToDictionary(t => t, t => Scalar(db.ConnectionString, $"SELECT COUNT(*) FROM {t}"));
-        foreach (var table in db.ReferenceTables)
+        // Children before parents (the restore order is parents first).
+        foreach (var table in db.ReferenceTables.Reverse())
             Scalar(db.ConnectionString, $"DELETE FROM {table}; SELECT 0");
+        Assert.Contains(db.ReferenceTables, t => t == "[dbo].[positions]"); // the ReferenceData migration's rows
 
         await db.ResetAsync();
 

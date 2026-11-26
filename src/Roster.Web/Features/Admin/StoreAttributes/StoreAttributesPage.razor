@@ -1,0 +1,39 @@
+@page "/admin/store-attributes"
+@* Port of src/app/(app)/admin/store-attributes/page.tsx. *@
+@inject IStoreAttributesService Service
+@inject IRememberedStore Remembered
+
+<div>
+    <SettingsHeader Area="Stores" Title="Store Attributes">
+        <Subtitle>Each store's checkout model, trading hours and pair store · one store at a time</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        <SaveNote>Saves the chosen store's details, checkout model and trading hours together.</SaveNote>
+        <ChildContent>
+            @if (_view is not null)
+            {
+                <AttributeSheet @key="@(_view.SelectedId?.ToString() ?? "none")" View="_view" Reload="ReloadAsync" />
+                <StoreAdmin Regions="_view.Regions" Reload="ReloadAsync" />
+            }
+        </ChildContent>
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("details", "Store details"),
+        new("checkout", "Checkout / SCO model"),
+        new("trading-hours", "Trading hours"),
+        new("add-stores", "Add stores"),
+    ];
+
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+
+    private StoreAttributesView? _view;
+
+    protected override Task OnParametersSetAsync() => ReloadAsync();
+
+    private async Task ReloadAsync() =>
+        _view = await Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId);
+}

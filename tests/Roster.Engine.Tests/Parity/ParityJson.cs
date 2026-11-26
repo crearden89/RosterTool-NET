@@ -59,7 +59,7 @@ public static class ParityJson
                         return new JsMap<TKey, TValue>();
                     }
                 }
-                return _inner.Read(ref reader, typeToConvert, options);
+                return _inner.Read(ref reader, typeToConvert, options)!;
             }
 
             public override void Write(Utf8JsonWriter writer, JsMap<TKey, TValue> value, JsonSerializerOptions options) =>

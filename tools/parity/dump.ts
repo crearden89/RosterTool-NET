@@ -36,7 +36,7 @@ import { existsSync, mkdirSync, mkdtempSync, copyFileSync, symlinkSync, writeFil
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { installHooks, overrideModule, stubModule, stubRequest } from "./lib/hooks";
-import { installRecorders, installShiftCostRecorder } from "./lib/entries";
+import { installRecorders, installShiftCostRecorder, installStage1SourcesRecorder } from "./lib/entries";
 import { breathe, closeCorpus, context, copyCases, fileSize, openCorpus, readMetas, select, type Budget, type CaseMeta } from "./lib/recorder";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,6 +85,7 @@ overrideModule(`${TS}/src/lib/refdata`, () => ({
 }));
 installRecorders(TS);
 installShiftCostRecorder(TS);
+installStage1SourcesRecorder(TS);
 
 const req = (p: string): Any => require(`${TS}/src/${p}`);
 const { withRequestMemo } = req("lib/requestCache");
@@ -273,7 +274,7 @@ async function g999() {
 
 // What the committed corpus keeps of each entry point (uncompressed budget).
 const BUDGETS: Record<string, Budget> = {
-  stage1: { cases: 240, bytes: 8e6 },
+  stage1: { cases: 240, bytes: 8e6, fixed: { computeStage1: 40 } },
   painter: { cases: 100, bytes: 16e6 },
   shaper: { cases: 160, bytes: 10e6 },
   fortnight: { cases: 4, bytes: 6e6 },

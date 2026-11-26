@@ -302,6 +302,74 @@ export function installShiftCostRecorder(root: string) {
   }));
 }
 
+/**
+ * computeStage1 (lib/stage1/compute.ts) reads its day through refdata and the
+ * till engine; the C# port takes those reads as Stage1Sources
+ * (Planning.Stage1.Stage1Compute.ComputeStage1). The recorder reads them again
+ * through the same request-memoised getters, so each is exactly what the
+ * TypeScript computed with. Weekday-keyed Maps are written as objects ("0".."6").
+ */
+export function installStage1SourcesRecorder(root: string) {
+  const lib = (p: string) => `${root}/src/lib/${p}`;
+  overrideModule(lib("stage1/compute"), (real) => ({
+    computeStage1: async (storeId: string, date: string) => {
+      const result = await (real.computeStage1 as Fn)(storeId, date);
+      if (!context.enabled) return result;
+      const R = require(lib("refdata"));
+      const { addDaysIso } = require(lib("period"));
+      const supabase = await require(lib("supabase/server")).createClient();
+      const [bench, nextBench, tradingWeek, specialHours, labourWindows, nonOp, holidays, phRealloc, overrides,
+        adminTaskRules, regionPrefix, attrs, resetTaskRules, placement, tradeCurveWeek, ruleOverrides, posCustomers, till] =
+        await Promise.all([
+          R.getBenchmarkDay(storeId, date),
+          R.getBenchmarkDay(storeId, addDaysIso(date, 1)),
+          R.getTradingWeek(storeId),
+          R.getSpecialHours(storeId),
+          R.getLabourWindows(),
+          supabase.from("non_op_entries").select("minutes").eq("store_id", storeId).eq("date", date),
+          R.getHolidaySet(storeId),
+          R.getPhReallocSet(storeId),
+          R.getSalesOverrideMap(storeId),
+          R.getAdminTasks(),
+          R.getRegionPrefix(storeId),
+          R.getStoreAttrs(storeId),
+          R.getResetTasks(),
+          R.getPlacementConfig(),
+          R.getTradeCurveWeek(storeId),
+          R.getRuleOverrides(),
+          R.getPosCustomerRows(storeId),
+          require(lib("till/compute")).computeTillForDate(storeId, date),
+        ]);
+      const byDow = (m: Map<number, unknown>) => Object.fromEntries([...m].map(([k, v]) => [String(k), v]));
+      const sources = {
+        date,
+        bench,
+        nextBench,
+        tradingWeek,
+        specialHours,
+        labourWindows: byDow(labourWindows),
+        nonOpMinutes: ((nonOp.data ?? []) as { minutes: number }[]).map((r) => r.minutes),
+        holidays,
+        phReallocDates: phRealloc,
+        salesOverride: overrides.get(date) ?? null,
+        adminTaskRules,
+        regionPrefix,
+        attrs,
+        resetTaskRules,
+        placement,
+        tradeCurveWeek: byDow(tradeCurveWeek),
+        ruleOverrides,
+        posCustomers,
+        till,
+      };
+      const inputText = JSON.stringify(encode({ sources }));
+      const s = sink("stage1");
+      if (!s.has("computeStage1", inputText)) s.add("computeStage1", inputText, encode(result) ?? null, undefined, 0);
+      return result;
+    },
+  }));
+}
+
 /** Record a call the driver makes itself (no app code calls it offline). */
 export function recordDirect<R>(entry: string, fn: string, args: Record<string, unknown>, call: () => R, output: (r: R) => unknown = (r) => r): R {
   return recordCall({ entry, fn, args }, call, output);

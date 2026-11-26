@@ -1,0 +1,122 @@
+@using global::Roster.Engine.SubTasks
+@* Port of TypeRow in src/app/(app)/admin/load-types/LoadTypesClient.tsx: one load type,
+   edited in place and saved on its own. *@
+
+<LeaveGuard Id="@($"load-type:{Row.Id}")" Dirty="@Dirty" />
+<tr class="@Ui.Cx(Ui.Table.Row, Dirty ? "bg-[var(--ui-lavender)]/50" : null)">
+    <td class="py-2 pr-3 pl-5 sm:pl-6">
+        <input @bind="_name" @bind:event="oninput" aria-label="Load type name" class="@($"w-full {Ui.CompactField}")" />
+    </td>
+    <td class="px-3 py-2">
+        <select @bind="_subTask" aria-label="@($"{Row.Name} counts as")" class="@Ui.CompactField">
+            <option value="">By name (@PartLabel(Catalogue.LoadPartFor(_name)))</option>
+            @foreach (var o in Catalogue.LoadPartOptions)
+            {
+                <option value="@o.Value">@o.Label</option>
+            }
+        </select>
+    </td>
+    <td class="px-3 py-2 text-right">
+        <input type="number" min="1" max="999" step="1" @bind="_priority" @bind:event="oninput" aria-label="@($"{Row.Name} priority")"
+               class="@($"w-16 text-right {Ui.CompactField}")" />
+    </td>
+    @Cell(_gt90, v => _gt90 = v, $"{Row.Name} minutes per pallet, more than 90 days", null)
+    @Cell(_lt90, v => _lt90 = v, $"{Row.Name} minutes per pallet, under 90 days", _gt90)
+    @Cell(_lt60, v => _lt60 = v, $"{Row.Name} minutes per pallet, under 60 days", _gt90)
+    @Cell(_lt30, v => _lt30 = v, $"{Row.Name} minutes per pallet, under 30 days", _gt90)
+    <td class="px-3 py-2">
+        <input type="color" aria-label="@($"{Row.Name} colour")" @bind="_color" @bind:event="oninput"
+               class="h-9 w-14 cursor-pointer rounded-lg border border-[var(--ui-control)]" />
+    </td>
+    <td class="py-2 pr-5 pl-3 text-right whitespace-nowrap sm:pr-6">
+        @if (Backwards)
+        {
+            <span class="mr-2 text-xs text-[var(--ui-amber-ink)]" title="A newer starter is set to be FASTER than a more experienced one - check these figures">⚠</span>
+        }
+        @if (Dirty)
+        {
+            <button type="button" disabled="@Pending" @onclick="SaveAsync" class="@($"mr-2 {Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)}")">Save</button>
+        }
+        <button type="button" disabled="@Pending" @onclick="DeleteAsync" class="@Ui.ButtonClass(ButtonKind.Danger, ButtonSize.Sm)">Delete</button>
+    </td>
+</tr>
+
+@code {
+    [Parameter, EditorRequired] public LoadTypeRow Row { get; set; } = default!;
+    [Parameter] public bool Pending { get; set; }
+    [Parameter, EditorRequired] public Func<Func<Task<AdminResult>>, Task> Run { get; set; } = _ => Task.CompletedTask;
+    [Inject] private ILoadTypesService Service { get; set; } = default!;
+
+    private string _name = "", _priority = "", _gt90 = "", _lt90 = "", _lt60 = "", _lt30 = "", _color = "", _subTask = "";
+
+    protected override void OnInitialized()
+    {
+        _name = Row.Name;
+        _priority = Js.NumberToString(Row.Priority);
+        _gt90 = Js.NumberToString(Row.MinutesPerPallet);
+        _lt90 = Str(Row.MinutesPerPalletLt90);
+        _lt60 = Str(Row.MinutesPerPalletLt60);
+        _lt30 = Str(Row.MinutesPerPalletLt30);
+        _color = Row.Color;
+        _subTask = Row.SubTask ?? "";
+    }
+
+    private static string Str(double? n) => n is { } v ? Js.NumberToString(v) : "";
+
+    /// <summary>A tenure cell: blank, or a positive number (anything else reads as blank).</summary>
+    private static double? NumOrNull(string s)
+    {
+        var t = Js.Trim(s);
+        if (t.Length == 0) return null;
+        var n = Js.Number(t);
+        return double.IsFinite(n) && n > 0 ? n : null;
+    }
+
+    /// <summary>"Ambient", or "Ambient - worked last (like D's)": what a type counts as.</summary>
+    private static string PartLabel(string v) =>
+        Catalogue.LoadPartOptions.FirstOrDefault(o => o.Value == v) is { Label: { } l } ? l : v;
+
+    private bool Dirty =>
+        _name != Row.Name
+        || Js.Number(_priority) != Row.Priority
+        || Js.Number(_gt90) != Row.MinutesPerPallet
+        || NumOrNull(_lt90) != Row.MinutesPerPalletLt90
+        || NumOrNull(_lt60) != Row.MinutesPerPalletLt60
+        || NumOrNull(_lt30) != Row.MinutesPerPalletLt30
+        || _color != Row.Color
+        || _subTask != (Row.SubTask ?? "");
+
+    // A later band that is FASTER than an earlier one is almost certainly a typo -
+    // flag it rather than silently planning a new starter as quicker.
+    private bool Backwards
+    {
+        get
+        {
+            double?[] seq = [Js.Number(_gt90), NumOrNull(_lt90), NumOrNull(_lt60), NumOrNull(_lt30)];
+            for (var i = 1; i < seq.Length; i++)
+            {
+                if (seq[i] is not { } v) continue;
+                double? prev = null;
+                for (var j = i - 1; j >= 0; j--)
+                    if (seq[j] is { } p) { prev = p; break; }
+                if (prev is { } pv && v < pv) return true;
+            }
+            return false;
+        }
+    }
+
+    private RenderFragment Cell(string value, Action<string> set, string label, string? placeholder) => __builder =>
+    {
+        <td class="px-3 py-2 text-right">
+            <input type="number" min="0" step="0.1" value="@value" placeholder="@placeholder" aria-label="@label"
+                   @oninput="@(e => set(e.Value?.ToString() ?? ""))" class="@($"w-20 text-right {Ui.CompactField}")" />
+        </td>
+    };
+
+    private Task SaveAsync() => Run(() => Service.UpdateLoadTypeAsync(
+        Row.Id, _name, Js.Number(_gt90), _color,
+        new TenureMinutes(NumOrNull(_lt90), NumOrNull(_lt60), NumOrNull(_lt30)),
+        Js.Number(_priority), _subTask));
+
+    private Task DeleteAsync() => Run(() => Service.DeleteLoadTypeAsync(Row.Id));
+}

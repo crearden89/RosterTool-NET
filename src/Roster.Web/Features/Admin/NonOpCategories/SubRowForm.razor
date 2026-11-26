@@ -1,0 +1,62 @@
+@* Port of SubRowForm in src/app/(app)/admin/non-op-categories/NonOpCategoriesClient.tsx:
+   one editable row, used for both "add" and "edit" so the two paths can never drift
+   apart. A blank number field means "no fixed time", so empty and 0 stay distinct. *@
+
+<tr class="@($"{Ui.Table.Row} bg-[var(--ui-lavender)]/50 align-middle")">
+    <td class="py-2 pr-3 pl-5 sm:pl-6">
+        <input autofocus placeholder="Sub-category name" aria-label="Sub-category name" @bind="_name" @bind:event="oninput" class="@($"{Ui.CompactField} w-full")" />
+    </td>
+    <td class="px-3 py-2">
+        <input type="number" min="0" placeholder="—" aria-label="Default minutes" @bind="_def" @bind:event="oninput" class="@($"{Ui.CompactField} w-full text-right")" />
+    </td>
+    <td class="px-3 py-2">
+        <input type="number" min="0" placeholder="—" aria-label="Maximum minutes" @bind="_max" @bind:event="oninput" class="@($"{Ui.CompactField} w-full text-right")" />
+    </td>
+    <td class="px-3 py-2">
+        <input placeholder="e.g. As approved by EMSO" aria-label="Approval or note" @bind="_note" @bind:event="oninput" class="@($"{Ui.CompactField} w-full")" />
+    </td>
+    <td class="px-3 py-2">
+        <div class="flex gap-0.5" role="group" aria-label="Days allowed">
+            @for (var i = 0; i < 7; i++)
+            {
+                var day = i;
+                var label = Period.DayLabels[day];
+                var on = _days.Contains(day);
+                <button type="button" title="@label" aria-label="@label" aria-pressed="@(on ? "true" : "false")" @onclick="() => ToggleDay(day)"
+                        class="@Ui.Cx("h-6 w-6 rounded text-[10px] font-semibold", Ui.FocusRing, on ? "bg-[var(--ui-ink)] text-white" : "bg-white text-[var(--ui-muted)]")">@label[0]</button>
+            }
+        </div>
+    </td>
+    <td class="px-3 py-2 text-right">
+        <div class="flex justify-end gap-2">
+            <button type="button" class="@Ui.ButtonClass(ButtonKind.Primary, ButtonSize.Sm)" disabled="@(Pending || Js.Trim(_name) == "")" @onclick="SaveAsync">Save</button>
+            <button type="button" class="@Ui.ButtonClass(ButtonKind.Secondary, ButtonSize.Sm)" @onclick="OnCancel">Cancel</button>
+        </div>
+    </td>
+</tr>
+
+@code {
+    [Parameter] public NonOpSubRow? Initial { get; set; }
+    [Parameter] public bool Pending { get; set; }
+    [Parameter, EditorRequired] public EventCallback<SubcategoryInput> OnSave { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnCancel { get; set; }
+
+    private string _name = "", _def = "", _max = "", _note = "";
+    private List<int> _days = [0, 1, 2, 3, 4, 5, 6];
+
+    protected override void OnInitialized()
+    {
+        if (Initial is null) return;
+        _name = Initial.Name;
+        _def = Initial.DefaultMinutes?.ToString() ?? "";
+        _max = Initial.MaxMinutes?.ToString() ?? "";
+        _note = Initial.Note ?? "";
+        _days = Initial.DaysAllowed.ToList();
+    }
+
+    private static double? NumOrNull(string s) => Js.Trim(s) == "" ? null : Js.Number(s);
+
+    private void ToggleDay(int i) => _days = _days.Contains(i) ? _days.Where(x => x != i).ToList() : [.. _days, i];
+
+    private Task SaveAsync() => OnSave.InvokeAsync(new SubcategoryInput(_name, NumOrNull(_def), NumOrNull(_max), _note, _days));
+}
