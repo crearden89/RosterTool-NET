@@ -1,0 +1,79 @@
+@* Port of src/app/(app)/admin/pay-rates/PaySettingsClient.tsx. *@
+@using PaySettings = global::Roster.Engine.Pay.PaySettings
+@inject IPayRatesService Service
+
+<div class="mb-6 rounded-xl border border-[var(--brand-border)] bg-white p-5">
+    <h2 class="mb-3 text-lg font-semibold text-[var(--brand-navy)]">Pay Settings &amp; On-costs</h2>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        @Field("RSM Allowance ($/hr, sole manager)", "0.01", null, null, _form.RsmAllowance, v => _form = _form with { RsmAllowance = v })
+        @Field("Superannuation %", "0.01", null, null, Round2(_form.SuperRate * 100), v => _form = _form with { SuperRate = v / 100 })
+        @Field("Overtime 1.5 %", "1", null, null, Round2(_form.Overtime15Multiplier * 100), v => _form = _form with { Overtime15Multiplier = v / 100 })
+        @Field("Overtime 1.9 %", "1", null, null, Round2(_form.Overtime19Multiplier * 100), v => _form = _form with { Overtime19Multiplier = v / 100 })
+        @Field("Double time %", "1", null, null, Round2(_form.DoubleTimeMultiplier * 100), v => _form = _form with { DoubleTimeMultiplier = v / 100 })
+        @Field("Sunday 1.9x band from (hour)", "1", "0", "24", _form.SundayOtFromHour, v => _form = _form with { SundayOtFromHour = v })
+        @Field("Sunday 1.9x band to (hour)", "1", "0", "24", _form.SundayOtToHour, v => _form = _form with { SundayOtToHour = v })
+    </div>
+    <p class="mt-2 text-xs text-[var(--brand-navy)]/50">
+        Overtime worked on a Sunday between these hours is paid at the 1.9x multiplier instead of
+        1.5x. Double time applies to a whole shift that follows a break shorter than the role&apos;s
+        &quot;2x under gap&quot; on the Rules → Break &amp; Work Rules tab, and replaces overtime rather than
+        stacking with it.
+    </p>
+
+    <h3 class="mb-2 mt-5 text-sm font-semibold text-[var(--brand-navy)]">Payroll Tax by State (%)</h3>
+    <div class="grid grid-cols-4 gap-3 sm:grid-cols-8">
+        @foreach (var st in AuStates.All)
+        {
+            var state = st;
+            @Field(state, "0.01", null, null, Round2((_tax.TryGetValue(state, out var t) ? t : 0) * 100), v => _tax[state] = v / 100)
+        }
+    </div>
+
+    <div class="mt-4 flex items-center gap-3">
+        <button @onclick="SaveAsync" disabled="@_saving" class="rounded-lg bg-[var(--brand-orange)] px-5 py-2 font-semibold text-white disabled:opacity-50">
+            @(_saving ? "Saving…" : "Save pay settings")
+        </button>
+        @if (_msg is not null)
+        {
+            <span class="@($"text-sm {(_msg.StartsWith("Error") ? "text-[var(--brand-red)]" : "text-green-700")}")">@_msg</span>
+        }
+    </div>
+</div>
+
+@code {
+    private const string InputCls = "w-full rounded-lg border border-[var(--brand-border)] px-2 py-1.5 text-right";
+
+    [Parameter, EditorRequired] public PaySettings Settings { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyDictionary<string, double> TaxRates { get; set; } = default!;
+
+    private PaySettings _form = PaySettings.Default;
+    private Dictionary<string, double> _tax = [];
+    private bool _saving;
+    private string? _msg;
+
+    protected override void OnInitialized()
+    {
+        _form = Settings;
+        _tax = new Dictionary<string, double>(TaxRates);
+    }
+
+    private static double Round2(double n) => Js.Round(n * 100) / 100;
+
+    private RenderFragment Field(string label, string step, string? min, string? max, double value, Action<double> set) => __builder =>
+    {
+        <label class="block text-sm">
+            <span class="mb-1 block font-medium text-[var(--brand-navy)]">@label</span>
+            <input type="number" step="@step" min="@min" max="@max" value="@Js.NumberToString(value)" class="@InputCls"
+                   @oninput="@(e => set(Js.Number(e.Value?.ToString())))" />
+        </label>
+    };
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _msg = null;
+        var res = await Service.SavePaySettingsAsync(_form, _tax);
+        _saving = false;
+        _msg = res.Ok ? "Saved." : $"Error: {res.Error}";
+    }
+}

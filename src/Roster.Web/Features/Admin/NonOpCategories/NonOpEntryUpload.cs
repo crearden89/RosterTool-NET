@@ -28,8 +28,13 @@ public interface INonOpEntryUpload
     Task<NonOpUploadResult> BulkUploadNonOpEntriesAsync(string csvText, CancellationToken ct = default);
 }
 
-internal sealed class NonOpEntryUpload(IRosterDbContextFactory contexts, IStoreScope scope) : INonOpEntryUpload
+internal sealed class NonOpEntryUpload(IServiceProvider services) : INonOpEntryUpload
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     private static readonly string[] Required = ["Day", "NonOpHoursCategory", "NonOpHoursSubCategory", "Minutes", "Store ID"];
 
     public async Task<NonOpUploadResult> BulkUploadNonOpEntriesAsync(string csvText, CancellationToken ct = default)

@@ -99,7 +99,7 @@
     private string? _error;
     private string _newName = "", _newMinutes = "15", _newColor = "#2563eb";
 
-    protected override async Task OnInitializedAsync() => _rows = await Service.LoadAsync();
+    protected override async Task OnInitializedAsync() => _rows = await AdminLoad.OrAsync(() => Service.LoadAsync(), []);
 
     private async Task RunAsync(Func<Task<AdminResult>> fn)
     {
@@ -108,7 +108,7 @@
         StateHasChanged();
         var res = await fn();
         if (!res.Ok) _error = res.Error ?? "Something went wrong";
-        else _rows = await Service.LoadAsync();
+        else _rows = await AdminLoad.OrAsync(() => Service.LoadAsync(), []);
         _pending = false;
         StateHasChanged();
     }

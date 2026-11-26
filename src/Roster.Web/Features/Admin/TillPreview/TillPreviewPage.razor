@@ -1,0 +1,82 @@
+@page "/admin/till-preview"
+@* Port of src/app/(app)/admin/till-preview/page.tsx. Phase 2 validation surface: runs the
+   Till Allocation Engine over a store/date's derived trade curve so the "Updated"
+   methodology output is visible and checkable before Stage 1 consumes it.
+
+   It also carries the WORKED DERIVATION - benchmark hours through to tills - because
+   the engine's output is deliberately NOT the benchmark figure, and without the
+   intermediate steps on screen that difference reads as a broken 90% conversion rather
+   than as the tier table doing its job. *@
+@using global::Roster.Engine.Till
+@inject ITillPreviewService Service
+@inject IRememberedStore Remembered
+
+<div>
+    <SettingsHeader Area="Stores" Title="Till Allocation Preview">
+        <Subtitle>How the till engine turns a day's checkout hours into tills, worked through · one store and date at a time</Subtitle>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        <SettingsSection Id="store-date">
+            <Title>Store and date</Title>
+            <Purpose>The store and day to run the engine for. Nothing is saved: this page only shows the working.</Purpose>
+            <ChildContent>
+                @if (_view is { } v)
+                {
+                    <TillFilterBar @key="@($"{v.SelectedStore}:{v.SelectedDate}")" Stores="v.Stores" SelectedStore="v.SelectedStore" SelectedDate="@v.SelectedDate" />
+                }
+            </ChildContent>
+        </SettingsSection>
+
+        @if (_view is not null)
+        {
+            var result = _view.Result;
+            @if (result is null || result.Attrs is null)
+            {
+                <Card>
+                    <p class="text-sm text-[var(--ui-muted)]">
+                        No store attributes found for this store - set them on the Store Attributes screen
+                        first.
+                    </p>
+                </Card>
+            }
+            else if (!result.HasData)
+            {
+                <Card>
+                    <p class="text-sm text-[var(--ui-muted)]">
+                        No checkout demand for @Dates.AuFull(result.Date) - this needs both a Benchmark upload for this date
+                        (the day&apos;s Checkout Hours budget) and trade-curve data for this store - the POS
+                        Quarter-Hour statistics, or a legacy allocation pattern. Upload both on the Uploads screen.
+                    </p>
+                </Card>
+            }
+            else
+            {
+                <TillWorking Result="result" />
+            }
+        }
+    </SettingsBody>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "store")] public string? Store { get; set; }
+    [SupplyParameterFromQuery(Name = "date")] public string? Date { get; set; }
+
+    private TillPreviewView? _view;
+
+    private IReadOnlyList<SettingsSectionRef> Sections =>
+        _view?.Result is { Attrs: not null, HasData: true }
+            ?
+            [
+                new("store-date", "Store and date"),
+                new("headline", "What the engine decided"),
+                new("derivation", "How this day was built"),
+                new("ladder", "Till ladder"),
+                new("blocks", "Block by block"),
+            ]
+            : [new("store-date", "Store and date")];
+
+    protected override async Task OnParametersSetAsync() =>
+        _view = await AdminLoad.OrAsync(
+            () => Service.LoadAsync(Guid.TryParse(Store, out var s) ? s : null, Remembered.StoreId, Date),
+            new TillPreviewView([], null, "", null));
+}

@@ -33,8 +33,13 @@ public interface IDataFeedService
     Task<AdminResult> DeleteFeedTokenAsync(Guid id, CancellationToken ct = default);
 }
 
-internal sealed class DataFeedService(IRosterDbContextFactory contexts, IStoreScope scope) : IDataFeedService
+internal sealed class DataFeedService(IServiceProvider services) : IDataFeedService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     private static string NewToken() => AdminStores.RandomHex(32);
 
     public async Task<DataFeedView> LoadAsync(CancellationToken ct = default)

@@ -53,6 +53,11 @@ public sealed class NotificationsPageTests : UiTestContext
         Assert.Equal(expected, NotificationFormat.LocaleString(
             DateTimeOffset.Parse(at, System.Globalization.CultureInfo.InvariantCulture), TimeZoneInfo.FindSystemTimeZoneById(zone)));
 
+    [Fact]
+    public void Writes_the_time_in_Sydney_whatever_the_servers_zone() =>
+        Assert.Equal("25/11/2026, 5:17:05 pm", NotificationFormat.LocaleString(
+            DateTimeOffset.Parse("2026-11-25T06:17:05Z", System.Globalization.CultureInfo.InvariantCulture)));
+
     private sealed class EmptyNotifications : INotificationService
     {
         public Task<IReadOnlyList<NotificationItem>> ListMineAsync(CancellationToken cancellationToken = default) =>

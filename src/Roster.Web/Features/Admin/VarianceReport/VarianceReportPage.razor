@@ -1,0 +1,174 @@
+@page "/admin/variance-report"
+@* Port of src/app/(app)/admin/variance-report/page.tsx: one date, every store, actuals
+   compared with benchmarks (the report is Roster.Engine.Variance.VarianceReports). *@
+@using global::Roster.Engine.Variance
+@inject IVarianceReportService Service
+
+<div class="max-w-6xl">
+    <SettingsHeader Area="Data" Title="Daily Variance Report">
+        <Subtitle>One day's actuals against the benchmark, store by store · every store</Subtitle>
+        <Actions>
+            @if (_view is { } v)
+            {
+                @* The date between its arrows. *@
+                <div class="flex items-center rounded-xl border border-[var(--ui-control)] bg-white">
+                    <a href="@DayHref(v.Date.AddDays(-1))" aria-label="Previous day" title="Previous day" class="@Arrow"><Icon Name="IconName.ChevronLeft" Class="h-4 w-4" aria-hidden="true" /></a>
+                    <span class="px-2 text-center text-sm font-semibold whitespace-nowrap text-[var(--ui-ink)]">@($"{v.Date.DayOfWeek} {Dates.AuFull(v.Date)}")</span>
+                    <a href="@DayHref(v.Date.AddDays(1))" aria-label="Next day" title="Next day" class="@Arrow"><Icon Name="IconName.ChevronRight" Class="h-4 w-4" aria-hidden="true" /></a>
+                </div>
+            }
+        </Actions>
+    </SettingsHeader>
+    <SettingsBody Sections="Sections">
+        @if (_view is { } view)
+        {
+            var r = view.Report;
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                @Kpi("Stores with benchmarks", r.StoresWithBenchmarks)
+                @Kpi("Metric exceptions", r.MetricFlags.Count)
+                @Kpi("Hours exceptions", r.HourFlags.Count)
+                @Kpi("Missing stores", r.Missing.Count)
+            </div>
+            @FlagTable("metrics", "Benchmark & Actuals exceptions",
+                $"Sales, items and customers beyond {Js.NumberToString(view.Thresholds.MetricPct)}% of benchmark, plus file-flag mismatches (Is_Mhs, Has_Esl, Baler) and policy exceptions",
+                r.MetricFlags)
+            @FlagTable("hours", "Hours deviation exceptions",
+                $"Labour-hour categories deviating by more than {Js.NumberToString(view.Thresholds.HoursPct)}% from benchmark (100% hours both sides)",
+                r.HourFlags)
+            <SettingsSection Id="missing" Flush="true">
+                <Title>Missing store exceptions</Title>
+                <Purpose>Stores present in one source but not the other, where sales are reported</Purpose>
+                <ChildContent>
+                    <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                        <table class="@Ui.Table.Element">
+                            <thead class="@Ui.Table.Head">
+                                <tr>
+                                    <th class="@Th">Store</th>
+                                    <th class="@Th">Present in</th>
+                                    <th class="@($"{Th} text-right")">Retail sales</th>
+                                    <th class="@Th">Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (r.Missing.Count == 0)
+                                {
+                                    @Empty(4)
+                                }
+                                else
+                                {
+                                    @foreach (var m in r.Missing)
+                                    {
+                                        <tr class="@Ui.Table.Row">
+                                            <td class="@($"{Td} font-semibold")">@m.Store</td>
+                                            <td class="@Td">@m.PresentIn</td>
+                                            <td class="@($"{Td} text-right tabular-nums")">@Num(m.Sales)</td>
+                                            <td class="@($"{Td} text-[var(--ui-muted)]")">@m.Reason</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </ChildContent>
+            </SettingsSection>
+            <SettingsSection Id="thresholds">
+                <Title>Thresholds</Title>
+                <Purpose>How far from the benchmark a figure may be before it is listed here, and the Dashboard's Data light. Saved on their own, for every store.</Purpose>
+                <ChildContent>
+                    <ThresholdForm Saved="view.Thresholds" Reload="ReloadAsync" />
+                </ChildContent>
+            </SettingsSection>
+        }
+    </SettingsBody>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SettingsSectionRef> Sections =
+    [
+        new("metrics", "Benchmark & Actuals"),
+        new("hours", "Hours deviation"),
+        new("missing", "Missing stores"),
+        new("thresholds", "Thresholds"),
+    ];
+
+    private static readonly string Th = $"{Ui.Table.Th} text-left";
+    private const string Td = "px-3 py-1.5";
+    private static readonly string Arrow = $"rounded-xl px-2.5 py-2 text-[var(--ui-ink)] hover:bg-[var(--ui-lavender)] {Ui.FocusRing}";
+
+    [SupplyParameterFromQuery(Name = "date")] public string? Date { get; set; }
+
+    private VarianceReportView? _view;
+
+    protected override Task OnParametersSetAsync() => ReloadAsync();
+
+    private async Task ReloadAsync() =>
+        _view = await AdminLoad.OrAsync(
+            () => Service.LoadAsync(Date),
+            new VarianceReportView(
+                VarianceReportService.DateFor(Date, Dates.TodayAu()),
+                new global::Roster.Engine.Variance.VarianceReport(0, [], [], []),
+                new VarianceThresholds(VarianceReports.DefaultDataLightPct, VarianceReports.DefaultMetricPct, VarianceReports.DefaultHoursPct)));
+
+    private static string DayHref(DateOnly d) => $"/admin/variance-report?date={AdminParse.Iso(d)}";
+
+    private static string Num(double? v) => v is { } n ? Js.ToLocaleString(n, 2) : "—";
+
+    private static RenderFragment Kpi(string label, int value) => __builder =>
+    {
+        <StatCard>
+            <Label>@label</Label>
+            <Value><span class="@(value > 0 && label != "Stores with benchmarks" ? "text-[var(--ui-bad)]" : null)">@value</span></Value>
+        </StatCard>
+    };
+
+    private static RenderFragment Empty(int cols) => __builder =>
+    {
+        <tr>
+            <td colspan="@cols" class="px-4 py-5 text-center text-sm text-[var(--ui-muted)] italic">No exceptions identified for this reporting date.</td>
+        </tr>
+    };
+
+    private static RenderFragment FlagTable(string id, string title, string desc, IReadOnlyList<VarianceRow> rows) => __builder =>
+    {
+        <SettingsSection Id="@id" Flush="true">
+            <Title>@title</Title>
+            <Purpose>@desc</Purpose>
+            <ChildContent>
+                <div class="overflow-x-auto border-t border-[var(--ui-line)]">
+                    <table class="@Ui.Table.Element">
+                        <thead class="@Ui.Table.Head">
+                            <tr>
+                                <th class="@Th">Store</th>
+                                <th class="@Th">Metric</th>
+                                <th class="@($"{Th} text-right")">Actual</th>
+                                <th class="@($"{Th} text-right")">Benchmark</th>
+                                <th class="@($"{Th} text-right")">Variance</th>
+                                <th class="@Th">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (rows.Count == 0)
+                            {
+                                @Empty(6)
+                            }
+                            else
+                            {
+                                @foreach (var r in rows)
+                                {
+                                    <tr class="@Ui.Table.Row">
+                                        <td class="@($"{Td} font-semibold")">@r.Store</td>
+                                        <td class="@Td">@r.Metric</td>
+                                        <td class="@($"{Td} text-right tabular-nums")">@(r.ActualText ?? Num(r.Actual))</td>
+                                        <td class="@($"{Td} text-right tabular-nums")">@(r.BenchText ?? Num(r.Benchmark))</td>
+                                        <td class="@($"{Td} text-right font-semibold tabular-nums {(VarianceReports.VarianceIsSevere(r) ? "text-[var(--ui-bad)]" : "text-[var(--ui-amber-ink)]")}")">@VarianceReports.VarianceText(r)</td>
+                                        <td class="@($"{Td} text-[var(--ui-muted)]")">@r.Reason</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </ChildContent>
+        </SettingsSection>
+    };
+}

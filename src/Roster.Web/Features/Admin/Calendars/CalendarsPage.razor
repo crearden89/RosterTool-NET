@@ -27,5 +27,6 @@
 
     protected override Task OnInitializedAsync() => ReloadAsync();
 
-    private async Task ReloadAsync() => _view = await Service.LoadAsync();
+    private async Task ReloadAsync() =>
+        _view = await AdminLoad.OrAsync(() => Service.LoadAsync(), new CalendarsView([], [], [], [], [], []));
 }

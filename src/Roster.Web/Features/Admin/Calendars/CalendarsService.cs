@@ -55,8 +55,13 @@ public interface ICalendarsService
     Task<AdminResult> DeleteRowAsync(CalendarTable table, Guid id, CancellationToken ct = default);
 }
 
-internal sealed class CalendarsService(IRosterDbContextFactory contexts, IStoreScope scope) : ICalendarsService
+internal sealed class CalendarsService(IServiceProvider services) : ICalendarsService
 {
+    // Resolved on first use, not when the page is built: a page opened with no database
+    // reachable then shows its empty state (AdminLoad) instead of failing.
+    private IRosterDbContextFactory contexts => services.GetRequiredService<IRosterDbContextFactory>();
+    private IStoreScope scope => services.GetRequiredService<IStoreScope>();
+
     public async Task<CalendarsView> LoadAsync(CancellationToken ct = default)
     {
         scope.RequireSuperUser();
