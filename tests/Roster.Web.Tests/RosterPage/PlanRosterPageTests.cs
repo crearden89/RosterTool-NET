@@ -4,6 +4,7 @@
 using System.Reflection;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Roster.Web.Components.Ui;
 using Roster.Web.Features.Plan;
 using Roster.Web.Features.RosterPage;
 using Roster.Web.Tests.Infrastructure;
@@ -65,6 +66,29 @@ public class PlanRosterPageTests : UiTestContext
 
         cut.FindAll("tbody tr[data-row]")[0].QuerySelector("button[aria-label$='shift'][title^='Pin'], button[aria-label='Unpin shift']")!.Click();
         Assert.Contains(_plan.Calls, c => c.Method == nameof(IPlanService.SetShiftLockAsync));
+    }
+
+    [Fact]
+    public async Task A_new_person_saves_the_row_a_confirmed_remove_removes_and_add_adds()
+    {
+        JSInterop.Setup<bool>("confirm", _ => true).SetResult(true);
+        var cut = Render<PlanRosterPage>();
+        var picker = cut.FindComponents<NameCombobox>()[0].Instance;
+        var other = "a0000000-0000-4000-8000-000000000010"; // not rostered on the day
+        await cut.InvokeAsync(() => picker.OnChange.InvokeAsync(other));
+        var save = Assert.Single(_plan.Calls, c => c.Method == nameof(IPlanService.SaveShiftRowAsync));
+        Assert.Equal(Guid.Parse(other), save.Args[3]);
+        Assert.NotEqual(save.Args[2], save.Args[3]);
+
+        cut.FindAll("tbody tr[data-row]")[0].QuerySelector("button[aria-label='Remove shift']")!.Click();
+        Assert.Contains(_plan.Calls, c => c.Method == nameof(IPlanService.RemoveShiftAsync));
+
+        var add = cut.FindComponents<NameCombobox>().Last().Instance; // the Add a shift picker
+        await cut.InvokeAsync(() => add.OnChange.InvokeAsync(other));
+        cut.FindAll("button").First(b => b.TextContent == "Add").Click();
+        var added = Assert.Single(_plan.Calls, c => c.Method == nameof(IPlanService.AddShiftAsync));
+        Assert.Equal((Guid.Parse(other), 420d, 900d), ((Guid)added.Args[2]!, (double)added.Args[3]!, (double)added.Args[4]!));
+        Assert.Contains("Saved.", cut.Markup);
     }
 
     [Fact]
