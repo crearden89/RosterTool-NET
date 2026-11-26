@@ -70,7 +70,7 @@ public sealed class ReviewService(
             data = await reader.LoadReviewAsync(sid, periodStart, cancellationToken);
             var link = Db.ReviewLinks.ReviewLink(sid, periodStart);
             await using var db = contexts.Create();
-            unread = await db.Notifications.AsNoTracking().CountAsync(n => n.Link == link && n.ReadAt == null, cancellationToken);
+            unread = await db.Notifications.AsNoTracking().CountAsync(n => n.UserId == user.Id && n.Link == link && n.ReadAt == null, cancellationToken);
         }
 
         var storeRow = stores.FirstOrDefault(s => s.Id == storeId);
@@ -574,18 +574,19 @@ public sealed class ReviewService(
 
     // ─── The bell ────────────────────────────────────────────────────────────
 
-    // Opening a review clears your unread notices for it (the notifications rule
-    // limits the update to your own rows), so the bell only counts reviews you
+    // Opening a review clears your unread notices for it - your own rows only, a
+    // super user's too (the owner's correction of the TypeScript app, whose policy let
+    // a super user's update reach everyone's) - so the bell only counts reviews you
     // haven't looked at.
     public async Task MarkReviewNoticesReadAsync(Guid storeId, DateOnly periodStart, CancellationToken cancellationToken = default)
     {
-        if (scope.User is null) return;
+        if (scope.User?.Id is not { } me) return;
         var link = Db.ReviewLinks.ReviewLink(storeId, periodStart);
         try
         {
             await using var db = contexts.Create();
             var now = clock.GetUtcNow();
-            var rows = await db.Notifications.Where(n => n.Link == link && n.ReadAt == null).ToListAsync(cancellationToken);
+            var rows = await db.Notifications.Where(n => n.UserId == me && n.Link == link && n.ReadAt == null).ToListAsync(cancellationToken);
             foreach (var n in rows) n.ReadAt = now;
             await db.SaveChangesAsync(cancellationToken);
         }
