@@ -1,6 +1,8 @@
 // New: the Dashboard's and the Analysis pages' services over a private in-memory SQLite
 // database built from the data layer's model, with the real store scope and data services,
 // a fixed clock (Wednesday 25 November 2026, Sydney) and an invented user of any tier.
+// OnSqlServer() gives the same over a throwaway SQL Server database, for the reads that
+// take another path there (raw SQL).
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -11,14 +13,19 @@ using Roster.Data.Entities;
 using Roster.Data.Scope;
 using Roster.Web.Features.Analysis;
 using Roster.Web.Features.Overview;
+using Roster.Web.Tests.Infrastructure;
 
 namespace Roster.Web.Tests.Overview;
 
 public sealed class OverviewTestDb : IDisposable
 {
-    private readonly SqliteConnection _connection = new("Data Source=:memory:");
+    private readonly SqliteConnection? _connection;
+    private readonly bool _onSqlServer;
     private readonly ServiceProvider _root;
     private readonly AsyncServiceScope _scope;
+
+    /// <summary>The same services and seed on a new SQL Server database, dropped on Dispose (see <see cref="SqlServerTests"/>).</summary>
+    public static OverviewTestDb OnSqlServer() => new(SqlServerTests.NewDatabase());
 
     public static readonly DateOnly Today = new(2026, 11, 25);
     public static readonly Guid GroupId = Guid.Parse("d4000000-0000-4000-8000-000000000001");
@@ -29,13 +36,26 @@ public sealed class OverviewTestDb : IDisposable
     public static readonly Guid StoreB = Guid.Parse("5e400000-0000-4000-8000-000000000102");
     public static readonly Guid StoreC = Guid.Parse("5e400000-0000-4000-8000-000000000103");
 
-    public OverviewTestDb()
+    public OverviewTestDb() : this(sqlServer: null) { }
+
+    private OverviewTestDb(string? sqlServer)
     {
-        _connection.Open();
+        Action<DbContextOptionsBuilder> provider;
+        if (sqlServer is null)
+        {
+            var connection = _connection = new SqliteConnection("Data Source=:memory:");
+            connection.Open();
+            provider = b => b.UseSqlite(connection);
+        }
+        else
+        {
+            _onSqlServer = true;
+            provider = b => b.UseSqlServer(sqlServer);
+        }
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder().Build();
         services.AddSingleton<TimeProvider>(new FixedClock(new DateTimeOffset(2026, 11, 24, 23, 0, 0, TimeSpan.Zero)));
-        services.AddRosterData(b => b.UseSqlite(_connection), configuration);
+        services.AddRosterData(provider, configuration);
         services.AddScoped<IRememberedStore, Remembered>();
         services.AddLogging();
         new OverviewModule().Register(services, configuration);
@@ -105,9 +125,14 @@ public sealed class OverviewTestDb : IDisposable
 
     public void Dispose()
     {
+        if (_onSqlServer)
+        {
+            using var db = Contexts.CreateSystem("test teardown");
+            db.Database.EnsureDeleted();
+        }
         _scope.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _root.Dispose();
-        _connection.Dispose();
+        _connection?.Dispose();
     }
 
     private sealed class Remembered : IRememberedStore

@@ -32,13 +32,17 @@ public sealed record SnapshotWriteResult(bool Ok, string? Error = null, int? Ver
 /// </summary>
 public interface IPlanSnapshotStore
 {
-    /// <summary>readSnapshots: both held snapshots of a store's fortnight.</summary>
+    /// <summary>
+    /// readSnapshots: both held snapshots of a store's fortnight, as the current identity, so
+    /// nothing for a store outside its visible stores.
+    /// </summary>
     Task<HeldSnapshots> ReadAsync(Guid storeId, DateOnly periodStart, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// readPeerPlanSnapshot: the one deliberate gate through which another store's held PLAN
     /// is read (peer-visible Plan page). Only the plan, never the roster, and without who
-    /// generated it. Callers must strip flags before showing anything.
+    /// generated it; read as the system once the caller is signed in. Callers must strip
+    /// flags before showing anything.
     /// </summary>
     Task<HeldSnapshot?> ReadPeerPlanAsync(Guid storeId, DateOnly periodStart, CancellationToken cancellationToken = default);
 
@@ -58,7 +62,10 @@ public interface IPlanSnapshotStore
         CancellationToken cancellationToken = default);
 }
 
-/// <summary><see cref="IPlanSnapshotStore"/> over plan_snapshots, as the current identity.</summary>
+/// <summary>
+/// <see cref="IPlanSnapshotStore"/> over plan_snapshots, as the current identity; only the peer
+/// gate reads as the system.
+/// </summary>
 public sealed class PlanSnapshotStore(IRosterDbContextFactory contexts) : IPlanSnapshotStore
 {
     /// <summary>writePlanSnapshot's conflict message, verbatim.</summary>
@@ -78,11 +85,15 @@ public sealed class PlanSnapshotStore(IRosterDbContextFactory contexts) : IPlanS
 
     public async Task<HeldSnapshot?> ReadPeerPlanAsync(Guid storeId, DateOnly periodStart, CancellationToken cancellationToken = default)
     {
-        await using var db = contexts.Create();
-        if (!db.Access.IsSignedIn && db.Access.Kind != Scope.AccessKind.System) return null;
-        // Read past the store filter on purpose: this is the peer gate (the TypeScript app
-        // used the service-role client here).
-        var row = await db.PlanSnapshots.IgnoreQueryFilters().AsNoTracking()
+        // The gate: someone signed in, or the server itself. Which other stores a person may
+        // look at this way is the peer-visible page's own access check, made before this.
+        Scope.AccessContext caller;
+        await using (var mine = contexts.Create()) caller = mine.Access;
+        if (!caller.IsSignedIn && caller.Kind != Scope.AccessKind.System) return null;
+        // Past the gate the read is the system's: the store scope rightly hides another
+        // store's held plans (the TypeScript app read them with the service-role client).
+        await using var db = contexts.CreateSystem("readPeerPlanSnapshot: another store's held plan, past the peer gate");
+        var row = await db.PlanSnapshots.AsNoTracking()
             .FirstOrDefaultAsync(s => s.StoreId == storeId && s.PeriodStart == periodStart && s.Kind == SnapshotKinds.Plan, cancellationToken);
         return row is null ? null : ToHeld(row) with { GeneratedBy = null };
     }

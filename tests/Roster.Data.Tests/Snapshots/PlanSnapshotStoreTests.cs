@@ -82,6 +82,66 @@ public sealed class PlanSnapshotStoreTests : IDisposable
         Assert.Null(await nobody.ReadPeerPlanAsync(_org.S2, Period));
     }
 
+    // The owner tightened plan_snapshots to the visible stores: a store login's own reads
+    // stop at its store, and another store's held plan is reached only through the peer
+    // gate, which reads it as the system once the caller is signed in.
+    [Fact]
+    public async Task A_store_login_reads_only_its_own_held_snapshots_but_the_peer_gate_still_reads_another_stores_plan()
+    {
+        await As(_org.EmsoA1).StoreAsync(_org.S2, Period, SnapshotKinds.Plan, "{\"days\":[]}", At, _org.EmsoA1.Id);
+        await As(_org.EmsoA1).StoreAsync(_org.S2, Period, SnapshotKinds.Roster, "{\"byDate\":[]}", At, _org.EmsoA1.Id);
+
+        var direct = await As(_org.StoreS1).ReadAsync(_org.S2, Period);
+        Assert.Null(direct.Plan);
+        Assert.Null(direct.Roster);
+
+        var peer = await As(_org.StoreS1).ReadPeerPlanAsync(_org.S2, Period);
+        Assert.Equal("{\"days\":[]}", peer?.Payload);
+        Assert.Null(peer!.GeneratedBy);
+
+        // The area's EMSO, a PA and a super user still read both held snapshots of the store.
+        foreach (var reader in new[] { _org.EmsoA1, _org.PaR1, _org.Super })
+        {
+            var held = await As(reader).ReadAsync(_org.S2, Period);
+            Assert.NotNull(held.Plan);
+            Assert.NotNull(held.Roster);
+        }
+    }
+
+    [Fact]
+    public async Task The_peer_gate_reads_through_a_system_context_after_checking_the_caller()
+    {
+        await As(_org.EmsoA1).StoreAsync(_org.S2, Period, SnapshotKinds.Plan, "{\"days\":[]}", At, _org.EmsoA1.Id);
+
+        var signedIn = new Recording(_db, AccessContext.ForUser(_org.StoreS1));
+        Assert.NotNull(await new PlanSnapshotStore(signedIn).ReadPeerPlanAsync(_org.S2, Period));
+        Assert.Equal([AccessKind.User, AccessKind.System], signedIn.Made);
+
+        // No one signed in (and a kiosk): the gate stops it before any system read.
+        foreach (var access in new[] { AccessContext.Anonymous, AccessContext.ForKiosk(_org.S1) })
+        {
+            var refused = new Recording(_db, access);
+            Assert.Null(await new PlanSnapshotStore(refused).ReadPeerPlanAsync(_org.S2, Period));
+            Assert.DoesNotContain(AccessKind.System, refused.Made);
+        }
+    }
+
+    /// <summary>A context factory that notes the identity of every context it makes.</summary>
+    private sealed class Recording(TestDatabase db, AccessContext current) : IRosterDbContextFactory
+    {
+        public List<AccessKind> Made { get; } = [];
+
+        public RosterDbContext Create() => Create(current);
+
+        public RosterDbContext Create(AccessContext access)
+        {
+            Made.Add(access.Kind);
+            return db.As(access);
+        }
+
+        public RosterDbContext CreateSystem(string reason) => Create(AccessContext.System(reason));
+    }
+
     [Fact]
     public async Task A_snapshot_is_a_plan_or_a_roster() =>
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>

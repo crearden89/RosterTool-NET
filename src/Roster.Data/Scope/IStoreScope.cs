@@ -37,8 +37,8 @@ public interface IStoreScope
     /// <summary>
     /// The peer gate of the peer-visible pages (Plan structure, Non-Op, Dashboard): any
     /// signed-in user may read another store there, in trimmed form, and the page then reads
-    /// past the row filters (IgnoreQueryFilters) for that store only, as the TypeScript app
-    /// read it with the service-role client. False for anyone not signed in or an unknown store.
+    /// that store through a System context, as the TypeScript app read it with the
+    /// service-role client. False for anyone not signed in or an unknown store.
     /// Private pages (Roster, Setup, Analysis, Sales, Weekends) never use it.
     /// </summary>
     Task<bool> CanPeerReadAsync(Guid storeId, CancellationToken cancellationToken = default);

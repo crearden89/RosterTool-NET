@@ -357,6 +357,10 @@ public sealed class OverviewService(
         var result = new Dictionary<Guid, HeldPlanStatus>();
         if (db.Provider == DatabaseProvider.SqlServer)
         {
+            // This read is raw SQL, which the row filters do not reach: hold it to the stores
+            // this context may read held plans of, the visible stores, as the filter would.
+            var visible = await db.Stores.AsNoTracking().Where(s => ids.Contains(s.Id)).Select(s => s.Id).ToListAsync(ct);
+            if (visible.Count == 0) return result;
             var oks = string.Join(", ", Enumerable.Range(0, 14).Select(i => $"json_value(payload, '$.days[{i}].ok') as d{i}"));
             var sql = $"""
                 select store_id, version, {oks}
@@ -370,7 +374,7 @@ public sealed class OverviewService(
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = sql;
-                cmd.Parameters.Add(new SqlParameter("@ids", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(ids) });
+                cmd.Parameters.Add(new SqlParameter("@ids", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(visible) });
                 cmd.Parameters.Add(new SqlParameter("@period", SqlDbType.Date) { Value = periodStart.ToDateTime(TimeOnly.MinValue) });
                 await using var r = await cmd.ExecuteReaderAsync(ct);
                 while (await r.ReadAsync(ct))
