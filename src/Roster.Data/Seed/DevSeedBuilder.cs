@@ -366,7 +366,9 @@ internal sealed class DevSeedBuilder(RosterDbContext db, DateOnly today, FirstSu
         string[] priority = ["checkout", "load_running", "reset", "admin", "specials", "cleaning"];
         await SaveAsync("labour_group_priority", priority.Select((g, i) => new LabourGroupPriority { LabourGroup = g, Priority = i + 1 }), ct);
 
-        await SaveAsync("pay_settings", [new PaySettings()], ct);
+        // The RSM allowance is the owner's figure: $9 an hour on top of the SA rate, in the
+        // blocks where the RSM is the only manager on the floor.
+        await SaveAsync("pay_settings", [new PaySettings { RsmAllowance = 9 }], ct);
         (string State, double Rate)[] tax = [("NSW", 0.0545), ("VIC", 0.0485), ("QLD", 0.0475), ("SA", 0.0495), ("WA", 0.055), ("TAS", 0.061), ("NT", 0.055), ("ACT", 0.0685)];
         await SaveAsync("payroll_tax_rates", tax.Select(t => new PayrollTaxRate { State = t.State, Rate = t.Rate }), ct);
     }

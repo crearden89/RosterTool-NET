@@ -95,7 +95,7 @@ something. It also has seven users: `superuser` (Super User), `store1` and `stor
 (PA), `director1` (DSO), and `emso1` and `emso2` (EMSO). The console lists these users and each
 store's kiosk links. The users are the people behind the seeded reviews, approvals and uploads, and
 nobody signs in as them. If `Roster:Users:FirstSuperUser` is set (section 2), the seed adds that
-person too.
+person too. The seed's pay settings already have the RSM allowance at $9 (section 5).
 
 `dotnet run` serves http://localhost:5066 (the `http` profile).
 
@@ -254,6 +254,11 @@ string named `Roster` in App Service's configuration also reaches the app as
 **The database.** Run `roster-schema.sql` on an empty database, or run
 `dotnet ef database update` against the server (section 1). The app never changes the schema
 itself; only the migrations and the development seeder do.
+
+**Pay settings.** Set the RSM allowance on Pay Rates to $9: **Super User → Pay Rate Table**, *Pay
+Settings & On-costs*, "RSM Allowance ($/hr, sole manager)", then save. An RSM's hours cost the
+Store Assistant rate for the hour and day type, and the allowance is added for each hour in the
+15-minute blocks where the RSM is the only manager on the floor. The figure stays editable there.
 
 **IIS:**
 

@@ -34,6 +34,7 @@ internal static class SeedChecks
         Assert.Equal(6 * 19, await db.Employees.CountAsync());
         Assert.Equal(6, await db.BreakRules.CountAsync());
         Assert.Equal(30 * 24 * 4, await db.PayRates.CountAsync());
+        Assert.Equal(9, (await db.PaySettings.SingleAsync()).RsmAllowance);
         Assert.Equal(6 * 42, await db.BenchmarkDays.CountAsync());
         Assert.True(await db.ActualsDays.AnyAsync(a => a.Date < Today));
         Assert.False(await db.ActualsDays.AnyAsync(a => a.Date >= Today));
