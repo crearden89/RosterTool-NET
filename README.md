@@ -27,10 +27,10 @@ its own SQL Server and invented sample data. You install nothing.
 3. When the app is ready, it opens in another tab. If it does not (your browser may have blocked
    it), select the **Ports** tab at the bottom of the editor, then the globe icon (*Open in
    Browser*) next to **Roster**.
-4. You see the development sign-in, which has no password. Pick a tier and select **Sign In**.
-   Super User sees every page. A Store or EMSO sign-in also needs a store, so pick one. For the
-   other tiers, leave the store as it is and choose one inside the app. The stores, people and
-   figures are all invented.
+4. You see the development sign-in, which has no password. Pick a tier and a store, then select
+   **Sign In**. Super User sees every page. A Store or EMSO sign-in needs a store; for the other
+   tiers, the store is just the one that opens first. The stores, people and figures are all
+   invented.
 5. If the app does not open, its log says why. In the editor, open the menu at the top left
    (three lines), select **Terminal**, then **New Terminal**, and type
    `tail -n 50 /tmp/roster-app.log`. To start the app again, type
