@@ -88,7 +88,9 @@ public static class AccountEndpoints
             var userId = await EnsureDevUserRowAsync(http, DevUserId($"{username}|{tier}|{store?.Code}"), username, name, tier,
                 tier == Roster.Engine.Core.Tiers.Store ? store?.Id : null,
                 tier == Roster.Engine.Core.Tiers.Emso ? store?.AreaId : null,
-                store?.RegionId);
+                // The row's scope as tier_scope allows it: a super user has no store, region or
+                // director group; the chosen store only opens first.
+                tier == Roster.Engine.Core.Tiers.Store ? store?.RegionId : null);
             var user = new SignedInUser
             {
                 Id = userId,
