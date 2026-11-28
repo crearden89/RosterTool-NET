@@ -14,6 +14,37 @@ This guide is for the people who run and deploy the app. Settings are written as
 (`Auth__Mode`). Secrets (the connection string, the cron secret) go in environment variables,
 never in a file that is committed.
 
+## Try it in your browser (GitHub Codespaces)
+
+GitHub Codespaces can run the app for you on a cloud machine that you use from your browser, with
+its own SQL Server and invented sample data. You install nothing.
+
+1. On the repository's page on GitHub, select **Code**, then the **Codespaces** tab, then
+   **Create codespace on main**.
+2. An editor opens in a new browser tab. Leave it open. The first start takes a few minutes: it
+   sets up .NET and SQL Server, builds the app and fills the database with invented data. Later
+   starts are quicker.
+3. When the app is ready, it opens in another tab. If it does not (your browser may have blocked
+   it), select the **Ports** tab at the bottom of the editor, then the globe icon (*Open in
+   Browser*) next to **Roster**.
+4. You see the development sign-in, which has no password. Pick a tier and select **Sign In**.
+   Super User sees every page. A Store or EMSO sign-in also needs a store, so pick one. For the
+   other tiers, leave the store as it is and choose one inside the app. The stores, people and
+   figures are all invented.
+5. If the app does not open, its log says why. In the editor, open the menu at the top left
+   (three lines), select **Terminal**, then **New Terminal**, and type
+   `tail -n 50 /tmp/roster-app.log`. To start the app again, type
+   `bash .devcontainer/start-app.sh --stop` and then `bash .devcontainer/start-app.sh --background`.
+6. When you have finished, stop the codespace, so that it does not use up your free monthly
+   allowance: go to [github.com/codespaces](https://github.com/codespaces), select **...** next to
+   the codespace, then **Stop codespace**. (It also stops by itself after 30 minutes without
+   use.) A stopped codespace keeps its data and still counts towards your storage allowance:
+   delete it on the same page when you no longer need it.
+
+The app's address is private: only you can open it, signed in to GitHub. The codespace's SQL Server
+password is made at random on its first start, in `.devcontainer/.env`, which is never committed.
+The set-up is in `.devcontainer/`.
+
 ## 1. Run it locally
 
 **You need** the .NET 10 SDK (`global.json` asks for 10.0.100 or a later 10.0 SDK) and SQL Server

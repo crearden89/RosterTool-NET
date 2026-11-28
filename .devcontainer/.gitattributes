@@ -1,0 +1,2 @@
+# The scripts run with bash inside Linux containers: keep their line endings LF on every checkout.
+*.sh text eol=lf

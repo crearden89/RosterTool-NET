@@ -1,0 +1,40 @@
+# New: the containers of the dev container (devcontainer.json), for GitHub Codespaces and
+# VS Code Dev Containers.
+#   app: where you work. The .NET 10 SDK comes from devcontainer.json's dotnet feature, the
+#        repository is under /workspaces, and start-app.sh runs the Roster web app here.
+#   db:  SQL Server 2022, Developer edition, which app reaches as "db".
+# No password is in this file or anywhere in the repository. init-env.sh makes a random SA
+# password in .devcontainer/.env (not committed) before the containers start, and Compose
+# reads ${MSSQL_SA_PASSWORD} from there. There are no ports here: Codespaces forwards the
+# app's port (devcontainer.json), and SQL Server is reached only from app.
+
+services:
+  app:
+    # Debian 12, which has the time zone data the app needs (Australia/Sydney and others).
+    image: mcr.microsoft.com/devcontainers/base:bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    # Keeps the container running; postStartCommand starts the app.
+    command: sleep infinity
+    init: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # Codespaces serves the forwarded port over https, through its own proxy: the app
+      # reads the original scheme from the proxy's X-Forwarded-* headers.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__Roster: "Server=db;Database=Roster;User Id=sa;Password=${MSSQL_SA_PASSWORD:?run .devcontainer/init-env.sh, which makes it in .devcontainer/.env};TrustServerCertificate=True"
+      # The same password again, for start-app.sh's DB_HOST and DB_NAME.
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?run .devcontainer/init-env.sh, which makes it in .devcontainer/.env}"
+    depends_on:
+      - db
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?run .devcontainer/init-env.sh, which makes it in .devcontainer/.env}"
+      # By default SQL Server may take 80% of the machine's memory. 2 GB is enough for the
+      # seeded data and leaves the rest for the editor and the build.
+      MSSQL_MEMORY_LIMIT_MB: "2048"
