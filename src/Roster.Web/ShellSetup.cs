@@ -2,6 +2,7 @@
 // app got from Next.js and Supabase (src/app/layout.tsx, src/middleware.ts, src/lib/supabase).
 
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Roster.Data;
@@ -20,6 +21,14 @@ public static class ShellSetup
     public static WebApplicationBuilder AddRosterWeb(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
+
+        // Behind a development proxy such as GitHub Codespaces the public address arrives only in
+        // X-Forwarded-Host; ASPNETCORE_FORWARDEDHEADERS_ENABLED covers For and Proto alone, so the
+        // sign-in redirects pointed at localhost. Only takes effect when that variable turns the
+        // forwarded-headers middleware on; production hosting sets its own proxy rules.
+        if (builder.Environment.IsDevelopment())
+            services.Configure<ForwardedHeadersOptions>(o => o.ForwardedHeaders |= ForwardedHeaders.XForwardedHost);
+
         services.AddRazorComponents().AddInteractiveServerComponents();
         services.Configure<BrandingOptions>(builder.Configuration.GetSection(BrandingOptions.Section));
 
